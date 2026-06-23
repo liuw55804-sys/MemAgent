@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import subprocess
 import sys
 
+from memagent.agents import build_agents_snippet
 from memagent.context import detect_context
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
@@ -109,12 +111,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Extra Codex CLI arguments after --, for example: -- --model gpt-5.4",
     )
 
+    snippet = subparsers.add_parser(
+        "agents-snippet",
+        help="Print AGENTS.md instructions for natural-language MemAgent triggers.",
+    )
+    snippet.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "agents-snippet":
+        print(build_agents_snippet(Path(args.memagent_root) if args.memagent_root else None))
+        return 0
+
     store = MemoryStore.from_home_arg(args.home)
 
     if args.command == "remember":

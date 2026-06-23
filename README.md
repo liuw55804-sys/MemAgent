@@ -92,6 +92,12 @@ implementation design for `domain` and `kind` typed memories.
 See [docs/design_v0.3_codex_integration.md](docs/design_v0.3_codex_integration.md)
 for the Codex natural-language integration design.
 
+Generate a copyable `AGENTS.md` snippet:
+
+```bash
+memagent agents-snippet
+```
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

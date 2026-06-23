@@ -10,6 +10,14 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 ## Natural Language Triggers
 
+Generate the current recommended snippet with:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli agents-snippet
+```
+
+Copy the output into a project or global `AGENTS.md`.
+
 When the user says:
 
 - `记住这个`
@@ -21,6 +29,8 @@ Codex should summarize the lesson and call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli remember \
+  --domain coding \
+  --kind <kind> \
   --topic "short topic" \
   --trigger keyword \
   "short actionable memory"

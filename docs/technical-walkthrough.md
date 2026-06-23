@@ -6,6 +6,7 @@
 
 ```text
 src/memagent/
+  agents.py    生成可复制到 AGENTS.md 的 MemAgent 触发规则
   cli.py       命令行入口，负责把用户命令转成函数调用
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
@@ -20,6 +21,7 @@ src/memagent/
 PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
+PYTHONPATH=src python -m memagent.cli agents-snippet
 ```
 
 安装成 editable package 后，才可以直接用：
@@ -29,6 +31,7 @@ python -m pip install -e .
 memagent remember --domain coding --kind note "..."
 memagent recall "..."
 memagent codex "..."
+memagent agents-snippet
 ```
 
 默认记忆文件写到：
@@ -59,6 +62,8 @@ flowchart LR
 ```
 
 ## 3. 三条命令分别做什么
+
+当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`。
 
 ### 3.1 `remember`
 
@@ -184,6 +189,31 @@ sequenceDiagram
 - 这样不会污染 Codex 的 prompt。
 - 但 `recall` 命令会打印 “No related memories found”，因为它是调试命令，用户需要知道结果。
 
+### 3.4 `agents-snippet`
+
+用途：生成一段可复制到 `AGENTS.md` 的自然语言触发规则，让 Codex 知道什么时候调用 MemAgent。
+
+命令：
+
+```bash
+memagent agents-snippet
+```
+
+开发阶段：
+
+```bash
+PYTHONPATH=src python -m memagent.cli agents-snippet
+```
+
+它不会修改任何文件，只会打印 Markdown。你可以把输出复制到项目或全局 `AGENTS.md`。
+
+这段 snippet 会告诉 Codex：
+
+- 用户说“召回一下相关记忆”时，调用 `memagent recall`。
+- 用户说“沉淀一下”时，总结短 memory 并调用 `memagent remember`。
+- recalled memory 只是提示，不是事实来源。
+- 不要保存 token、cookie、密码、私钥或原始敏感样本。
+
 ## 4. 文件级讲解
 
 ### 4.1 `cli.py`
@@ -193,7 +223,7 @@ sequenceDiagram
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -204,9 +234,11 @@ build_parser()
   -> 定义 remember 子命令
   -> 定义 recall 子命令
   -> 定义 codex 子命令
+  -> 定义 agents-snippet 子命令
 
 main(argv)
   -> parse args
+  -> if agents-snippet: build_agents_snippet
   -> MemoryStore.from_home_arg(args.home)
   -> if remember: detect_context + store.remember(domain, kind, ...)
   -> if recall: detect_context + store.recall + compose_context
@@ -229,6 +261,18 @@ memagent codex "task" -- --model gpt-5.4
 ```
 
 `argparse.REMAINDER` 会把 `--` 也收进列表里，所以这里手动去掉第一个 `--`。
+
+### 4.1.1 `agents.py`
+
+`agents.py` 负责生成给 Codex 看的 AGENTS.md 片段。
+
+核心函数：
+
+```python
+def build_agents_snippet(memagent_root: Path | None = None) -> str:
+```
+
+它会生成包含绝对 `PYTHONPATH=<memagent-root>/src python -m memagent.cli` 的指令。这样即使目标项目没有安装 `memagent` 命令，Codex 也可以通过 Python module path 调用 MemAgent。
 
 ### 4.2 `context.py`
 
