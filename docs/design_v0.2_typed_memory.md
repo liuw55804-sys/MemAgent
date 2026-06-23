@@ -380,6 +380,6 @@ v0.2 完成后，再考虑：
 
 - `--domain` / `--kind` 作为 recall 筛选条件。
 - 对不同 kind 采用不同 context composer。
-- 给 `tool_recipe`、`skill_route`、`data_entrypoint` 做专门模板。
+- 给 `tool_recipe`、`skill_route`、`data_entrypoint` 做专门模板。当前已先提供 `templates/` 下的 copy-and-fill YAML 模板，后续可再接 CLI 生成。
 - 让 LLM extraction 判断 domain/kind。
 - AGENTS.md 自然语言触发调用 `remember --domain coding --kind pitfall`。

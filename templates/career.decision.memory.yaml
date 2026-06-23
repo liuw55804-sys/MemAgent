@@ -1,0 +1,38 @@
+# Copy this file into a local memory store, then replace placeholders.
+# Suggested target: ~/.memagent/memories/<your-id>.memory.yaml
+
+id: "mem_manual_career_decision_example"
+created_at: "YYYY-MM-DDTHH:MM:SS+08:00"
+domain: "career"
+kind: "decision"
+topic: "<career decision topic>"
+scope:
+  repo: "unknown"
+  module: "unknown"
+triggers:
+  - "<career keyword>"
+applies_when:
+  - "<when this decision context is relevant>"
+recommended_action:
+  type: "remember_preference"
+  target: "<decision target>"
+tool_recipes: []
+entrypoints: []
+pitfalls: []
+verification: []
+decision:
+  context: "<decision context>"
+  choice: "<chosen direction>"
+  reason: "<why this choice was made>"
+next_time_prompt:
+  - "<short instruction to give the assistant next time>"
+agents_md_suggestion:
+  - "Do not promote career decisions to coding AGENTS.md."
+sensitivity:
+  level: "local"
+  exportable: false
+status:
+  maturity: "draft"
+  promotion_candidate: false
+source_note: |
+  <where this memory came from>

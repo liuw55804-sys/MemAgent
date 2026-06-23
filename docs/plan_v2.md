@@ -472,14 +472,15 @@ memagent remember --domain life --kind preference ...
 提供几条可复制模板：
 
 ```text
-coding.skill_route.template.yaml
-coding.tool_recipe.template.yaml
-coding.data_entrypoint.template.yaml
-coding.pitfall.template.yaml
-coding.verification.template.yaml
-generic.note.template.yaml
-life.preference.template.yaml
-learning.checklist.template.yaml
+templates/coding.skill_route.memory.yaml
+templates/coding.tool_recipe.memory.yaml
+templates/coding.data_entrypoint.memory.yaml
+templates/coding.pitfall.memory.yaml
+templates/coding.verification.memory.yaml
+templates/generic.note.memory.yaml
+templates/life.preference.memory.yaml
+templates/learning.checklist.memory.yaml
+templates/career.decision.memory.yaml
 ```
 
 这样你可以手动填真实私有内容，先不依赖 AI。

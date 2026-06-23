@@ -10,6 +10,7 @@ Added:
 - `domain` and `kind` fields in newly written memory cards.
 - Recall output now labels matches as `[domain/kind]`.
 - Backward-compatible recall for old cards without `domain` or `kind`.
+- Copy-and-fill typed memory templates under `templates/`.
 
 Changed:
 

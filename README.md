@@ -87,6 +87,12 @@ MemAgent with a generic memory substrate underneath.
 See [docs/design_v0.2_typed_memory.md](docs/design_v0.2_typed_memory.md) for the
 implementation design for `domain` and `kind` typed memories.
 
+## Typed Memory Templates
+
+See [templates/README.md](templates/README.md) for copy-and-fill YAML templates
+for `skill_route`, `tool_recipe`, `data_entrypoint`, `pitfall`, `verification`,
+and a few generic non-coding memory types.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

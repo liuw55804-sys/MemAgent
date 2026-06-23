@@ -1,0 +1,36 @@
+# Copy this file into a local memory store, then replace placeholders.
+# Suggested target: ~/.memagent/memories/<your-id>.memory.yaml
+
+id: "mem_manual_life_preference_example"
+created_at: "YYYY-MM-DDTHH:MM:SS+08:00"
+domain: "life"
+kind: "preference"
+topic: "<life preference topic>"
+scope:
+  repo: "unknown"
+  module: "unknown"
+triggers:
+  - "<life keyword>"
+applies_when:
+  - "<when this preference should be considered>"
+recommended_action:
+  type: "remember_preference"
+  target: "<preference target>"
+tool_recipes: []
+entrypoints: []
+pitfalls: []
+verification: []
+preferences:
+  - "<preference>"
+next_time_prompt:
+  - "<short instruction to give the assistant next time>"
+agents_md_suggestion:
+  - "Do not promote life preferences to coding AGENTS.md."
+sensitivity:
+  level: "local"
+  exportable: false
+status:
+  maturity: "draft"
+  promotion_candidate: false
+source_note: |
+  <where this memory came from>
