@@ -87,6 +87,11 @@ MemAgent with a generic memory substrate underneath.
 See [docs/design_v0.2_typed_memory.md](docs/design_v0.2_typed_memory.md) for the
 implementation design for `domain` and `kind` typed memories.
 
+## v0.3 Design
+
+See [docs/design_v0.3_codex_integration.md](docs/design_v0.3_codex_integration.md)
+for the Codex natural-language integration design.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

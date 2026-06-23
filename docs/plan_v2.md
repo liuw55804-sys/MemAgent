@@ -469,6 +469,12 @@ memagent remember --domain life --kind preference ...
 
 ### Step 3：Codex 自然语言触发 recall
 
+对应实现设计：
+
+```text
+docs/design_v0.3_codex_integration.md
+```
+
 先让用户可以在 Codex 里自然表达：
 
 ```text

@@ -15,6 +15,7 @@ Changed:
 
 - Recall now requires user-query matches before applying repo-scope bonus, reducing unrelated same-repo matches.
 - Chinese query tokenization now includes lightweight 2-4 character n-grams for partial phrase matching.
+- v0.3 design now focuses on Codex natural-language integration through AGENTS.md snippets.
 
 ## v0.1.0-mvp - 2026-06-23
 
