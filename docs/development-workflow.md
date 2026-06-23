@@ -59,6 +59,19 @@ Use this checklist:
 - Python logic changed? Run compileall and unittest.
 ```
 
+## Version Plan Documents
+
+Keep version direction documents stable. If the product direction changes
+substantially, create a new plan file instead of rewriting the old one:
+
+```text
+docs/v2plan.md
+docs/v3plan.md
+docs/v4plan.md
+```
+
+Small clarifications are fine, but do not use a version plan as a scratchpad.
+
 ## Verification
 
 For Python logic changes:
@@ -84,4 +97,3 @@ Can the current user explain the feature after reading the docs?
 
 What is the smallest test that protects the behavior?
 ```
-

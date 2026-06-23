@@ -73,11 +73,10 @@ See [docs/self-test-plan.md](docs/self-test-plan.md) before adding AI/provider
 integrations. It helps decide whether the next step should be ingest, recall,
 prompt composition, or natural-language triggering.
 
-## Next Iteration
+## v2 Plan
 
-See [docs/next-iteration-plan.md](docs/next-iteration-plan.md) for the proposed
-v0.2 direction: typed memories, bytedcli-oriented recipes, skill routing, and
-more useful recall.
+See [docs/v2plan.md](docs/v2plan.md) for the stable v2 direction: coding-first
+MemAgent with a generic memory substrate underneath.
 
 ## Codex Natural Language Triggers
 
