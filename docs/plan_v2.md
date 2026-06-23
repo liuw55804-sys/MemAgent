@@ -467,32 +467,40 @@ memagent remember --domain life --kind preference ...
 - Pitfall: 不要直接全表 group 大 JSON 字段。
 ```
 
-### Step 3：支持本地 demo memory 模板
+### Step 3：Codex 自然语言触发 recall
 
-提供几条可复制模板：
+先让用户可以在 Codex 里自然表达：
 
 ```text
-coding.skill_route.template.yaml
-coding.tool_recipe.template.yaml
-coding.data_entrypoint.template.yaml
-coding.pitfall.template.yaml
-coding.verification.template.yaml
-generic.note.template.yaml
-life.preference.template.yaml
-learning.checklist.template.yaml
+召回一下相关记忆
+之前有没有踩过类似坑
+用 MemAgent 看看
 ```
 
-这样你可以手动填真实私有内容，先不依赖 AI。
-
-### Step 4：AGENTS.md 自然语言触发升级
-
-把当前自然语言触发规则整理成一个可安装片段：
+Codex 根据 `AGENTS.md` 规则调用：
 
 ```bash
-memagent agents-snippet
+memagent recall "<user prompt>"
 ```
 
-后续可以手动复制到项目 `AGENTS.md`。
+并把召回结果作为当前任务的参考上下文。
+
+### Step 4：Codex 自然语言触发 remember
+
+再支持：
+
+```text
+记住这个
+沉淀一下
+下次别再踩这个坑
+把这次排查做成 memory
+```
+
+Codex 把本轮成功路径、失败路径、工具入口或验证方式压成一句短 memory，再调用：
+
+```bash
+memagent remember --domain coding --kind <kind> "<short lesson>"
+```
 
 ### Step 5：再考虑 AI extraction
 

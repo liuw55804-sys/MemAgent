@@ -46,6 +46,27 @@ v0.2 不做：
 
 这版先把结构埋进去，让后续召回排序和 AI extraction 有稳定目标。
 
+## 2.1 方向纠偏：不做手填模板系统
+
+v0.2 不继续推进 copy-and-fill YAML templates。
+
+原因：
+
+- 模板会让用户从“和 Codex 自然协作”退回到“手工维护配置文件”。
+- 第一版最重要的是结合 Codex 的内容流：召回、注入、沉淀，而不是提前设计很多 memory 形状。
+- `domain/kind` 已经足够作为轻量扩展点，后续复杂字段应由 Codex/AI extraction 自动填，而不是要求用户手填。
+
+因此 v0.2 后续优先级调整为：
+
+```text
+1. Codex recall 入口更自然
+2. recalled context 更适合给 Codex 使用
+3. 用户说“沉淀一下”时，Codex 能调用 memagent remember
+4. 等这条链路顺了，再考虑更结构化的字段或 AI extraction
+```
+
+当前保留 `domain/kind`，但不新增模板目录、不新增复杂 YAML 手填流程。
+
 ## 3. 字段定义
 
 ### 3.1 `domain`
@@ -380,6 +401,6 @@ v0.2 完成后，再考虑：
 
 - `--domain` / `--kind` 作为 recall 筛选条件。
 - 对不同 kind 采用不同 context composer。
-- 给 `tool_recipe`、`skill_route`、`data_entrypoint` 做专门模板。
+- Codex/AGENTS.md 自然语言触发 recall 和 remember。
 - 让 LLM extraction 判断 domain/kind。
 - AGENTS.md 自然语言触发调用 `remember --domain coding --kind pitfall`。
