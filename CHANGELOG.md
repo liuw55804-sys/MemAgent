@@ -2,6 +2,20 @@
 
 All notable MemAgent changes should be recorded here.
 
+## Unreleased
+
+Added:
+
+- `remember --domain` and `remember --kind` for typed memory cards.
+- `domain` and `kind` fields in newly written memory cards.
+- Recall output now labels matches as `[domain/kind]`.
+- Backward-compatible recall for old cards without `domain` or `kind`.
+
+Changed:
+
+- Recall now requires user-query matches before applying repo-scope bonus, reducing unrelated same-repo matches.
+- Chinese query tokenization now includes lightweight 2-4 character n-grams for partial phrase matching.
+
 ## v0.1.0-mvp - 2026-06-23
 
 MVP baseline for local Codex workflow memory.
@@ -22,4 +36,3 @@ Known limitations:
 - Recall uses simple keyword scoring, not BM25/vector retrieval.
 - Memory cards are written as YAML text but not parsed structurally during recall.
 - LLM-assisted extraction, compression, conflict detection, and lifecycle evaluation are future work.
-

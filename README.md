@@ -8,7 +8,7 @@ session can quickly recall proven commands, failed paths, and next-step hints.
 ## MVP Commands
 
 ```bash
-python -m memagent.cli remember "RDS big-table JSON aggregation timed out; use id ranges first."
+python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 python -m memagent.cli recall "continue checking attribution accuracy"
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
 ```
@@ -17,7 +17,7 @@ After installing the project in editable mode, the shorter form is available:
 
 ```bash
 python -m pip install -e .
-memagent remember "RDS big-table JSON aggregation timed out; use id ranges first."
+memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 memagent recall "continue checking attribution accuracy"
 memagent codex "continue checking attribution accuracy"
 ```
@@ -29,6 +29,10 @@ By default, memories are stored under:
 ```
 
 Set `MEMAGENT_HOME` to use a different local store.
+
+`remember` defaults to `--domain coding --kind note`. Use explicit types when a
+memory has a clear shape, for example `tool_recipe`, `skill_route`, `pitfall`,
+`verification`, `preference`, or `checklist`.
 
 ## Codex Wrapper
 

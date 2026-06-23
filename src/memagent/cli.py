@@ -24,6 +24,14 @@ def build_parser() -> argparse.ArgumentParser:
     remember = subparsers.add_parser("remember", help="Write a memory card from text.")
     remember.add_argument("text", help="Lesson, workflow note, or pitfall to remember.")
     remember.add_argument("--topic", help="Short memory topic.")
+    remember.add_argument(
+        "--domain",
+        help="Memory domain. Defaults to coding. Examples: coding, learning, life.",
+    )
+    remember.add_argument(
+        "--kind",
+        help="Memory kind. Defaults to note. Examples: tool_recipe, skill_route, pitfall.",
+    )
     remember.add_argument("--repo", help="Repository scope.")
     remember.add_argument("--module", help="Module or subsystem scope.")
     remember.add_argument(
@@ -111,14 +119,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "remember":
         context = detect_context()
-        card = store.remember(
-            text=args.text,
-            topic=args.topic,
-            repo=args.repo or context.repo_name,
-            module=args.module,
-            triggers=args.trigger,
-            exportable=args.exportable,
-        )
+        try:
+            card = store.remember(
+                text=args.text,
+                topic=args.topic,
+                domain=args.domain,
+                kind=args.kind,
+                repo=args.repo or context.repo_name,
+                module=args.module,
+                triggers=args.trigger,
+                exportable=args.exportable,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
         print(f"Saved memory: {card.path}")
         return 0
 

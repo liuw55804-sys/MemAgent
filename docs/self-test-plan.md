@@ -45,6 +45,8 @@ rm -rf local_memory_demo
 
 ```bash
 PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo remember \
+  --domain coding \
+  --kind note \
   --topic "MemAgent baseline status" \
   --trigger "MemAgent" \
   --trigger "v0.1.0" \
@@ -143,6 +145,8 @@ PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo codex --dry-run
 
 ```bash
 PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo remember \
+  --domain coding \
+  --kind note \
   --topic "MemAgent baseline status" \
   --trigger "MemAgent" \
   --trigger "AI" \
@@ -157,6 +161,8 @@ PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo remember \
 
 ```bash
 PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo remember \
+  --domain coding \
+  --kind tool_recipe \
   --topic "某类排查的 bytedcli 入口" \
   --trigger "bytedcli" \
   --trigger "RDS" \
@@ -173,6 +179,8 @@ PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo remember \
 
 ```bash
 PYTHONPATH=src python -m memagent.cli --home ./local_memory_demo remember \
+  --domain coding \
+  --kind pitfall \
   --topic "大表统计失败路径" \
   --trigger "大表" \
   --trigger "JSON" \

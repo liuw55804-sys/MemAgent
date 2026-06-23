@@ -17,7 +17,7 @@ src/memagent/
 开发阶段还没要求必须安装包，所以主要用：
 
 ```bash
-PYTHONPATH=src python -m memagent.cli remember "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
+PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 ```
@@ -26,7 +26,7 @@ PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 
 ```bash
 python -m pip install -e .
-memagent remember "..."
+memagent remember --domain coding --kind note "..."
 memagent recall "..."
 memagent codex "..."
 ```
@@ -62,12 +62,12 @@ flowchart LR
 
 ### 3.1 `remember`
 
-用途：把用户手动输入的一条经验写成本地 memory card。
+用途：把用户手动输入的一条经验写成本地 memory card，并用 `domain/kind` 标记它属于什么领域、什么类型。
 
 命令：
 
 ```bash
-memagent remember "RDS JSON aggregation timed out; split by id ranges before grouping."
+memagent remember --domain coding --kind pitfall "RDS JSON aggregation timed out; split by id ranges before grouping."
 ```
 
 执行链路：
@@ -84,6 +84,7 @@ sequenceDiagram
   CLI->>C: detect_context()
   C-->>CLI: repo_name / cwd / branch
   CLI->>M: MemoryStore.remember(...)
+  M->>M: normalize domain and kind
   M->>M: derive topic and triggers
   M->>M: render YAML card
   M->>F: write ~/.memagent/memories/*.memory.yaml
@@ -95,9 +96,9 @@ sequenceDiagram
 
 - `cli.py`：解析 `remember` 的参数，调用 `detect_context()` 和 `store.remember(...)`。
 - `context.py`：自动推断当前 repo 名，作为默认 `repo` scope。
-- `memory.py`：生成 ID、topic、triggers，然后调用 `_render_memory_card(...)` 写文件。
+- `memory.py`：规范化 domain/kind，生成 ID、topic、triggers，然后调用 `_render_memory_card(...)` 写文件。
 
-当前版本的 `remember` 还比较朴素：它不会真正理解长线程，只是把用户输入的文本保存为 `pitfalls` 和 `source_note`。这正好是后续 `ingest` 和 LLM extraction 要补强的地方。
+当前版本的 `remember` 仍然比较朴素：它不会真正理解长线程，只是把用户输入的文本保存为 `pitfalls` 和 `source_note`。但 v0.2 已经能用 `domain/kind` 给 memory 做第一层分类，这正好是后续 `ingest` 和 LLM extraction 要补强的入口。
 
 ### 3.2 `recall`
 
@@ -134,11 +135,13 @@ sequenceDiagram
 
 当前召回算法很简单：
 
-- 把 `query + repo_name + branch` 分词。
+- 把用户 `query` 分词。
+- 中文短语会生成 2-4 字 n-gram，支持 `帮我判断租房偏好` 命中 `租房偏好`。
 - 扫描 `~/.memagent/memories/*.memory.yaml`。
 - 用关键词出现次数打分。
-- 如果 memory card 里包含当前 repo 名，额外加分。
+- 如果 query 已经命中，并且 memory card 里包含当前 repo 名，额外加分。
 - 取分数最高的前几条。
+- 读取 card 顶层的 `domain/kind`，旧 card 没有这两个字段时默认用 `coding/note`。
 - 从 `stable_facts`、`pitfalls`、`next_time_prompt` 里抽几行，组成短上下文。
 
 这不是最终算法，只是 MVP 的可解释 baseline。后续可以替换成 BM25、向量召回、rerank，但接口上可以继续保持 `store.recall(...)`。
@@ -205,7 +208,7 @@ build_parser()
 main(argv)
   -> parse args
   -> MemoryStore.from_home_arg(args.home)
-  -> if remember: detect_context + store.remember
+  -> if remember: detect_context + store.remember(domain, kind, ...)
   -> if recall: detect_context + store.recall + compose_context
   -> if codex: recall + build_augmented_prompt + subprocess.run
 ```
@@ -292,6 +295,8 @@ class MemoryMatch:
     path: Path
     score: int
     title: str
+    domain: str
+    kind: str
     lines: tuple[str, ...]
 ```
 
@@ -343,6 +348,10 @@ def __init__(self, home: Path) -> None:
 当前逻辑：
 
 - 用当前 UTC 时间生成唯一 ID。
+- 如果用户没传 `--domain`，默认写入 `coding`。
+- 如果用户没传 `--kind`，默认写入 `note`。
+- 如果用户传了 `Tool-Recipe` 这样的写法，会规范化成 `tool_recipe`。
+- 如果用户传了非法 domain/kind，会报错，避免写出拼写混乱的 card。
 - 如果用户没传 `--topic`，用 `_derive_topic(text)` 从文本前 60 个字符生成标题。
 - 如果用户没传 `--trigger`，用 `_derive_triggers(text)` 从文本里提取关键词。
 - 用 `_render_memory_card(...)` 生成 YAML 字符串。
@@ -353,6 +362,8 @@ def __init__(self, home: Path) -> None:
 ```yaml
 id: "mem_..."
 created_at: "..."
+domain: "coding"
+kind: "pitfall"
 topic: "RDS query pitfall"
 scope:
   repo: "demo_repo"
@@ -380,14 +391,14 @@ source_note: |
 当前召回逻辑：
 
 ```text
-terms = tokenize(query + repo_name + branch)
+terms = tokenize(query)
 for each memory card:
   raw = read yaml text
   score = sum(each term count in raw)
-  if current repo_name appears in raw:
-    score += 3
   if score > 0:
-    create MemoryMatch
+    if current repo_name appears in raw:
+      score += 3
+    create MemoryMatch with domain/kind
 sort by score desc
 return top limit
 ```
@@ -396,7 +407,13 @@ return top limit
 
 - 它容易受文本格式影响。
 - 无法做字段级权重。
+- 中文 n-gram 是轻量 baseline，不等于真正语义召回。
 - 后续应该换成结构化解析和索引。
+
+向后兼容规则：
+
+- 旧 card 没有 `domain` 时，召回时当作 `coding`。
+- 旧 card 没有 `kind` 时，召回时当作 `note`。
 
 #### `MemoryStore.compose_context`
 
@@ -408,7 +425,7 @@ return top limit
 [MemAgent recalled context]
 - Task: how to avoid RDS JSON timeout
 - Context: cwd: /path; repo: memagent; branch: main
-- Memory: RDS query pitfall
+- Memory: RDS query pitfall [coding/pitfall]
   - RDS JSON aggregation timed out; split by id ranges before grouping.
   - Before continuing, recall this lesson: ...
 ```
@@ -518,4 +535,3 @@ PYTHONPATH=src python -m unittest discover -s tests
 - 它会不会让用户更难理解当前代码？
 
 只要这些问题能答清楚，再写代码会更踏实。
-

@@ -10,6 +10,31 @@ import textwrap
 from memagent.context import ProjectContext
 
 
+DEFAULT_DOMAIN = "coding"
+DEFAULT_KIND = "note"
+
+ALLOWED_DOMAINS = {
+    "coding",
+    "learning",
+    "life",
+    "career",
+    "generic",
+}
+
+ALLOWED_KINDS = {
+    "note",
+    "tool_recipe",
+    "skill_route",
+    "data_entrypoint",
+    "pitfall",
+    "verification",
+    "checklist",
+    "preference",
+    "decision",
+    "workflow",
+}
+
+
 @dataclass(frozen=True)
 class SavedMemory:
     path: Path
@@ -21,6 +46,8 @@ class MemoryMatch:
     path: Path
     score: int
     title: str
+    domain: str
+    kind: str
     lines: tuple[str, ...]
 
 
@@ -40,6 +67,8 @@ class MemoryStore:
         *,
         text: str,
         topic: str | None,
+        domain: str | None,
+        kind: str | None,
         repo: str | None,
         module: str | None,
         triggers: list[str],
@@ -48,10 +77,14 @@ class MemoryStore:
         now = datetime.now(timezone.utc)
         identifier = f"mem_{now.strftime('%Y%m%d_%H%M%S_%f')}"
         title = topic or _derive_topic(text)
+        normalized_domain = normalize_domain(domain)
+        normalized_kind = normalize_kind(kind)
         trigger_values = triggers or _derive_triggers(text)
         body = _render_memory_card(
             identifier=identifier,
             created_at=now.isoformat(),
+            domain=normalized_domain,
+            kind=normalized_kind,
             topic=title,
             repo=repo,
             module=module,
@@ -70,7 +103,7 @@ class MemoryStore:
         context: ProjectContext,
         limit: int,
     ) -> list[MemoryMatch]:
-        terms = _tokenize(" ".join([query, context.repo_name or "", context.branch or ""]))
+        terms = _tokenize(query)
         if not terms:
             return []
         matches: list[MemoryMatch] = []
@@ -78,15 +111,17 @@ class MemoryStore:
             raw = path.read_text(encoding="utf-8", errors="replace")
             haystack = raw.lower()
             score = sum(haystack.count(term) for term in terms)
-            if context.repo_name and context.repo_name.lower() in haystack:
-                score += 3
             if score <= 0:
                 continue
+            if context.repo_name and context.repo_name.lower() in haystack:
+                score += 3
             matches.append(
                 MemoryMatch(
                     path=path,
                     score=score,
                     title=_extract_value(raw, "topic") or path.stem,
+                    domain=_extract_value(raw, "domain") or DEFAULT_DOMAIN,
+                    kind=_extract_value(raw, "kind") or DEFAULT_KIND,
                     lines=tuple(_important_lines(raw)),
                 )
             )
@@ -119,7 +154,7 @@ class MemoryStore:
         for match in matches:
             if remaining <= 0:
                 break
-            prefix = f"- Memory: {match.title}"
+            prefix = f"- Memory: {match.title} [{match.domain}/{match.kind}]"
             if show_sources:
                 prefix += f" ({match.path.name})"
             lines.append(prefix)
@@ -136,6 +171,8 @@ def _render_memory_card(
     *,
     identifier: str,
     created_at: str,
+    domain: str,
+    kind: str,
     topic: str,
     repo: str | None,
     module: str | None,
@@ -150,6 +187,8 @@ def _render_memory_card(
         [
             f"id: {quote_yaml(identifier)}",
             f"created_at: {quote_yaml(created_at)}",
+            f"domain: {quote_yaml(domain)}",
+            f"kind: {quote_yaml(kind)}",
             f"topic: {quote_yaml(topic)}",
             "scope:",
             f"  repo: {quote_yaml(repo or 'unknown')}",
@@ -203,8 +242,59 @@ def _next_time_prompt(text: str) -> str:
     return f"Before continuing, recall this lesson: {text[:120]}"
 
 
+def normalize_domain(value: str | None) -> str:
+    return _normalize_enum(
+        value=value,
+        default=DEFAULT_DOMAIN,
+        allowed=ALLOWED_DOMAINS,
+        field_name="domain",
+    )
+
+
+def normalize_kind(value: str | None) -> str:
+    return _normalize_enum(
+        value=value,
+        default=DEFAULT_KIND,
+        allowed=ALLOWED_KINDS,
+        field_name="kind",
+    )
+
+
+def _normalize_enum(
+    *,
+    value: str | None,
+    default: str,
+    allowed: set[str],
+    field_name: str,
+) -> str:
+    normalized = (value or default).strip().lower().replace("-", "_")
+    if not normalized:
+        return default
+    if normalized not in allowed:
+        allowed_values = ", ".join(sorted(allowed))
+        raise ValueError(f"invalid {field_name}: {value}. Allowed values: {allowed_values}")
+    return normalized
+
+
 def _tokenize(text: str) -> list[str]:
-    return [token.lower() for token in re.findall(r"[\w\u4e00-\u9fff]+", text)]
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for raw_token in re.findall(r"[\w\u4e00-\u9fff]+", text):
+        token = raw_token.lower()
+        candidates = [token]
+        if _contains_cjk(token) and len(token) > 1:
+            max_size = min(len(token), 4)
+            for size in range(2, max_size + 1):
+                candidates.extend(token[index : index + size] for index in range(len(token) - size + 1))
+        for candidate in candidates:
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                tokens.append(candidate)
+    return tokens
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
 
 
 def _extract_value(raw: str, key: str) -> str | None:
@@ -235,4 +325,3 @@ def _important_lines(raw: str) -> list[str]:
 def quote_yaml(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
-

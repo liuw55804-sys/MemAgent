@@ -196,6 +196,10 @@ v0.2 暂不新增筛选参数。
 
 这样用户一眼能看出召回的是什么类型。
 
+同时收紧一个 v0.1 的噪声点：召回必须先命中用户 query，再给 repo scope 加分。不能只因为 memory 属于当前 repo 就被召回，否则 `life/preference` 和 `coding/tool_recipe` 很容易在同一个项目目录里互相干扰。
+
+中文 query 先用轻量 n-gram 兜底：对中文连续片段生成 2-4 字短语，避免 `帮我判断租房偏好` 不能命中 `租房偏好`。这不是最终语义检索，只是 v0.2 的可解释 baseline。
+
 ### 5.3 `codex`
 
 `codex` 使用 `compose_context()` 的输出，因此会自然继承 recall 中的 `[domain/kind]` 展示。
@@ -379,4 +383,3 @@ v0.2 完成后，再考虑：
 - 给 `tool_recipe`、`skill_route`、`data_entrypoint` 做专门模板。
 - 让 LLM extraction 判断 domain/kind。
 - AGENTS.md 自然语言触发调用 `remember --domain coding --kind pitfall`。
-
