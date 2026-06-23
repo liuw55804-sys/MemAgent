@@ -1,0 +1,168 @@
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+
+from memagent.context import detect_context
+from memagent.memory import MemoryStore
+from memagent.wrapper import build_augmented_prompt
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="memagent",
+        description="Local workflow memory for Codex and other coding agents.",
+    )
+    parser.add_argument(
+        "--home",
+        help="Override memory home directory. Defaults to MEMAGENT_HOME or ~/.memagent.",
+    )
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    remember = subparsers.add_parser("remember", help="Write a memory card from text.")
+    remember.add_argument("text", help="Lesson, workflow note, or pitfall to remember.")
+    remember.add_argument("--topic", help="Short memory topic.")
+    remember.add_argument("--repo", help="Repository scope.")
+    remember.add_argument("--module", help="Module or subsystem scope.")
+    remember.add_argument(
+        "--trigger",
+        action="append",
+        default=[],
+        help="Keyword that should recall this memory. Can be repeated.",
+    )
+    remember.add_argument(
+        "--exportable",
+        action="store_true",
+        help="Mark this memory as exportable. Default is local/internal only.",
+    )
+
+    recall = subparsers.add_parser("recall", help="Recall relevant memory cards.")
+    recall.add_argument("query", help="Natural-language task or question.")
+    recall.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum number of memory cards to inspect. Default: 5.",
+    )
+    recall.add_argument(
+        "--max-lines",
+        type=int,
+        default=12,
+        help="Maximum lines in the composed recall context. Default: 12.",
+    )
+    recall.add_argument(
+        "--show-sources",
+        action="store_true",
+        help="Include matching memory card file names.",
+    )
+
+    codex = subparsers.add_parser(
+        "codex",
+        help="Start Codex with recalled MemAgent context prepended to the prompt.",
+    )
+    codex.add_argument("prompt", help="Prompt to pass to Codex.")
+    codex.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum number of memory cards to inspect. Default: 5.",
+    )
+    codex.add_argument(
+        "--max-lines",
+        type=int,
+        default=12,
+        help="Maximum lines in the composed recall context. Default: 12.",
+    )
+    codex.add_argument(
+        "--show-sources",
+        action="store_true",
+        help="Include matching memory card file names in the Codex prompt.",
+    )
+    codex.add_argument(
+        "--no-memory",
+        action="store_true",
+        help="Pass the prompt to Codex without recalling memories.",
+    )
+    codex.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the final prompt instead of starting Codex.",
+    )
+    codex.add_argument(
+        "--codex-bin",
+        default="codex",
+        help="Codex executable to run. Default: codex.",
+    )
+    codex.add_argument(
+        "codex_args",
+        nargs=argparse.REMAINDER,
+        help="Extra Codex CLI arguments after --, for example: -- --model gpt-5.4",
+    )
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    store = MemoryStore.from_home_arg(args.home)
+
+    if args.command == "remember":
+        context = detect_context()
+        card = store.remember(
+            text=args.text,
+            topic=args.topic,
+            repo=args.repo or context.repo_name,
+            module=args.module,
+            triggers=args.trigger,
+            exportable=args.exportable,
+        )
+        print(f"Saved memory: {card.path}")
+        return 0
+
+    if args.command == "recall":
+        context = detect_context()
+        matches = store.recall(args.query, context=context, limit=args.limit)
+        rendered = store.compose_context(
+            query=args.query,
+            context=context,
+            matches=matches,
+            max_lines=args.max_lines,
+            show_sources=args.show_sources,
+        )
+        print(rendered)
+        return 0
+
+    if args.command == "codex":
+        context = detect_context()
+        matches = [] if args.no_memory else store.recall(args.prompt, context=context, limit=args.limit)
+        recalled_context = ""
+        if not args.no_memory and matches:
+            recalled_context = store.compose_context(
+                query=args.prompt,
+                context=context,
+                matches=matches,
+                max_lines=args.max_lines,
+                show_sources=args.show_sources,
+            )
+        final_prompt = build_augmented_prompt(args.prompt, recalled_context)
+        if args.dry_run:
+            print(final_prompt)
+            return 0
+        cmd = [args.codex_bin, *normalize_remainder(args.codex_args), final_prompt]
+        return subprocess.run(cmd, check=False).returncode
+
+    parser.error(f"unknown command: {args.command}")
+    return 2
+
+
+def normalize_remainder(items: list[str]) -> list[str]:
+    if items and items[0] == "--":
+        return items[1:]
+    return items
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
