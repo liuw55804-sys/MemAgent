@@ -67,6 +67,18 @@ module-by-module explanation of the current MVP code.
 See [docs/development-workflow.md](docs/development-workflow.md) for the local
 Git/versioning rhythm. Current baseline: `v0.1.0-mvp`.
 
+## Self-Test Plan
+
+See [docs/self-test-plan.md](docs/self-test-plan.md) before adding AI/provider
+integrations. It helps decide whether the next step should be ingest, recall,
+prompt composition, or natural-language triggering.
+
+## Next Iteration
+
+See [docs/next-iteration-plan.md](docs/next-iteration-plan.md) for the proposed
+v0.2 direction: typed memories, bytedcli-oriented recipes, skill routing, and
+more useful recall.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
