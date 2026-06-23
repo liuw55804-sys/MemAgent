@@ -65,9 +65,9 @@ Keep version direction documents stable. If the product direction changes
 substantially, create a new plan file instead of rewriting the old one:
 
 ```text
-docs/v2plan.md
-docs/v3plan.md
-docs/v4plan.md
+docs/plan_v2.md
+docs/plan_v3.md
+docs/plan_v4.md
 ```
 
 Small clarifications are fine, but do not use a version plan as a scratchpad.

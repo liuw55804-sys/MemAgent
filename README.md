@@ -75,7 +75,7 @@ prompt composition, or natural-language triggering.
 
 ## v2 Plan
 
-See [docs/v2plan.md](docs/v2plan.md) for the stable v2 direction: coding-first
+See [docs/plan_v2.md](docs/plan_v2.md) for the stable v2 direction: coding-first
 MemAgent with a generic memory substrate underneath.
 
 ## Codex Natural Language Triggers
