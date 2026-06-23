@@ -78,6 +78,11 @@ prompt composition, or natural-language triggering.
 See [docs/plan_v2.md](docs/plan_v2.md) for the stable v2 direction: coding-first
 MemAgent with a generic memory substrate underneath.
 
+## v0.2 Design
+
+See [docs/design_v0.2_typed_memory.md](docs/design_v0.2_typed_memory.md) for the
+implementation design for `domain` and `kind` typed memories.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
