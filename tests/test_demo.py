@@ -8,7 +8,7 @@ import unittest
 
 from memagent.agents import MEMAGENT_BLOCK_START
 from memagent.cli import main
-from memagent.demo import run_demo, run_demo_bundle
+from memagent.demo import run_demo, run_demo_bundle, run_mcp_demo
 
 
 class DemoRunTest(unittest.TestCase):
@@ -68,12 +68,16 @@ class DemoRunTest(unittest.TestCase):
             self.assertTrue((workspace / "agents_flow" / "transcript.md").exists())
             self.assertTrue((workspace / "agents_flow" / "trace_eval" / "report.md").exists())
             self.assertTrue((workspace / "recall_eval" / "report.md").exists())
+            self.assertTrue((workspace / "mcp_flow" / "mcp_transcript.md").exists())
             self.assertIn("# MemAgent Interview Demo Bundle", result.report)
             self.assertIn("## MCP Tool Surface", result.report)
+            self.assertIn("MCP JSON-RPC transcript", result.report)
             self.assertIn("memagent_recall", result.report)
             self.assertIn("bm25", result.report)
             self.assertIn("Trace feedback eval", result.report)
+            self.assertIn("JSON-RPC exchanges captured", result.report)
             self.assertEqual(result.mcp_tool_count, 12)
+            self.assertGreaterEqual(len(result.mcp_demo.exchanges), 10)
 
     def test_demo_bundle_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,8 +96,46 @@ class DemoRunTest(unittest.TestCase):
                 )
             self.assertEqual(exit_code, 0)
             self.assertIn("[MemAgent demo-bundle]", stdout.getvalue())
+            self.assertIn("mcp transcript:", stdout.getvalue())
             self.assertIn("mcp tools: 12", stdout.getvalue())
             self.assertTrue((workspace / "interview_demo.md").exists())
+
+    def test_run_mcp_demo_writes_jsonrpc_transcript(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "mcp"
+            result = run_mcp_demo(
+                workspace=workspace,
+                memagent_root=Path("/tmp/memagent"),
+                reset=False,
+            )
+            self.assertTrue(result.transcript_path.exists())
+            self.assertTrue(result.trace_eval_report_path.exists())
+            self.assertIn("# MemAgent MCP JSON-RPC Transcript", result.transcript)
+            self.assertIn('"method": "initialize"', result.transcript)
+            self.assertIn('"method": "tools/list"', result.transcript)
+            self.assertIn('"name": "memagent_recall"', result.transcript)
+            self.assertIn("MCP transcript recall found the intended memory", result.transcript)
+            self.assertGreaterEqual(len(result.exchanges), 10)
+
+    def test_mcp_demo_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "mcp"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "mcp-demo",
+                        "--workspace",
+                        str(workspace),
+                        "--memagent-root",
+                        "/tmp/memagent",
+                        "--reset",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("[MemAgent mcp-demo]", stdout.getvalue())
+            self.assertIn("exchanges:", stdout.getvalue())
+            self.assertTrue((workspace / "mcp_transcript.md").exists())
 
 
 if __name__ == "__main__":

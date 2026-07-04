@@ -39,6 +39,7 @@ PYTHONPATH=src python -m memagent.cli handoff draft --from-file local_memory_dem
 PYTHONPATH=src python -m memagent.cli handoff promote --index 1
 PYTHONPATH=src python -m memagent.cli demo-run --reset
 PYTHONPATH=src python -m memagent.cli demo-bundle --reset
+PYTHONPATH=src python -m memagent.cli mcp-demo --reset
 PYTHONPATH=src python -m memagent.cli mcp-stdio
 PYTHONPATH=src python -m memagent.cli recall-eval
 ```
@@ -64,6 +65,7 @@ memagent handoff draft --from-file local_memory_demo/demo_run/session_notes.md
 memagent handoff promote --index 1
 memagent demo-run --reset
 memagent demo-bundle --reset
+memagent mcp-demo --reset
 memagent mcp-stdio
 memagent recall-eval
 ```
@@ -97,7 +99,7 @@ flowchart LR
 
 ## 3. 主要命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`demo-bundle`、`mcp-stdio`、`recall-eval`。
+当前主要命令是 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
 
 ### 3.1 `remember`
 
@@ -394,7 +396,35 @@ local_memory_demo/demo_bundle/interview_demo.md
 
 所以 `demo-bundle` 不是新的 memory 逻辑，而是一个 presentation layer。它把多个可验证 artifact 串成一个入口，方便面试时按 AGENTS.md、RAG、MCP、feedback loop 的顺序讲。
 
-### 3.9 `mcp-stdio`
+### 3.9 `mcp-demo`
+
+用途：生成一份 MCP JSON-RPC transcript，证明 MCP surface 可以被真实调用。
+
+命令：
+
+```bash
+memagent mcp-demo --reset
+```
+
+默认写到：
+
+```text
+local_memory_demo/mcp_demo/mcp_transcript.md
+```
+
+它会创建 mock project 和本地 memory home，然后直接调用 `McpServer.handle(...)`，依次记录：
+
+- `initialize`
+- `tools/list`
+- `tools/call memagent_agents_doctor`
+- `tools/call memagent_remember`
+- `tools/call memagent_recall`
+- `tools/call memagent_handoff_save/show`
+- `tools/call memagent_trace_list/label/report/eval`
+
+这里没有启动后台服务，也没有监听端口；它是一个可复现的 protocol transcript generator。真正给 MCP client 用的入口还是 `mcp-stdio`。
+
+### 3.10 `mcp-stdio`
 
 用途：启动一个最小 MCP stdio server，把 MemAgent 能力暴露给支持 MCP 的本地 client。
 
@@ -428,7 +458,7 @@ memagent mcp-stdio
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
 
-### 3.10 `recall-eval`
+### 3.11 `recall-eval`
 
 用途：运行 mock recall benchmark，比较 `bm25` 和 `keyword` 两种策略。
 
@@ -452,7 +482,7 @@ local_memory_demo/recall_eval/report.md
 
 这个命令用于验证和展示 retriever，不读取真实 `~/.memagent`。
 
-### 3.11 `handoff`
+### 3.12 `handoff`
 
 用途：保存或展示当前项目最近一次交接状态。
 
@@ -519,7 +549,7 @@ memagent handoff promote --index 1 --write
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`demo-bundle`、`mcp-stdio`、`recall-eval`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -536,6 +566,7 @@ build_parser()
   -> 定义 handoff 子命令
   -> 定义 demo-run 子命令
   -> 定义 demo-bundle 子命令
+  -> 定义 mcp-demo 子命令
   -> 定义 mcp-stdio 子命令
   -> 定义 recall-eval 子命令
   -> 定义 trace 子命令和 trace eval
@@ -545,6 +576,7 @@ main(argv)
   -> if agents-snippet: build_agents_snippet
   -> if demo-run: run_demo
   -> if demo-bundle: run_demo_bundle
+  -> if mcp-demo: run_mcp_demo
   -> if mcp-stdio: run_stdio_server
   -> if recall-eval: run_recall_eval
   -> MemoryStore.from_home_arg(args.home)

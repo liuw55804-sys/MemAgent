@@ -45,6 +45,9 @@ local_memory_demo/demo_bundle/
     project/AGENTS.md
   recall_eval/
     report.md
+  mcp_flow/
+    mcp_transcript.md
+    trace_eval/report.md
 ```
 
 `interview_demo.md` contains:
@@ -53,6 +56,7 @@ local_memory_demo/demo_bundle/
 - Mermaid system story
 - capability evidence table
 - MCP tool surface table with read-only/idempotent annotations
+- MCP JSON-RPC transcript link
 - five-minute demo script
 - positioning summary
 
@@ -75,6 +79,7 @@ commands and reports:
 
 - `demo-run` for AGENTS.md / Codex flow
 - `recall-eval` for mock retriever metrics
+- `mcp-demo` for JSON-RPC protocol evidence
 - `trace eval` from the demo trace for real-use feedback evidence
 - MCP `tool_definitions()` for protocol surface evidence
 

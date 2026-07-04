@@ -14,7 +14,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
-from memagent.demo import run_demo, run_demo_bundle
+from memagent.demo import run_demo, run_demo_bundle, run_mcp_demo
 from memagent.eval import run_recall_eval, run_trace_eval
 from memagent.handoff import (
     HandoffStore,
@@ -244,6 +244,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--reset",
         action="store_true",
         help="Delete the bundle workspace before running.",
+    )
+
+    mcp_demo = subparsers.add_parser(
+        "mcp-demo",
+        help="Generate a local MCP JSON-RPC transcript from mock data.",
+    )
+    mcp_demo.add_argument(
+        "--workspace",
+        default="local_memory_demo/mcp_demo",
+        help="MCP demo workspace directory. Default: local_memory_demo/mcp_demo.",
+    )
+    mcp_demo.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+    mcp_demo.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete the MCP demo workspace before running.",
     )
 
     mcp = subparsers.add_parser(
@@ -506,7 +525,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- transcript: {result.demo.transcript_path}")
         print(f"- recall eval: {result.recall_eval.report_path}")
         print(f"- trace eval: {result.demo.workspace / 'trace_eval' / 'report.md'}")
+        print(f"- mcp transcript: {result.mcp_demo.transcript_path}")
         print(f"- mcp tools: {result.mcp_tool_count}")
+        return 0
+
+    if args.command == "mcp-demo":
+        result = run_mcp_demo(
+            workspace=Path(args.workspace),
+            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            reset=args.reset,
+        )
+        print("[MemAgent mcp-demo]")
+        print(f"- workspace: {result.workspace}")
+        print(f"- project: {result.project_dir}")
+        print(f"- memory home: {result.memory_home}")
+        print(f"- transcript: {result.transcript_path}")
+        print(f"- exchanges: {len(result.exchanges)}")
+        print(f"- trace eval: {result.trace_eval_report_path}")
         return 0
 
     if args.command == "mcp-stdio":

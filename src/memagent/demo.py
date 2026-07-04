@@ -23,7 +23,7 @@ from memagent.handoff import (
     render_promotion_preview,
 )
 from memagent.memory import MemoryStore
-from memagent.mcp import tool_definitions
+from memagent.mcp import MCP_PROTOCOL_VERSION, McpServer, tool_definitions
 from memagent.wrapper import build_augmented_prompt
 
 
@@ -86,7 +86,27 @@ class DemoBundleResult:
     report: str
     demo: DemoRunResult
     recall_eval: RecallEvalResult
+    mcp_demo: "McpDemoResult"
     mcp_tool_count: int
+
+
+@dataclass(frozen=True)
+class McpDemoExchange:
+    title: str
+    request: dict[str, object]
+    response: dict[str, object] | None
+
+
+@dataclass(frozen=True)
+class McpDemoResult:
+    workspace: Path
+    project_dir: Path
+    memory_home: Path
+    transcript_path: Path
+    transcript: str
+    exchanges: tuple[McpDemoExchange, ...]
+    seeded_trace_id: str
+    trace_eval_report_path: Path
 
 
 def run_demo(
@@ -392,6 +412,232 @@ def run_demo(
     )
 
 
+def run_mcp_demo(
+    *,
+    workspace: Path,
+    memagent_root: Path | None = None,
+    reset: bool = False,
+) -> McpDemoResult:
+    root = (memagent_root or default_memagent_root()).expanduser().resolve()
+    workspace = workspace.expanduser().resolve()
+    if reset and workspace.exists():
+        shutil.rmtree(workspace)
+
+    project_dir = workspace / "project"
+    memory_home = workspace / "memagent_home"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    memory_home.mkdir(parents=True, exist_ok=True)
+    _ensure_demo_project(project_dir)
+
+    context = detect_context(project_dir)
+    install_plan = build_agents_install_plan(
+        context=context,
+        target=project_dir / "AGENTS.md",
+        memagent_root=root,
+    )
+    write_agents_install_plan(install_plan)
+
+    server = McpServer.from_home_arg(str(memory_home), str(root))
+    exchanges: list[McpDemoExchange] = []
+
+    def send(title: str, request: dict[str, object]) -> dict[str, object] | None:
+        response = server.handle(request)
+        exchanges.append(McpDemoExchange(title=title, request=request, response=response))
+        return response
+
+    send(
+        "Initialize MCP server",
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "memagent-demo", "version": "0"},
+            },
+        },
+    )
+    send(
+        "Initialized notification",
+        {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+        },
+    )
+    send("List tools", {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    send(
+        "Check AGENTS.md integration",
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_agents_doctor",
+                "arguments": {"cwd": str(project_dir)},
+            },
+        },
+    )
+    send(
+        "Remember workflow memory",
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_remember",
+                "arguments": {
+                    "text": DEMO_MEMORY,
+                    "topic": "MCP demo attribution accuracy entrypoint",
+                    "domain": "coding",
+                    "kind": "data_entrypoint",
+                    "repo": "demo_service",
+                    "module": "attribution",
+                    "triggers": ["attribution", "accuracy", "audit_label"],
+                    "exportable": True,
+                    "cwd": str(project_dir),
+                },
+            },
+        },
+    )
+    send(
+        "Recall workflow memory",
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_recall",
+                "arguments": {
+                    "query": DEMO_QUERY,
+                    "cwd": str(project_dir),
+                    "strategy": "bm25",
+                    "show_sources": True,
+                    "show_reasons": True,
+                    "format": "json",
+                },
+            },
+        },
+    )
+    send(
+        "Save handoff",
+        {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_handoff_save",
+                "arguments": {
+                    "cwd": str(project_dir),
+                    "topic": "MCP demo handoff",
+                    "summary": DEMO_HANDOFF,
+                    "done": ["Exercised MCP remember and recall tools."],
+                    "next_steps": ["Review generated MCP transcript."],
+                    "memory_candidates": ["MCP demos should show protocol requests and responses."],
+                },
+            },
+        },
+    )
+    send(
+        "Show handoff",
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_handoff_show",
+                "arguments": {"cwd": str(project_dir), "max_lines": 30},
+            },
+        },
+    )
+
+    recall_context = detect_context(project_dir)
+    matches = server.store.recall(DEMO_QUERY, context=recall_context, limit=5, strategy="bm25")
+    payload = server.store.build_recall_payload(
+        query=DEMO_QUERY,
+        context=recall_context,
+        matches=matches,
+        max_lines=12,
+        show_sources=True,
+        show_reasons=True,
+    )
+    seeded_trace = server.store.save_recall_trace(payload, source="mcp-demo-seed")
+    send(
+        "List seeded recall traces",
+        {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_trace_list",
+                "arguments": {"limit": 5},
+            },
+        },
+    )
+    send(
+        "Label recall trace",
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_trace_label",
+                "arguments": {
+                    "identifier": seeded_trace.identifier,
+                    "rating": "useful",
+                    "note": "MCP transcript recall found the intended memory.",
+                },
+            },
+        },
+    )
+    send(
+        "Report trace feedback",
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_trace_report",
+                "arguments": {"limit": 10},
+            },
+        },
+    )
+    trace_eval_report_path = workspace / "trace_eval" / "report.md"
+    send(
+        "Write trace feedback eval",
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_trace_eval",
+                "arguments": {"workspace": str(trace_eval_report_path.parent), "limit": 10},
+            },
+        },
+    )
+
+    transcript = render_mcp_demo_transcript(
+        workspace=workspace,
+        project_dir=project_dir,
+        memory_home=memory_home,
+        exchanges=tuple(exchanges),
+        seeded_trace_id=seeded_trace.identifier,
+        trace_eval_report_path=trace_eval_report_path,
+    )
+    transcript_path = workspace / "mcp_transcript.md"
+    transcript_path.write_text(transcript, encoding="utf-8")
+    return McpDemoResult(
+        workspace=workspace,
+        project_dir=project_dir,
+        memory_home=memory_home,
+        transcript_path=transcript_path,
+        transcript=transcript,
+        exchanges=tuple(exchanges),
+        seeded_trace_id=seeded_trace.identifier,
+        trace_eval_report_path=trace_eval_report_path,
+    )
+
+
 def run_demo_bundle(
     *,
     workspace: Path,
@@ -410,12 +656,18 @@ def run_demo_bundle(
         reset=True,
     )
     recall_eval = run_recall_eval(workspace=workspace / "recall_eval")
+    mcp_demo = run_mcp_demo(
+        workspace=workspace / "mcp_flow",
+        memagent_root=root,
+        reset=True,
+    )
     tools = tool_definitions()
     report = render_demo_bundle_report(
         workspace=workspace,
         memagent_root=root,
         demo=demo,
         recall_eval=recall_eval,
+        mcp_demo=mcp_demo,
         tools=tools,
     )
     report_path = workspace / "interview_demo.md"
@@ -426,6 +678,7 @@ def run_demo_bundle(
         report=report,
         demo=demo,
         recall_eval=recall_eval,
+        mcp_demo=mcp_demo,
         mcp_tool_count=len(tools),
     )
 
@@ -475,6 +728,7 @@ def render_demo_bundle_report(
     memagent_root: Path,
     demo: DemoRunResult,
     recall_eval: RecallEvalResult,
+    mcp_demo: McpDemoResult,
     tools: list[dict[str, object]],
 ) -> str:
     trace_eval_report = demo.workspace / "trace_eval" / "report.md"
@@ -493,6 +747,7 @@ def render_demo_bundle_report(
         f"| AGENTS.md flow transcript | `{_display_path(demo.transcript_path, root=workspace)}` | Codex natural-language triggers, recall, handoff, prompt patch |",
         f"| Trace feedback eval | `{_display_path(trace_eval_report, root=workspace)}` | Real-use recall feedback can be labeled and reported |",
         f"| Recall benchmark | `{_display_path(recall_eval.report_path, root=workspace)}` | BM25 recall can be compared against a keyword baseline |",
+        f"| MCP JSON-RPC transcript | `{_display_path(mcp_demo.transcript_path, root=workspace)}` | MCP initialize, tools/list, and tools/call are exercised end-to-end |",
         f"| Demo project AGENTS.md | `{_display_path(demo.project_dir / 'AGENTS.md', root=workspace)}` | The integration can be installed and checked in a project |",
         "",
         "## System Story",
@@ -513,7 +768,7 @@ def render_demo_bundle_report(
         "|---|---|",
         f"| AGENTS.md integration | `demo-run` generated `{len(demo.steps)}` reproducible steps and a ready doctor check |",
         f"| RAG evaluation | `bm25` {bm25}; `keyword` {keyword} |",
-        f"| MCP protocol surface | `{len(tools)}` tools exposed with annotations |",
+        f"| MCP protocol surface | `{len(tools)}` tools exposed with annotations; `{len(mcp_demo.exchanges)}` JSON-RPC exchanges captured |",
         "| Agent memory lifecycle | remember -> recall -> handoff -> promote -> recall promoted memory |",
         "| Feedback loop | recall trace -> label useful -> report -> trace eval Markdown artifact |",
         "",
@@ -540,8 +795,9 @@ def render_demo_bundle_report(
             "1. Open the AGENTS.md flow transcript and show the doctor output marked `Status: ready`.",
             "2. Show the recall step with sources, matched terms, and BM25 strategy.",
             "3. Show the Codex dry-run prompt patch to prove MemAgent augments Codex instead of replacing it.",
-            "4. Show handoff and promotion to explain memory lifecycle beyond plain RAG.",
-            "5. Show recall-eval and trace-eval reports to explain offline and real-use evaluation.",
+            "4. Show the MCP JSON-RPC transcript to prove the protocol surface is executable.",
+            "5. Show handoff and promotion to explain memory lifecycle beyond plain RAG.",
+            "6. Show recall-eval and trace-eval reports to explain offline and real-use evaluation.",
             "",
             "## Positioning",
             "",
@@ -562,6 +818,72 @@ def render_demo_bundle_report(
         ]
     )
     return "\n".join(lines)
+
+
+def render_mcp_demo_transcript(
+    *,
+    workspace: Path,
+    project_dir: Path,
+    memory_home: Path,
+    exchanges: tuple[McpDemoExchange, ...],
+    seeded_trace_id: str,
+    trace_eval_report_path: Path,
+) -> str:
+    lines = [
+        "# MemAgent MCP JSON-RPC Transcript",
+        "",
+        "This transcript is generated from a local mock project. It is safe to share.",
+        "",
+        f"- Workspace: `{workspace}`",
+        f"- Project: `{project_dir}`",
+        f"- Memory home: `{memory_home}`",
+        f"- Protocol version: `{MCP_PROTOCOL_VERSION}`",
+        f"- Exchanges: `{len(exchanges)}`",
+        f"- Seeded trace: `{seeded_trace_id}`",
+        f"- Trace eval report: `{trace_eval_report_path}`",
+        "",
+        "## Flow",
+        "",
+        "```mermaid",
+        "sequenceDiagram",
+        "  participant C as MCP Client",
+        "  participant S as MemAgent MCP Server",
+        "  C->>S: initialize",
+        "  C->>S: tools/list",
+        "  C->>S: tools/call remember",
+        "  C->>S: tools/call recall",
+        "  C->>S: tools/call handoff / trace",
+        "  S-->>C: JSON-RPC results",
+        "```",
+        "",
+    ]
+    for index, exchange in enumerate(exchanges, start=1):
+        lines.extend(
+            [
+                f"## {index}. {exchange.title}",
+                "",
+                "Request:",
+                "",
+                "```json",
+                json.dumps(exchange.request, ensure_ascii=False, indent=2),
+                "```",
+                "",
+                "Response:",
+                "",
+            ]
+        )
+        if exchange.response is None:
+            lines.extend(["```text", "(notification; no response)", "```", ""])
+        else:
+            lines.extend(
+                [
+                    "```json",
+                    json.dumps(exchange.response, ensure_ascii=False, indent=2),
+                    "```",
+                    "",
+                ]
+            )
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _ensure_demo_project(project_dir: Path) -> None:

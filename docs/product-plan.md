@@ -104,7 +104,7 @@ MemAgent 要重点解决的是：
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
 - **演示可复现**：通过 `demo-run` 在隔离目录里生成 mock 项目和 transcript，稳定展示 install、doctor、recall、prompt patch；通过 `demo-bundle` 生成面试入口报告。
-- **协议可扩展**：通过 `mcp-stdio` 把 recall、remember、doctor、handoff、trace 暴露成 MCP tools，服务未来 Cursor、Claude Code 等 MCP client。
+- **协议可扩展**：通过 `mcp-stdio` 把 recall、remember、doctor、handoff、trace 暴露成 MCP tools，服务未来 Cursor、Claude Code 等 MCP client；通过 `mcp-demo` 生成 JSON-RPC transcript 作为协议级证据。
 - **召回可评估**：通过 `recall-eval` 用 mock benchmark 对比 BM25 和 keyword baseline，输出 hit@1 / MRR 报告；通过 `trace eval` 输出真实反馈报告。
 - **交接可延续**：通过 `handoff save/show` 保存每个项目最近一次交接状态，让新会话可以先 catch up，再决定是否召回长期 memory。
 - **交接可草稿化**：通过 `handoff draft --from-file` 从线程笔记或 transcript 生成可审阅 handoff draft，用户确认后再 `--save`。

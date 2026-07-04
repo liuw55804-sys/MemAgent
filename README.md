@@ -23,6 +23,7 @@ python -m memagent.cli handoff draft --from-file ./session_notes.md
 python -m memagent.cli handoff promote --index 1
 python -m memagent.cli demo-run --reset
 python -m memagent.cli demo-bundle --reset
+python -m memagent.cli mcp-demo --reset
 python -m memagent.cli mcp-stdio
 python -m memagent.cli recall-eval
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
@@ -47,6 +48,7 @@ memagent handoff draft --from-file ./session_notes.md
 memagent handoff promote --index 1
 memagent demo-run --reset
 memagent demo-bundle --reset
+memagent mcp-demo --reset
 memagent mcp-stdio
 memagent recall-eval
 memagent codex "continue checking attribution accuracy"
@@ -298,6 +300,12 @@ interview demo bundle design. `memagent demo-bundle --reset` generates one
 shareable Markdown entrypoint that links the AGENTS.md flow transcript, mock RAG
 benchmark, real trace-feedback report, and MCP tool surface.
 
+## v0.22 Design
+
+See [docs/design_v0.22_mcp_demo.md](docs/design_v0.22_mcp_demo.md) for the MCP
+JSON-RPC transcript design. `memagent mcp-demo --reset` generates a concrete
+protocol transcript covering initialize, tools/list, and tools/call flows.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
@@ -331,6 +339,18 @@ The entry report is written to:
 
 ```text
 local_memory_demo/demo_bundle/interview_demo.md
+```
+
+Generate a standalone MCP JSON-RPC transcript:
+
+```bash
+memagent mcp-demo --reset
+```
+
+The transcript is written to:
+
+```text
+local_memory_demo/mcp_demo/mcp_transcript.md
 ```
 
 ## Development

@@ -57,9 +57,10 @@ local_memory_demo/demo_bundle/
   agents_flow/transcript.md
   agents_flow/trace_eval/report.md
   recall_eval/report.md
+  mcp_flow/mcp_transcript.md
 ```
 
-`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、RAG、MCP、handoff、trace feedback 和 eval 证据串成一个可讲的系统故事。
+`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、RAG、MCP、handoff、trace feedback 和 eval 证据串成一个可讲的系统故事。`mcp_flow/mcp_transcript.md` 可以用来证明 MCP 是真实 JSON-RPC 交互，不只是工具清单。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 

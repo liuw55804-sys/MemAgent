@@ -22,6 +22,7 @@ Added:
 - `handoff draft --from-file` to generate a reviewable handoff draft from session notes before saving.
 - `handoff promote` command to preview or write handoff memory candidates as durable memory cards.
 - `demo-bundle` command to generate a shareable interview demo entrypoint from mock data.
+- `mcp-demo` command to generate a local MCP JSON-RPC transcript from mock data.
 - MCP tools for saving and showing project handoffs.
 - MCP tool for drafting and optionally saving handoffs from session text.
 - MCP tool for promoting handoff memory candidates.
