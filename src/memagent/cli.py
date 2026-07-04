@@ -33,7 +33,7 @@ from memagent.llm import check_llm_provider, render_llm_doctor
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.router import render_route_decision, route_interaction
-from memagent.wrapper import build_augmented_prompt
+from memagent.wrapper import build_augmented_prompt, process_result_context_for_prompt
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,6 +138,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["heuristic", "openai-compatible"],
         help="Routing provider. Default: heuristic.",
     )
+    route.add_argument("--llm-profile", help="Named LLM provider profile for openai-compatible routing.")
+    route.add_argument("--llm-config", help="Optional LLM provider profile config path.")
     route.add_argument(
         "--recent-trace",
         action="store_true",
@@ -173,6 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["heuristic", "openai-compatible"],
         help="Routing/drafting provider. Default: heuristic.",
     )
+    process.add_argument("--llm-profile", help="Named LLM provider profile for openai-compatible processing.")
+    process.add_argument("--llm-config", help="Optional LLM provider profile config path.")
     process.add_argument(
         "--no-write",
         action="store_true",
@@ -225,6 +229,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM provider to check. Default: openai-compatible.",
     )
     llm_doctor.add_argument(
+        "--profile",
+        help="Named provider profile from ~/.memagent/llm_providers.local.json.",
+    )
+    llm_doctor.add_argument(
+        "--config",
+        help="Provider profile config path. Defaults to ~/.memagent/llm_providers.local.json.",
+    )
+    llm_doctor.add_argument(
         "--check-live",
         action="store_true",
         help="Send a small chat completion request to verify the API. Default only checks env vars.",
@@ -269,6 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["heuristic", "openai-compatible"],
         help="Drafting provider. Default: heuristic.",
     )
+    draft_memory_parser.add_argument("--llm-profile", help="Named LLM provider profile for openai-compatible drafting.")
+    draft_memory_parser.add_argument("--llm-config", help="Optional LLM provider profile config path.")
     draft_memory_parser.add_argument("--topic", help="Optional topic override.")
     draft_memory_parser.add_argument("--kind", help="Optional memory kind override.")
     draft_memory_parser.add_argument(
@@ -317,9 +331,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recall scoring strategy. Default: bm25.",
     )
     codex.add_argument(
+        "--provider",
+        default="heuristic",
+        choices=["heuristic", "openai-compatible"],
+        help="MemAgent preflight provider. Default: heuristic.",
+    )
+    codex.add_argument("--llm-profile", help="Named LLM provider profile for openai-compatible preflight.")
+    codex.add_argument("--llm-config", help="Optional LLM provider profile config path.")
+    codex.add_argument(
+        "--no-write",
+        action="store_true",
+        help="Do not let preflight write trace feedback, handoff, trace, or evaluation artifacts.",
+    )
+    codex.add_argument(
+        "--no-trace",
+        action="store_true",
+        help="Do not save recall traces during preflight recall actions.",
+    )
+    codex.add_argument(
         "--no-memory",
         action="store_true",
-        help="Pass the prompt to Codex without recalling memories.",
+        help="Pass the prompt to Codex without MemAgent preflight.",
     )
     codex.add_argument(
         "--dry-run",
@@ -824,6 +856,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.llm_command == "doctor":
             result = check_llm_provider(
                 provider=args.provider,
+                profile=args.profile,
+                config_path=Path(args.config) if args.config else None,
                 check_live=args.check_live,
                 timeout_seconds=args.timeout,
             )
@@ -872,6 +906,8 @@ def main(argv: list[str] | None = None) -> int:
                 recent_text=recent_text,
                 context=context,
                 provider=args.provider,
+                llm_profile=args.llm_profile,
+                llm_config_path=Path(args.llm_config) if args.llm_config else None,
                 has_recent_trace=True if args.recent_trace else None,
             )
         except ValueError as exc:
@@ -898,6 +934,8 @@ def main(argv: list[str] | None = None) -> int:
                 store=store,
                 handoff_store=handoff_store,
                 provider=args.provider,
+                llm_profile=args.llm_profile,
+                llm_config_path=Path(args.llm_config) if args.llm_config else None,
                 allow_writes=not args.no_write,
                 trace_recall=not args.no_trace,
                 limit=args.limit,
@@ -929,6 +967,8 @@ def main(argv: list[str] | None = None) -> int:
                     source_text,
                     context=context,
                     provider=args.provider,
+                    llm_profile=args.llm_profile,
+                    llm_config_path=Path(args.llm_config) if args.llm_config else None,
                     topic=args.topic,
                     kind=args.kind,
                     max_chars=args.max_chars,
@@ -1124,23 +1164,30 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "codex":
         context = detect_context()
-        matches = [] if args.no_memory else store.recall(
-            args.prompt,
-            context=context,
-            limit=args.limit,
-            strategy=args.strategy,
-        )
-        recalled_context = ""
-        if not args.no_memory and matches:
-            recalled_context = store.compose_context(
-                query=args.prompt,
-                context=context,
-                matches=matches,
-                max_lines=args.max_lines,
-                show_sources=args.show_sources,
-                show_reasons=args.show_reasons,
-            )
-        final_prompt = build_augmented_prompt(args.prompt, recalled_context)
+        preflight_context = ""
+        if not args.no_memory:
+            try:
+                result = process_interaction(
+                    message=args.prompt,
+                    recent_text="",
+                    context=context,
+                    store=store,
+                    handoff_store=HandoffStore(store.home),
+                    provider=args.provider,
+                    llm_profile=args.llm_profile,
+                    llm_config_path=Path(args.llm_config) if args.llm_config else None,
+                    allow_writes=not args.no_write,
+                    trace_recall=not args.no_trace,
+                    limit=args.limit,
+                    max_lines=args.max_lines,
+                    show_sources=args.show_sources,
+                    show_reasons=args.show_reasons,
+                    strategy=args.strategy,
+                )
+            except ValueError as exc:
+                parser.error(str(exc))
+            preflight_context = process_result_context_for_prompt(result)
+        final_prompt = build_augmented_prompt(args.prompt, preflight_context)
         if args.dry_run:
             print(final_prompt)
             return 0

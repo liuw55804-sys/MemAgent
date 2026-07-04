@@ -31,6 +31,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli process", snippet)
         self.assertIn("LLM Provider Readiness", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli llm doctor", snippet)
+        self.assertIn("--profile", snippet)
         self.assertIn("--check-live", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli route", snippet)
         self.assertIn("Task-Start Memory Check", snippet)

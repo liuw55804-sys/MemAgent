@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+from pathlib import Path
 import re
 import shlex
 from typing import Any
@@ -68,6 +69,8 @@ def draft_memory(
     *,
     context: ProjectContext | None = None,
     provider: str = "heuristic",
+    llm_profile: str | None = None,
+    llm_config_path: Path | None = None,
     topic: str | None = None,
     kind: str | None = None,
     max_chars: int = 420,
@@ -79,7 +82,15 @@ def draft_memory(
     if provider == "heuristic":
         return draft_memory_heuristic(text, context=context, topic=topic, kind=kind, max_chars=max_chars)
     if provider == "openai-compatible":
-        return draft_memory_openai_compatible(text, context=context, topic=topic, kind=kind, max_chars=max_chars)
+        return draft_memory_openai_compatible(
+            text,
+            context=context,
+            llm_profile=llm_profile,
+            llm_config_path=llm_config_path,
+            topic=topic,
+            kind=kind,
+            max_chars=max_chars,
+        )
     raise ValueError("provider must be heuristic or openai-compatible")
 
 
@@ -113,11 +124,17 @@ def draft_memory_openai_compatible(
     source_text: str,
     *,
     context: ProjectContext | None,
+    llm_profile: str | None,
+    llm_config_path: Path | None,
     topic: str | None,
     kind: str | None,
     max_chars: int,
 ) -> MemoryDraft:
-    config = OpenAICompatibleConfig.from_env()
+    config = (
+        OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
+        if llm_profile
+        else OpenAICompatibleConfig.from_env()
+    )
     context_payload = (
         {
             "cwd": str(context.cwd),

@@ -45,6 +45,13 @@ JSON output for Codex/MCP clients:
 memagent llm doctor --json
 ```
 
+Named local profile:
+
+```bash
+memagent llm doctor --profile deepseek
+memagent llm doctor --profile deepseek --check-live
+```
+
 ## Environment
 
 The OpenAI-compatible provider uses:
@@ -57,6 +64,41 @@ MEMAGENT_LLM_MODEL
 
 `MEMAGENT_LLM_BASE_URL` can point to a `/v1` base URL or directly to
 `/chat/completions`. MemAgent never prints the API key.
+
+For multiple providers, use a local private profile file:
+
+```json
+{
+  "profiles": {
+    "aliyun": {
+      "provider": "openai-compatible",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-plus",
+      "api_key": "<local key>"
+    },
+    "deepseek": {
+      "provider": "openai-compatible",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-v4-flash",
+      "api_key": "<local key>"
+    },
+    "glm": {
+      "provider": "openai-compatible",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "model": "glm-4.5-flash",
+      "api_key": "<local key>"
+    }
+  }
+}
+```
+
+Default path:
+
+```text
+~/.memagent/llm_providers.local.json
+```
+
+Keep the file private, for example with `chmod 600`.
 
 ## Schema
 
@@ -73,7 +115,9 @@ MEMAGENT_LLM_MODEL
   "chat_completions_url": "https://example.com/v1/chat/completions",
   "missing_env": [],
   "error": null,
-  "api_key_set": true
+  "api_key_set": true,
+  "profile": "deepseek",
+  "config_path": "/Users/example/.memagent/llm_providers.local.json"
 }
 ```
 
@@ -84,6 +128,7 @@ MEMAGENT_LLM_MODEL
 - `--check-live` sends a tiny chat completion request and may incur provider
   cost.
 - The API key is only read from the environment and is never printed.
+- Local provider profile files should stay outside Git.
 
 ## Interview Point
 

@@ -58,7 +58,50 @@ PYTHONPATH=src python -m memagent.cli llm doctor --check-live
 - 成功时 `status: live_ok`
 - 失败时 `status: live_failed`，并展示可读错误
 
-## Step 4: Try LLM-Assisted Process
+## Step 4: Optional Local Profiles
+
+如果你有多个 provider，可以写本地私有 profile：
+
+```text
+~/.memagent/llm_providers.local.json
+```
+
+示例结构：
+
+```json
+{
+  "profiles": {
+    "aliyun": {
+      "provider": "openai-compatible",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-plus",
+      "api_key": "<local key>"
+    },
+    "deepseek": {
+      "provider": "openai-compatible",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-v4-flash",
+      "api_key": "<local key>"
+    },
+    "glm": {
+      "provider": "openai-compatible",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "model": "glm-4.5-flash",
+      "api_key": "<local key>"
+    }
+  }
+}
+```
+
+然后逐个检查：
+
+```bash
+PYTHONPATH=src python -m memagent.cli llm doctor --profile aliyun --check-live
+PYTHONPATH=src python -m memagent.cli llm doctor --profile deepseek --check-live
+PYTHONPATH=src python -m memagent.cli llm doctor --profile glm --check-live
+```
+
+## Step 5: Try LLM-Assisted Process
 
 live check 成功后，再用同一个 provider 走自然交互入口：
 
@@ -67,6 +110,7 @@ PYTHONPATH=src python -m memagent.cli process \
   "这个入口下次别忘了" \
   --recent-text "bytedcli rds db table schema demo_db demo_table --region cn" \
   --provider openai-compatible \
+  --llm-profile aliyun \
   --json
 ```
 

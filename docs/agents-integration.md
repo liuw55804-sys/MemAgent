@@ -106,11 +106,17 @@ without spending tokens:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli llm doctor
 ```
 
+For named local profiles in `~/.memagent/llm_providers.local.json`:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli llm doctor --profile deepseek
+```
+
 Only run a live provider request when the user explicitly asks to verify the API
 call:
 
 ```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli llm doctor --check-live
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli llm doctor --profile deepseek --check-live
 ```
 
 ### Task-Start Memory Check

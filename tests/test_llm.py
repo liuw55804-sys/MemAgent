@@ -3,6 +3,8 @@ from __future__ import annotations
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 from unittest import mock
@@ -42,6 +44,33 @@ class LlmDoctorTest(unittest.TestCase):
         self.assertFalse(payload["live_checked"])
         self.assertEqual(payload["chat_completions_url"], "https://api.example.test/v1/chat/completions")
         self.assertTrue(payload["api_key_set"])
+        self.assertNotIn("test-key", render_llm_doctor(result))
+
+    def test_profile_config_without_live_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "llm_profiles.json"
+            with self.subTest("profile"):
+                config_path.write_text(
+                    json.dumps(
+                        {
+                            "profiles": {
+                                "demo": {
+                                    "provider": "openai-compatible",
+                                    "base_url": "https://api.example.test/v1",
+                                    "api_key": "test-key",
+                                    "model": "demo-model",
+                                }
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                result = check_llm_provider(profile="demo", config_path=config_path)
+
+        payload = result.to_payload()
+        self.assertTrue(payload["configured"])
+        self.assertEqual(payload["profile"], "demo")
+        self.assertEqual(payload["config_path"], str(config_path))
         self.assertNotIn("test-key", render_llm_doctor(result))
 
     def test_live_check_with_local_openai_compatible_server(self) -> None:

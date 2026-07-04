@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+from pathlib import Path
 import re
 from typing import Any
 from urllib import error, request
@@ -10,6 +11,7 @@ from urllib import error, request
 
 LLM_DOCTOR_SCHEMA_VERSION = "memagent.llm_doctor.v1"
 SUPPORTED_LLM_PROVIDERS = {"openai-compatible"}
+DEFAULT_LLM_PROVIDERS_PATH = Path("~/.memagent/llm_providers.local.json")
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,24 @@ class OpenAICompatibleConfig:
             raise ValueError(
                 "openai-compatible provider requires MEMAGENT_LLM_BASE_URL, "
                 "MEMAGENT_LLM_API_KEY, and MEMAGENT_LLM_MODEL"
+            )
+        return cls(base_url=base_url, api_key=api_key, model=model, timeout_seconds=timeout_seconds)
+
+    @classmethod
+    def from_profile(
+        cls,
+        profile: str,
+        *,
+        config_path: Path | None = None,
+        timeout_seconds: int = 30,
+    ) -> "OpenAICompatibleConfig":
+        profile_payload = load_llm_profile(profile, config_path=config_path)
+        base_url = str(profile_payload.get("base_url") or "").strip()
+        api_key = str(profile_payload.get("api_key") or "").strip()
+        model = str(profile_payload.get("model") or "").strip()
+        if not base_url or not api_key or not model:
+            raise ValueError(
+                f"profile {profile!r} requires base_url, api_key, and model"
             )
         return cls(base_url=base_url, api_key=api_key, model=model, timeout_seconds=timeout_seconds)
 
@@ -51,6 +71,8 @@ class LlmDoctorResult:
     chat_completions_url: str | None
     missing_env: tuple[str, ...]
     api_key_set: bool
+    profile: str | None = None
+    config_path: str | None = None
     error: str | None = None
 
     def to_payload(self) -> dict[str, Any]:
@@ -67,17 +89,29 @@ class LlmDoctorResult:
             "missing_env": list(self.missing_env),
             "error": self.error,
             "api_key_set": self.api_key_set,
+            "profile": self.profile,
+            "config_path": self.config_path,
         }
 
 
 def check_llm_provider(
     *,
     provider: str = "openai-compatible",
+    profile: str | None = None,
+    config_path: Path | None = None,
     check_live: bool = False,
     timeout_seconds: int = 30,
 ) -> LlmDoctorResult:
     if provider not in SUPPORTED_LLM_PROVIDERS:
         raise ValueError(f"provider must be one of {sorted(SUPPORTED_LLM_PROVIDERS)}")
+    if profile:
+        return _check_profile_provider(
+            provider=provider,
+            profile=profile,
+            config_path=config_path,
+            check_live=check_live,
+            timeout_seconds=timeout_seconds,
+        )
     missing = _missing_openai_compatible_env()
     if missing:
         return LlmDoctorResult(
@@ -91,6 +125,8 @@ def check_llm_provider(
             chat_completions_url=None,
             missing_env=tuple(missing),
             api_key_set=bool(os.environ.get("MEMAGENT_LLM_API_KEY", "").strip()),
+            profile=None,
+            config_path=None,
             error="missing required environment variables",
         )
     config = OpenAICompatibleConfig.from_env(timeout_seconds=timeout_seconds)
@@ -106,7 +142,93 @@ def check_llm_provider(
             chat_completions_url=config.chat_completions_url,
             missing_env=(),
             api_key_set=True,
+            profile=None,
+            config_path=None,
         )
+    return _live_check_result(
+        provider=provider,
+        config=config,
+        profile=None,
+        config_path=None,
+    )
+
+
+def load_llm_profile(profile: str, *, config_path: Path | None = None) -> dict[str, Any]:
+    path = (config_path or DEFAULT_LLM_PROVIDERS_PATH).expanduser()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    profiles = payload.get("profiles") if isinstance(payload, dict) else None
+    if not isinstance(profiles, dict):
+        raise ValueError(f"LLM provider config has no profiles object: {path}")
+    profile_payload = profiles.get(profile)
+    if not isinstance(profile_payload, dict):
+        raise ValueError(f"LLM provider profile not found: {profile}")
+    provider = str(profile_payload.get("provider") or "openai-compatible")
+    if provider != "openai-compatible":
+        raise ValueError(f"profile {profile!r} provider must be openai-compatible")
+    return profile_payload
+
+
+def _check_profile_provider(
+    *,
+    provider: str,
+    profile: str,
+    config_path: Path | None,
+    check_live: bool,
+    timeout_seconds: int,
+) -> LlmDoctorResult:
+    path = (config_path or DEFAULT_LLM_PROVIDERS_PATH).expanduser()
+    try:
+        config = OpenAICompatibleConfig.from_profile(
+            profile,
+            config_path=path,
+            timeout_seconds=timeout_seconds,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return LlmDoctorResult(
+            provider=provider,
+            configured=False,
+            live_checked=False,
+            live_ok=None,
+            status="not_configured",
+            base_url=None,
+            model=None,
+            chat_completions_url=None,
+            missing_env=(),
+            api_key_set=False,
+            profile=profile,
+            config_path=str(path),
+            error=str(exc),
+        )
+    if not check_live:
+        return LlmDoctorResult(
+            provider=provider,
+            configured=True,
+            live_checked=False,
+            live_ok=None,
+            status="configured",
+            base_url=config.base_url,
+            model=config.model,
+            chat_completions_url=config.chat_completions_url,
+            missing_env=(),
+            api_key_set=True,
+            profile=profile,
+            config_path=str(path),
+        )
+    return _live_check_result(
+        provider=provider,
+        config=config,
+        profile=profile,
+        config_path=str(path),
+    )
+
+
+def _live_check_result(
+    *,
+    provider: str,
+    config: OpenAICompatibleConfig,
+    profile: str | None,
+    config_path: str | None,
+) -> LlmDoctorResult:
     try:
         content = chat_completion(
             config=config,
@@ -133,6 +255,8 @@ def check_llm_provider(
             chat_completions_url=config.chat_completions_url,
             missing_env=(),
             api_key_set=True,
+            profile=profile,
+            config_path=config_path,
             error=str(exc),
         )
     return LlmDoctorResult(
@@ -146,6 +270,8 @@ def check_llm_provider(
         chat_completions_url=config.chat_completions_url,
         missing_env=(),
         api_key_set=True,
+        profile=profile,
+        config_path=config_path,
         error=None if content.strip() else "empty response",
     )
 
@@ -162,6 +288,10 @@ def render_llm_doctor(result: LlmDoctorResult) -> str:
     ]
     if payload["live_checked"]:
         lines.append(f"- live ok: {_yes_no(payload['live_ok'])}")
+    if payload["profile"]:
+        lines.append(f"- profile: {payload['profile']}")
+    if payload["config_path"]:
+        lines.append(f"- config: {payload['config_path']}")
     if payload["base_url"]:
         lines.append(f"- base url: {payload['base_url']}")
     if payload["model"]:

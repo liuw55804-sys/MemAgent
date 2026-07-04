@@ -190,6 +190,8 @@ class McpServer:
             recent_text=_optional_str(arguments, "recent_text") or "",
             context=context,
             provider=_optional_str(arguments, "provider") or "heuristic",
+            llm_profile=_optional_str(arguments, "llm_profile"),
+            llm_config_path=_optional_path(arguments, "llm_config_path"),
             has_recent_trace=_optional_bool(arguments, "recent_trace", False)
             if "recent_trace" in arguments
             else None,
@@ -207,6 +209,8 @@ class McpServer:
             _required_str(arguments, "text"),
             context=context,
             provider=_optional_str(arguments, "provider") or "heuristic",
+            llm_profile=_optional_str(arguments, "llm_profile"),
+            llm_config_path=_optional_path(arguments, "llm_config_path"),
             topic=_optional_str(arguments, "topic"),
             kind=_optional_str(arguments, "kind"),
             max_chars=_optional_int(arguments, "max_chars", 420),
@@ -227,6 +231,8 @@ class McpServer:
             store=self.store,
             handoff_store=self.handoff_store,
             provider=_optional_str(arguments, "provider") or "heuristic",
+            llm_profile=_optional_str(arguments, "llm_profile"),
+            llm_config_path=_optional_path(arguments, "llm_config_path"),
             allow_writes=_optional_bool(arguments, "allow_writes", True),
             trace_recall=_optional_bool(arguments, "trace_recall", True),
             limit=_optional_int(arguments, "limit", 5),
@@ -245,6 +251,8 @@ class McpServer:
     def _tool_llm_doctor(self, arguments: dict[str, Any]) -> str:
         result = check_llm_provider(
             provider=_optional_str(arguments, "provider") or "openai-compatible",
+            profile=_optional_str(arguments, "profile"),
+            config_path=_optional_path(arguments, "config_path"),
             check_live=_optional_bool(arguments, "check_live", False),
             timeout_seconds=_optional_int(arguments, "timeout_seconds", 30),
         )
@@ -511,6 +519,8 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Routing provider.",
                         "enum": ["heuristic", "openai-compatible"],
                     },
+                    "llm_profile": {"type": "string", "description": "Named local LLM provider profile."},
+                    "llm_config_path": {"type": "string", "description": "Optional LLM provider profile config path."},
                     "recent_trace": {
                         "type": "boolean",
                         "description": "Whether a recent recall trace exists for feedback labeling.",
@@ -540,6 +550,8 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Drafting provider.",
                         "enum": ["heuristic", "openai-compatible"],
                     },
+                    "llm_profile": {"type": "string", "description": "Named local LLM provider profile."},
+                    "llm_config_path": {"type": "string", "description": "Optional LLM provider profile config path."},
                     "topic": {"type": "string", "description": "Optional topic override."},
                     "kind": {"type": "string", "description": "Optional memory kind override."},
                     "max_chars": {"type": "integer", "description": "Maximum characters in drafted memory text."},
@@ -569,6 +581,8 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Routing/drafting provider.",
                         "enum": ["heuristic", "openai-compatible"],
                     },
+                    "llm_profile": {"type": "string", "description": "Named local LLM provider profile."},
+                    "llm_config_path": {"type": "string", "description": "Optional LLM provider profile config path."},
                     "allow_writes": {
                         "type": "boolean",
                         "description": "Allow local trace, feedback, handoff, or eval writes.",
@@ -605,6 +619,14 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "type": "string",
                         "description": "LLM provider.",
                         "enum": ["openai-compatible"],
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "Named provider profile from local MemAgent config.",
+                    },
+                    "config_path": {
+                        "type": "string",
+                        "description": "Optional provider profile config path.",
                     },
                     "check_live": {
                         "type": "boolean",

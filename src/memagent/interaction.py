@@ -55,10 +55,14 @@ def process_interaction(
     store: MemoryStore,
     handoff_store: HandoffStore,
     provider: str = "heuristic",
+    llm_profile: str | None = None,
+    llm_config_path: Path | None = None,
     allow_writes: bool = True,
     trace_recall: bool = True,
     limit: int = 5,
     max_lines: int = 12,
+    show_sources: bool = True,
+    show_reasons: bool = True,
     strategy: str = DEFAULT_RECALL_STRATEGY,
     eval_workspace: Path | None = None,
     replay_workspace: Path | None = None,
@@ -68,6 +72,8 @@ def process_interaction(
         recent_text=recent_text,
         context=context,
         provider=provider,
+        llm_profile=llm_profile,
+        llm_config_path=llm_config_path,
         has_recent_trace=_has_recent_trace(store),
     )
 
@@ -80,10 +86,19 @@ def process_interaction(
             trace_recall=trace_recall,
             limit=limit,
             max_lines=max_lines,
+            show_sources=show_sources,
+            show_reasons=show_reasons,
             strategy=strategy,
         )
     if route.action == "draft_memory":
-        return _process_draft_memory(route=route, context=context, recent_text=recent_text, provider=provider)
+        return _process_draft_memory(
+            route=route,
+            context=context,
+            recent_text=recent_text,
+            provider=provider,
+            llm_profile=llm_profile,
+            llm_config_path=llm_config_path,
+        )
     if route.action == "label_feedback":
         return _process_label_feedback(route=route, store=store, allow_writes=allow_writes)
     if route.action == "handoff_show":
@@ -139,6 +154,8 @@ def _process_recall(
     trace_recall: bool,
     limit: int,
     max_lines: int,
+    show_sources: bool,
+    show_reasons: bool,
     strategy: str,
 ) -> ProcessResult:
     query = route.query or route.user_message
@@ -148,8 +165,8 @@ def _process_recall(
         context=context,
         matches=matches,
         max_lines=max_lines,
-        show_sources=True,
-        show_reasons=True,
+        show_sources=show_sources,
+        show_reasons=show_reasons,
     )
     writes: list[str] = []
     artifacts: dict[str, Any] = {"matches": len(matches)}
@@ -188,9 +205,17 @@ def _process_draft_memory(
     context: ProjectContext,
     recent_text: str,
     provider: str,
+    llm_profile: str | None,
+    llm_config_path: Path | None,
 ) -> ProcessResult:
     source = recent_text.strip() or route.user_message
-    draft = draft_memory(source, context=context, provider=provider)
+    draft = draft_memory(
+        source,
+        context=context,
+        provider=provider,
+        llm_profile=llm_profile,
+        llm_config_path=llm_config_path,
+    )
     payload = draft.to_payload(context=context)
     warnings = tuple(payload.get("warnings") or ())
     return ProcessResult(

@@ -366,6 +366,12 @@ provider configuration, and `--check-live` explicitly verifies the API call.
 See [docs/selftest_v0.30_llm_provider.md](docs/selftest_v0.30_llm_provider.md)
 for a short config-only and optional live-check playbook.
 
+## v0.31 Design
+
+See [docs/design_v0.31_process_first_wrapper.md](docs/design_v0.31_process_first_wrapper.md)
+for the process-first Codex wrapper. `memagent codex` now uses the same
+natural interaction processor as AGENTS.md and MCP before launching Codex.
+
 ## Codex Natural Language Signals
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

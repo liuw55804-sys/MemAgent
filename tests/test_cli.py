@@ -34,6 +34,44 @@ class CliTest(unittest.TestCase):
         self.assertTrue(payload["configured"])
         self.assertNotIn("test-key", stdout.getvalue())
 
+    def test_llm_doctor_profile_json_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "llm_profiles.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "profiles": {
+                            "demo": {
+                                "provider": "openai-compatible",
+                                "base_url": "https://api.example.test/v1",
+                                "api_key": "test-key",
+                                "model": "demo-model",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "llm",
+                        "doctor",
+                        "--profile",
+                        "demo",
+                        "--config",
+                        str(config_path),
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "configured")
+        self.assertEqual(payload["profile"], "demo")
+        self.assertNotIn("test-key", stdout.getvalue())
+
     def test_process_json_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -64,6 +102,64 @@ class CliTest(unittest.TestCase):
             self.assertEqual(payload["route"]["action"], "draft_memory")
             self.assertEqual(payload["writes"], [])
             self.assertEqual(payload["context"]["repo_name"], "project")
+
+    def test_codex_dry_run_uses_process_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(project)
+                with redirect_stdout(StringIO()):
+                    remember_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "remember",
+                            "--topic",
+                            "audit_rule_lib owner entrypoint",
+                            "--kind",
+                            "data_entrypoint",
+                            "--trigger",
+                            "audit_rule_lib",
+                            "--trigger",
+                            "owner",
+                            "Before audit_rule_lib owner debugging, check live RDS schema first.",
+                        ]
+                    )
+                self.assertEqual(remember_code, 0)
+
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    codex_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "codex",
+                            "--dry-run",
+                            "--no-trace",
+                            "帮我排查 audit_rule_lib owner 问题，先按你觉得最省时间的方式来",
+                        ]
+                    )
+            finally:
+                os.chdir(previous_cwd)
+
+        self.assertEqual(codex_code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("[MemAgent recalled context]", rendered)
+        self.assertIn("Before audit_rule_lib owner debugging", rendered)
+        self.assertIn("[User task]", rendered)
+
+    def test_codex_dry_run_no_memory_keeps_prompt(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            exit_code = main(["codex", "--dry-run", "--no-memory", "just run codex"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue().strip(), "just run codex")
 
     def test_draft_memory_json_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

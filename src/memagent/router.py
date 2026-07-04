@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+from pathlib import Path
 import re
 from typing import Any
 
@@ -71,6 +72,8 @@ def route_interaction(
     recent_text: str = "",
     context: ProjectContext | None = None,
     provider: str = "heuristic",
+    llm_profile: str | None = None,
+    llm_config_path: Path | None = None,
     has_recent_trace: bool | None = None,
 ) -> RouteDecision:
     message = _clean(user_message)
@@ -88,6 +91,8 @@ def route_interaction(
             message,
             recent_text=recent_text,
             context=context,
+            llm_profile=llm_profile,
+            llm_config_path=llm_config_path,
             has_recent_trace=has_recent_trace,
         )
     raise ValueError("provider must be heuristic or openai-compatible")
@@ -267,9 +272,15 @@ def route_with_openai_compatible(
     *,
     recent_text: str,
     context: ProjectContext | None,
+    llm_profile: str | None,
+    llm_config_path: Path | None,
     has_recent_trace: bool | None,
 ) -> RouteDecision:
-    config = OpenAICompatibleConfig.from_env()
+    config = (
+        OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
+        if llm_profile
+        else OpenAICompatibleConfig.from_env()
+    )
     context_payload = (
         {
             "cwd": str(context.cwd),

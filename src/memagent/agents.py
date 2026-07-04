@@ -87,11 +87,18 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         ```
 
         This checks local environment configuration without making an API call.
+        If the user keeps local provider profiles in
+        `~/.memagent/llm_providers.local.json`, check a named profile with:
+
+        ```bash
+        {command_prefix} llm doctor --profile "<profile-name>"
+        ```
+
         Only use the live API check when the user explicitly asks to verify the
         provider call:
 
         ```bash
-        {command_prefix} llm doctor --check-live
+        {command_prefix} llm doctor --profile "<profile-name>" --check-live
         ```
 
         When the intent is unclear, ask MemAgent's router for a read-only

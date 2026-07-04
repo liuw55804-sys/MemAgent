@@ -61,6 +61,7 @@ Added:
 - v0.29 natural interaction processor design note for route-and-handle Codex memory UX.
 - v0.30 LLM provider readiness design note for OpenAI-compatible API checks.
 - v0.30 self-test playbook for config-only and optional live LLM provider checks.
+- v0.31 process-first Codex wrapper design note.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
@@ -80,6 +81,8 @@ Changed:
 - `draft memory` command and `memagent_memory_draft` MCP tool produce reviewable memory previews with keep/revise/reject quality labels.
 - `process` command and `memagent_process` MCP tool route and execute safe interaction actions while keeping durable memory writes behind confirmation.
 - `llm doctor` command and `memagent_llm_doctor` MCP tool check OpenAI-compatible provider readiness without printing API keys.
+- Local LLM provider profiles can be used by `llm doctor`, `route`, `draft memory`, `process`, and `codex`.
+- `codex` command now runs MemAgent process preflight instead of hard-coding recall-first behavior.
 
 ## v0.1.0-mvp - 2026-06-23
 
