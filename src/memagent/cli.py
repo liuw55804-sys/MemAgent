@@ -15,6 +15,7 @@ from memagent.agents import (
 from memagent.context import detect_context
 from memagent.demo import run_demo
 from memagent.memory import MemoryStore
+from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
 
 
@@ -196,6 +197,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Delete the demo workspace before running.",
     )
 
+    mcp = subparsers.add_parser(
+        "mcp-stdio",
+        help="Run a minimal MCP stdio server exposing MemAgent recall/remember tools.",
+    )
+    mcp.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+
     return parser
 
 
@@ -220,6 +230,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- transcript: {result.transcript_path}")
         print(f"- steps: {len(result.steps)}")
         return 0
+
+    if args.command == "mcp-stdio":
+        return run_stdio_server(McpServer.from_home_arg(args.home, args.memagent_root))
 
     store = MemoryStore.from_home_arg(args.home)
 

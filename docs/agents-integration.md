@@ -43,6 +43,13 @@ For a full mock demo transcript, run:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli demo-run --reset
 ```
 
+For MCP clients, MemAgent also exposes the same memory operations through a
+local stdio server:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli mcp-stdio
+```
+
 When the user says:
 
 - `记住这个`

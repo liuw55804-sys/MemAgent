@@ -15,6 +15,7 @@ Added:
 - `recall --show-reasons` and `codex --show-reasons` to display simple recall scores and matched query terms.
 - `agents-doctor` command to inspect whether the current project AGENTS.md has MemAgent recall/remember integration.
 - `demo-run` command to create an isolated mock project and write a shareable AGENTS.md integration transcript.
+- `mcp-stdio` command exposing MemAgent recall, remember, and AGENTS.md doctor as MCP tools over stdio.
 - Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 

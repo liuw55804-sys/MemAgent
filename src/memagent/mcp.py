@@ -1,0 +1,314 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import json
+import sys
+from typing import Any, TextIO
+
+from memagent.agents import build_agents_doctor_report, default_memagent_root
+from memagent.context import detect_context
+from memagent.memory import MemoryStore
+
+
+MCP_PROTOCOL_VERSION = "2025-11-25"
+JSONRPC_VERSION = "2.0"
+
+PARSE_ERROR = -32700
+INVALID_REQUEST = -32600
+METHOD_NOT_FOUND = -32601
+INVALID_PARAMS = -32602
+INTERNAL_ERROR = -32603
+
+
+@dataclass
+class McpServer:
+    store: MemoryStore
+    memagent_root: Path
+
+    @classmethod
+    def from_home_arg(cls, home: str | None, memagent_root: str | None = None) -> "McpServer":
+        return cls(
+            store=MemoryStore.from_home_arg(home),
+            memagent_root=(Path(memagent_root) if memagent_root else default_memagent_root()).expanduser().resolve(),
+        )
+
+    def handle(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        request_id = message.get("id")
+        method = message.get("method")
+
+        if message.get("jsonrpc") != JSONRPC_VERSION or not isinstance(method, str):
+            return _error(request_id, INVALID_REQUEST, "Invalid JSON-RPC request")
+
+        if method == "notifications/initialized":
+            return None
+
+        if method == "initialize":
+            return _result(request_id, self._initialize_result())
+
+        if method == "ping":
+            return _result(request_id, {})
+
+        if method == "tools/list":
+            return _result(request_id, {"tools": tool_definitions()})
+
+        if method == "tools/call":
+            params = message.get("params")
+            if not isinstance(params, dict):
+                return _error(request_id, INVALID_PARAMS, "tools/call params must be an object")
+            try:
+                return _result(request_id, self._call_tool(params))
+            except ValueError as exc:
+                return _result(request_id, _tool_error(str(exc)))
+            except Exception as exc:  # pragma: no cover - defensive protocol guard
+                return _error(request_id, INTERNAL_ERROR, str(exc))
+
+        return _error(request_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
+
+    def _initialize_result(self) -> dict[str, Any]:
+        return {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "capabilities": {
+                "tools": {
+                    "listChanged": False,
+                }
+            },
+            "serverInfo": {
+                "name": "memagent",
+                "title": "MemAgent",
+                "version": "0.1.0",
+                "description": "Local workflow memory layer for Codex and other coding agents.",
+            },
+            "instructions": (
+                "Use MemAgent tools to recall or save local coding workflow memory. "
+                "Treat recalled memories as hints and verify against live code, docs, schemas, and command output."
+            ),
+        }
+
+    def _call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
+        name = params.get("name")
+        arguments = params.get("arguments") or {}
+        if not isinstance(name, str):
+            raise ValueError("tools/call requires a string tool name")
+        if not isinstance(arguments, dict):
+            raise ValueError("tools/call arguments must be an object")
+
+        if name == "memagent_recall":
+            return _tool_text(self._tool_recall(arguments))
+        if name == "memagent_remember":
+            return _tool_text(self._tool_remember(arguments))
+        if name == "memagent_agents_doctor":
+            return _tool_text(self._tool_agents_doctor(arguments))
+        raise ValueError(f"Unknown tool: {name}")
+
+    def _tool_recall(self, arguments: dict[str, Any]) -> str:
+        query = _required_str(arguments, "query")
+        context = detect_context(_optional_path(arguments, "cwd"))
+        matches = self.store.recall(query, context=context, limit=_optional_int(arguments, "limit", 5))
+        return self.store.compose_context(
+            query=query,
+            context=context,
+            matches=matches,
+            max_lines=_optional_int(arguments, "max_lines", 12),
+            show_sources=_optional_bool(arguments, "show_sources", True),
+            show_reasons=_optional_bool(arguments, "show_reasons", True),
+        )
+
+    def _tool_remember(self, arguments: dict[str, Any]) -> str:
+        text = _required_str(arguments, "text")
+        context = detect_context(_optional_path(arguments, "cwd"))
+        saved = self.store.remember(
+            text=text,
+            topic=_optional_str(arguments, "topic"),
+            domain=_optional_str(arguments, "domain"),
+            kind=_optional_str(arguments, "kind"),
+            repo=_optional_str(arguments, "repo") or context.repo_name,
+            module=_optional_str(arguments, "module"),
+            triggers=_optional_str_list(arguments, "triggers"),
+            exportable=_optional_bool(arguments, "exportable", False),
+        )
+        return f"Saved memory: {saved.path}"
+
+    def _tool_agents_doctor(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        return build_agents_doctor_report(
+            context=context,
+            memory_home=self.store.home,
+            memory_count=self.store.count_memory_cards(),
+            memagent_root=self.memagent_root,
+        )
+
+
+def tool_definitions() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "memagent_recall",
+            "title": "Recall MemAgent Memory",
+            "description": "Recall relevant local workflow memories for a coding task.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural-language task or question."},
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                    "limit": {"type": "integer", "description": "Maximum memory cards to inspect."},
+                    "max_lines": {"type": "integer", "description": "Maximum lines in the composed context."},
+                    "show_sources": {"type": "boolean", "description": "Include memory file names."},
+                    "show_reasons": {"type": "boolean", "description": "Include score and matched query terms."},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_remember",
+            "title": "Save MemAgent Memory",
+            "description": "Save a short, reusable local workflow memory.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Short actionable memory text."},
+                    "topic": {"type": "string", "description": "Short topic."},
+                    "domain": {"type": "string", "description": "Memory domain, usually coding."},
+                    "kind": {"type": "string", "description": "Memory kind, such as pitfall or data_entrypoint."},
+                    "repo": {"type": "string", "description": "Repository scope."},
+                    "module": {"type": "string", "description": "Module or subsystem scope."},
+                    "triggers": {
+                        "type": "array",
+                        "description": "Recall trigger keywords.",
+                        "items": {"type": "string"},
+                    },
+                    "exportable": {"type": "boolean", "description": "Whether this memory is safe to export."},
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                },
+                "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_agents_doctor",
+            "title": "Check MemAgent AGENTS.md Integration",
+            "description": "Check whether the current project AGENTS.md can trigger MemAgent.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                },
+                "additionalProperties": False,
+            },
+        },
+    ]
+
+
+def run_stdio_server(server: McpServer, *, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:
+    for raw_line in stdin:
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            _write_message(stdout, _error(None, PARSE_ERROR, "Parse error"))
+            continue
+        if not isinstance(message, dict):
+            _write_message(stdout, _error(None, INVALID_REQUEST, "Invalid JSON-RPC request"))
+            continue
+        response = server.handle(message)
+        if response is not None:
+            _write_message(stdout, response)
+    return 0
+
+
+def _result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "jsonrpc": JSONRPC_VERSION,
+        "id": request_id,
+        "result": result,
+    }
+
+
+def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
+    return {
+        "jsonrpc": JSONRPC_VERSION,
+        "id": request_id,
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }
+
+
+def _tool_text(text: str) -> dict[str, Any]:
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": text,
+            }
+        ],
+        "isError": False,
+    }
+
+
+def _tool_error(text: str) -> dict[str, Any]:
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": text,
+            }
+        ],
+        "isError": True,
+    }
+
+
+def _write_message(stdout: TextIO, message: dict[str, Any]) -> None:
+    stdout.write(json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n")
+    stdout.flush()
+
+
+def _required_str(arguments: dict[str, Any], key: str) -> str:
+    value = arguments.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"missing required string argument: {key}")
+    return value
+
+
+def _optional_str(arguments: dict[str, Any], key: str) -> str | None:
+    value = arguments.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
+    return value
+
+
+def _optional_path(arguments: dict[str, Any], key: str) -> Path | None:
+    value = _optional_str(arguments, key)
+    return Path(value).expanduser().resolve() if value else None
+
+
+def _optional_int(arguments: dict[str, Any], key: str, default: int) -> int:
+    value = arguments.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, int):
+        raise ValueError(f"{key} must be an integer")
+    return value
+
+
+def _optional_bool(arguments: dict[str, Any], key: str, default: bool) -> bool:
+    value = arguments.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _optional_str_list(arguments: dict[str, Any], key: str) -> list[str]:
+    value = arguments.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{key} must be an array of strings")
+    return value

@@ -13,6 +13,7 @@ python -m memagent.cli recall "continue checking attribution accuracy" --show-so
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli demo-run --reset
+python -m memagent.cli mcp-stdio
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
 ```
 
@@ -25,6 +26,7 @@ memagent recall "continue checking attribution accuracy" --show-sources --show-r
 memagent agents-install
 memagent agents-doctor
 memagent demo-run --reset
+memagent mcp-stdio
 memagent codex "continue checking attribution accuracy"
 ```
 
@@ -141,6 +143,11 @@ the safe AGENTS.md installer design.
 
 See [docs/design_v0.6_demo_run.md](docs/design_v0.6_demo_run.md) for the
 reproducible demo transcript design.
+
+## v0.7 Design
+
+See [docs/design_v0.7_mcp_stdio.md](docs/design_v0.7_mcp_stdio.md) for the
+minimal MCP stdio adapter design.
 
 ## Codex Natural Language Triggers
 
