@@ -18,8 +18,11 @@ Added:
 - `mcp-stdio` command exposing MemAgent recall, remember, and AGENTS.md doctor as MCP tools over stdio.
 - BM25-style recall scoring as the default strategy, with `--strategy keyword` retained as a baseline.
 - `recall-eval` command to run a mock retrieval benchmark and write a Markdown report.
+- `handoff save/show` commands for per-project cross-session catch-up.
+- MCP tools for saving and showing project handoffs.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
+- v0.11 handoff design note for separating recent continuation state from durable workflow memory.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
@@ -31,6 +34,7 @@ Changed:
 - Generated AGENTS.md snippets now include managed Markdown markers for safe replacement by `agents-install`.
 - Demo documentation now points to the generated transcript flow as the fastest presentation path.
 - Generated AGENTS.md recall commands now explicitly use `--strategy bm25`.
+- Generated AGENTS.md snippets now include handoff/catch-up natural-language triggers.
 
 ## v0.1.0-mvp - 2026-06-23
 

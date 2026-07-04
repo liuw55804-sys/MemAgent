@@ -14,6 +14,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
+from memagent.handoff import HandoffStore
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
 
@@ -24,6 +25,11 @@ DEMO_MEMORY = (
     "For demo attribution accuracy checks, start from the audit_label snapshot "
     "table, sample by primary-key ranges, then compare model output with "
     "human-reviewed labels. Avoid full-table JSON aggregation before sampling."
+)
+DEMO_HANDOFF = (
+    "Demo session wired AGENTS.md, saved one attribution accuracy memory, and "
+    "verified recall plus Codex prompt patch. Next session should extend the "
+    "demo with handoff/catch-up before adding automatic hooks."
 )
 
 
@@ -62,6 +68,7 @@ def run_demo(
     _ensure_demo_project(project_dir)
 
     store = MemoryStore(memory_home)
+    handoff_store = HandoffStore(memory_home)
     command_prefix = _command_prefix(root=root, memory_home=memory_home)
 
     steps: list[DemoStep] = []
@@ -155,6 +162,55 @@ def run_demo(
                 f"{_quote(DEMO_CODEX_PROMPT)}"
             ),
             output=final_prompt,
+        )
+    )
+
+    saved_handoff = handoff_store.save(
+        context=recall_context,
+        summary=DEMO_HANDOFF,
+        topic="Demo continuation handoff",
+        done=[
+            "Installed MemAgent AGENTS.md block.",
+            "Saved one mock attribution accuracy memory.",
+            "Verified recall with sources and reasons.",
+        ],
+        next_steps=[
+            "Use the handoff as the next-session catch-up context.",
+            "Decide whether the mock workflow should become a durable memory card.",
+        ],
+        open_questions=["Should handoff drafts be generated automatically from session logs?"],
+        memory_candidates=["Codex demos benefit from showing handoff before recall."],
+    )
+    steps.append(
+        DemoStep(
+            title="Save session handoff",
+            command=(
+                f"{command_prefix} handoff save --topic \"Demo continuation handoff\" "
+                "--done \"Installed MemAgent AGENTS.md block.\" "
+                "--done \"Saved one mock attribution accuracy memory.\" "
+                "--done \"Verified recall with sources and reasons.\" "
+                "--next-step \"Use the handoff as the next-session catch-up context.\" "
+                "--next-step \"Decide whether the mock workflow should become a durable memory card.\" "
+                "--open-question \"Should handoff drafts be generated automatically from session logs?\" "
+                "--memory-candidate \"Codex demos benefit from showing handoff before recall.\" "
+                f"{_quote(DEMO_HANDOFF)}"
+            ),
+            output="\n".join(
+                [
+                    "[MemAgent handoff saved]",
+                    f"- project key: {saved_handoff.project_key}",
+                    f"- latest: {saved_handoff.latest_path}",
+                    f"- history: {saved_handoff.history_path}",
+                ]
+            ),
+        )
+    )
+
+    steps.append(
+        DemoStep(
+            title="Catch up from latest handoff",
+            command=f"{command_prefix} handoff show",
+            output=handoff_store.compose_latest(context=recall_context, max_lines=40, show_source=True),
         )
     )
 

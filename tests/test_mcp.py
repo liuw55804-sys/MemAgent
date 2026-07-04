@@ -31,7 +31,16 @@ class McpServerTest(unittest.TestCase):
 
             tools_response = server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
             names = [tool["name"] for tool in tools_response["result"]["tools"]]
-            self.assertEqual(names, ["memagent_recall", "memagent_remember", "memagent_agents_doctor"])
+            self.assertEqual(
+                names,
+                [
+                    "memagent_recall",
+                    "memagent_remember",
+                    "memagent_agents_doctor",
+                    "memagent_handoff_save",
+                    "memagent_handoff_show",
+                ],
+            )
 
     def test_tool_definitions_have_valid_basic_schema(self) -> None:
         for tool in tool_definitions():
@@ -84,6 +93,50 @@ class McpServerTest(unittest.TestCase):
             self.assertIn("Attribution accuracy pitfall", text)
             self.assertIn("strategy=bm25", text)
             self.assertIn("matched=attribution, accuracy", text)
+
+    def test_handoff_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+            server = McpServer.from_home_arg(str(Path(tmp) / "home"), "/tmp/memagent")
+            save_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_handoff_save",
+                        "arguments": {
+                            "summary": "Saved MCP handoff and should show it later.",
+                            "topic": "MCP handoff",
+                            "done": ["Added handoff tool."],
+                            "next_steps": ["Run MCP tests."],
+                            "cwd": str(project),
+                        },
+                    },
+                }
+            )
+            self.assertFalse(save_response["result"]["isError"])
+            self.assertIn("handoff saved", save_response["result"]["content"][0]["text"])
+
+            show_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_handoff_show",
+                        "arguments": {
+                            "cwd": str(project),
+                            "max_lines": 25,
+                        },
+                    },
+                }
+            )
+            text = show_response["result"]["content"][0]["text"]
+            self.assertIn("MCP handoff", text)
+            self.assertIn("Run MCP tests", text)
 
     def test_stdio_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

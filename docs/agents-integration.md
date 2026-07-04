@@ -34,8 +34,9 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 ```
 
 The doctor report checks whether an `AGENTS.md` file is visible from the current
-directory, whether it contains MemAgent recall/remember commands, and whether
-recall uses `--show-reasons --strategy bm25` for explainable BM25-style demos.
+directory, whether it contains MemAgent recall/remember/handoff commands, and
+whether recall uses `--show-reasons --strategy bm25` for explainable BM25-style
+demos.
 
 For a full mock demo transcript, run:
 
@@ -91,6 +92,41 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 simple score and matched query terms, which makes the recall result easier to
 debug and demo. `--strategy bm25` uses the default BM25-style retriever
 explicitly, so the AGENTS.md rule documents the RAG scoring strategy.
+
+When the user says:
+
+- `上次做到哪`
+- `接着上次继续`
+- `catch me up`
+- `where did we leave off`
+
+Codex should call:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff show
+```
+
+When the user says:
+
+- `交接一下`
+- `记录当前进展`
+- `下次接着做`
+- `保存一个 handoff`
+
+Codex should summarize the current thread and call:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff save \
+  --topic "short topic" \
+  --done "completed item" \
+  --next-step "recommended next step" \
+  --open-question "open question if any" \
+  --memory-candidate "possible durable lesson if any" \
+  "short handoff summary"
+```
+
+Use `handoff` for recent continuation state. Use `remember` only for durable
+workflow lessons that should be reusable beyond this one continuation.
 
 ## Safety
 

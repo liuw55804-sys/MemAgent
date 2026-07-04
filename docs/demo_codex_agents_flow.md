@@ -6,6 +6,7 @@
 agents-install 安装 + agents-doctor 自检
   -> Codex 自然语言识别 recall / remember
   -> MemAgent 本地写入和召回 memory
+  -> 保存 handoff 并在新会话 catch up
   -> 短上下文拼给 Codex
 ```
 
@@ -28,10 +29,11 @@ local_memory_demo/demo_run/
     pyproject.toml
   memagent_home/
     memories/
+    handoffs/
   transcript.md
 ```
 
-`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run 的命令和输出。
+`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run、handoff save/show 的命令和输出。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -57,6 +59,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 
 - 输出里有 recall 触发语，比如 `召回一下相关记忆`。
 - 输出里有 remember 触发语，比如 `沉淀一下`。
+- 输出里有 handoff 触发语，比如 `上次做到哪` 和 `交接一下`。
 - recall 命令带 `--show-sources --show-reasons --strategy bm25`，能展示来源、命中原因和召回策略。
 - 安全规则说明 local private memory 和 public demo 的边界。
 
@@ -121,6 +124,7 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
     - MemAgent section: yes
     - recall command: yes
     - remember command: yes
+    - handoff command: yes
     - explainable recall: yes
 - Status: ready
 ```
@@ -202,13 +206,38 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 
 这一步是面试演示的关键画面：MemAgent 没有替代 Codex，而是给 Codex 注入一段短、可解释、来源明确的 workflow memory。
 
-## 8. Demo 讲解词
+## 8. 演示 handoff / catch-up
+
+保存当前线程交接：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff save \
+  --topic "Demo continuation handoff" \
+  --done "Installed AGENTS.md block." \
+  --done "Verified recall with sources and reasons." \
+  --next-step "Use the handoff as the next-session catch-up context." \
+  --open-question "Should handoff drafts be generated automatically from session logs?" \
+  "Demo session wired AGENTS.md, saved one attribution accuracy memory, and verified recall plus Codex prompt patch."
+```
+
+新会话开始时 catch up：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff show
+```
+
+这一步用来讲清楚 handoff 和 memory card 的区别：
+
+- handoff 是最近项目状态，解决“上次做到哪”。
+- memory card 是长期经验，解决“类似问题下次怎么做”。
+
+## 9. Demo 讲解词
 
 可以这样讲：
 
-> 我做的不是一个通用 agent，而是 coding agent 的 workflow memory layer。用户在 Codex 里说“召回一下相关记忆”，Codex 根据 AGENTS.md 调用 MemAgent；MemAgent 从本地 memory card 里检索相关的工具入口、失败路径和验证方式，并把短上下文拼到 Codex prompt 前。召回结果会带来源和命中原因，所以它比黑盒记忆更可控。
+> 我做的不是一个通用 agent，而是 coding agent 的 workflow memory layer。用户在 Codex 里说“上次做到哪”，Codex 根据 AGENTS.md 调用 handoff show 恢复最近项目状态；用户说“召回一下相关记忆”时，MemAgent 再从长期 memory card 里检索相关工具入口、失败路径和验证方式，并把短上下文拼到 Codex prompt 前。handoff 和 memory 分层后，不会把每次临时状态都污染进长期 RAG 语料。
 
-## 9. 清理 demo 数据
+## 10. 清理 demo 数据
 
 ```bash
 rm -rf local_memory_demo/agents_flow

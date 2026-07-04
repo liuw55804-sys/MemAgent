@@ -11,8 +11,9 @@ src/memagent/
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
   demo.py      运行隔离 demo，并生成可分享的 Markdown transcript
   eval.py      运行 mock recall benchmark，并生成 hit@1 / MRR report
+  handoff.py   保存和读取每个项目最近一次 handoff/catch-up 状态
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
-  mcp.py       最小 MCP stdio server，把 recall/remember/doctor 暴露为 tools
+  mcp.py       最小 MCP stdio server，把 recall/remember/handoff/doctor 暴露为 tools
   wrapper.py   把召回上下文拼到 Codex prompt 前
 ```
 
@@ -27,6 +28,7 @@ PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
 PYTHONPATH=src python -m memagent.cli agents-doctor
+PYTHONPATH=src python -m memagent.cli handoff show
 PYTHONPATH=src python -m memagent.cli demo-run --reset
 PYTHONPATH=src python -m memagent.cli mcp-stdio
 PYTHONPATH=src python -m memagent.cli recall-eval
@@ -42,6 +44,7 @@ memagent codex "..."
 memagent agents-snippet
 memagent agents-install
 memagent agents-doctor
+memagent handoff show
 memagent demo-run --reset
 memagent mcp-stdio
 memagent recall-eval
@@ -76,7 +79,7 @@ flowchart LR
 
 ## 3. 三条命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`、`mcp-stdio`、`recall-eval`。
+当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`mcp-stdio`、`recall-eval`。
 
 ### 3.1 `remember`
 
@@ -285,7 +288,7 @@ memagent agents-doctor --cwd /path/to/project
 - memory home 位置和 memory card 数量。
 - 从当前目录向上找到的 `AGENTS.md` / `AGENTS.override.md`。
 - 是否包含 MemAgent section。
-- 是否包含 `memagent.cli recall` 和 `memagent.cli remember`。
+- 是否包含 `memagent.cli recall`、`memagent.cli remember` 和 `memagent.cli handoff`。
 - recall 命令是否包含 `--show-reasons`，方便演示可解释召回。
 - recall 命令是否包含 `--strategy bm25`，确保使用当前推荐的 RAG scoring。
 
@@ -315,6 +318,8 @@ local_memory_demo/demo_run/
 - 写入一条 mock workflow memory。
 - 运行 explainable recall。
 - 生成 `codex --dry-run` prompt patch。
+- 保存一次 session handoff。
+- 展示下一次会话的 catch-up 内容。
 - 把所有命令和输出写到 `transcript.md`。
 
 这个命令服务于演示和面试，不是核心 memory 逻辑。它把已有能力串起来，保证每次展示的路径可复现。
@@ -329,10 +334,12 @@ local_memory_demo/demo_run/
 memagent mcp-stdio
 ```
 
-当前暴露三个 tools：
+当前暴露五个 tools：
 
 - `memagent_recall`：召回相关 workflow memory。
 - `memagent_remember`：写入一条短 memory。
+- `memagent_handoff_save`：保存当前项目的 session handoff。
+- `memagent_handoff_show`：读取当前项目的 latest handoff。
 - `memagent_agents_doctor`：检查 AGENTS.md 集成状态。
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
@@ -361,6 +368,40 @@ local_memory_demo/recall_eval/report.md
 
 这个命令用于验证和展示 retriever，不读取真实 `~/.memagent`。
 
+### 3.10 `handoff`
+
+用途：保存或展示当前项目最近一次交接状态。
+
+保存：
+
+```bash
+memagent handoff save \
+  --topic "demo handoff" \
+  --done "wired AGENTS.md" \
+  --next-step "run demo" \
+  "short summary"
+```
+
+展示：
+
+```bash
+memagent handoff show
+```
+
+它和 `remember` 的区别：
+
+- `remember` 写长期 workflow memory，适合以后类似任务复用。
+- `handoff` 写最近继续状态，适合新会话开始时 catch up。
+
+文件写到：
+
+```text
+~/.memagent/handoffs/<project-key>/latest.md
+~/.memagent/handoffs/<project-key>/history/handoff_<timestamp>.md
+```
+
+`project-key` 由 repo 名和 git root/cwd 的 hash 组成，避免同名项目互相覆盖。
+
 ## 4. 文件级讲解
 
 ### 4.1 `cli.py`
@@ -370,7 +411,7 @@ local_memory_demo/recall_eval/report.md
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`、`mcp-stdio`、`recall-eval`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`mcp-stdio`、`recall-eval`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -384,6 +425,7 @@ build_parser()
   -> 定义 agents-snippet 子命令
   -> 定义 agents-install 子命令
   -> 定义 agents-doctor 子命令
+  -> 定义 handoff 子命令
   -> 定义 demo-run 子命令
   -> 定义 mcp-stdio 子命令
   -> 定义 recall-eval 子命令
@@ -395,8 +437,10 @@ main(argv)
   -> if mcp-stdio: run_stdio_server
   -> if recall-eval: run_recall_eval
   -> MemoryStore.from_home_arg(args.home)
+  -> HandoffStore(store.home)
   -> if agents-install: build_agents_install_plan + optional write
   -> if remember: detect_context + store.remember(domain, kind, ...)
+  -> if handoff save/show: detect_context + HandoffStore save/compose_latest
   -> if recall: detect_context + store.recall + compose_context
   -> if codex: recall + build_augmented_prompt + subprocess.run
   -> if agents-doctor: detect_context + build_agents_doctor_report
@@ -644,7 +688,39 @@ return top limit
 
 这让 Codex 和用户都能看出“为什么是这条 memory”，也给后续 vector recall 或 reranker 留出可解释输出的位置。
 
-### 4.4 `wrapper.py`
+### 4.4 `handoff.py`
+
+`handoff.py` 负责每个项目最近一次交接状态。
+
+核心类：
+
+```python
+class HandoffStore:
+```
+
+主要方法：
+
+```text
+save(...)            写 latest.md 和 history/*.md
+latest(...)          读取当前项目 latest.md
+compose_latest(...)  输出短 catch-up context
+```
+
+为什么它没有直接复用 `MemoryStore`？
+
+- handoff 是最近状态，不一定长期正确。
+- memory card 是可复用经验，应该参与 recall/eval。
+- 把 handoff 放进 `memories/` 会污染长期 RAG 语料。
+
+所以它写在：
+
+```text
+~/.memagent/handoffs/
+```
+
+后续如果加 hooks 或 LLM extraction，可以先生成 handoff draft，再由用户决定哪些 `memory_candidates` 需要用 `remember` 升级成长期 memory。
+
+### 4.5 `wrapper.py`
 
 `wrapper.py` 现在只有一个函数：
 
@@ -669,7 +745,7 @@ def build_augmented_prompt(user_prompt: str, recalled_context: str) -> str:
 
 ## 5. 测试怎么读
 
-当前测试主要保护四类能力：memory 存取召回、prompt wrapper、AGENTS.md 集成、demo transcript。
+当前测试主要保护五类能力：memory 存取召回、handoff 交接、prompt wrapper、AGENTS.md 集成、demo transcript。
 
 ```text
 tests/test_memory_store.py
@@ -703,10 +779,16 @@ tests/test_demo.py
   test_run_demo_writes_transcript_and_memory
   test_demo_run_cli
 
+tests/test_handoff.py
+  test_save_and_show_latest_handoff
+  test_show_without_handoff
+  test_handoff_cli_save_and_show
+
 tests/test_mcp.py
   test_initialize_and_tools_list
   test_tool_definitions_have_valid_basic_schema
   test_remember_and_recall_tools
+  test_handoff_tools
   test_stdio_server
   test_invalid_tool_call_returns_tool_error
 
@@ -723,13 +805,15 @@ tests/test_eval.py
 - 调用 `store.recall(...)` 找回 memory。
 - 调用 `compose_context(...)` 确认输出里有标题、关键句和可解释召回信息。
 
-这说明当前测试关注的是“能写、能召回、能渲染、能安装、能自检、能演示”，不是复杂召回质量。
+这说明当前测试关注的是“能写、能召回、能交接、能渲染、能安装、能自检、能演示”，不是复杂召回质量。
 
 `test_agents_snippet.py` 保护的是 AGENTS.md 自然语言触发入口，避免后续改文案时把关键命令或安全边界删掉。
 
 `test_demo.py` 保护的是演示闭环：能生成 mock project、AGENTS.md、memory card 和 transcript。
 
-`test_mcp.py` 保护的是 MCP adapter：initialize、tools/list、tools/call 和 stdio JSON-RPC 基本链路。
+`test_handoff.py` 保护的是交接闭环：能按项目保存 `latest.md`/`history`，能在新会话用 `handoff show` 取回短 catch-up context。
+
+`test_mcp.py` 保护的是 MCP adapter：initialize、tools/list、tools/call、handoff tools 和 stdio JSON-RPC 基本链路。
 
 `test_eval.py` 保护的是 RAG evaluation artifact：能生成 mock benchmark report，并且 BM25 指标不弱于 keyword baseline。
 
@@ -751,10 +835,12 @@ PYTHONPATH=src python -m unittest discover -s tests
 - `codex --dry-run` 查看最终 prompt。
 - `agents-install` / `agents-doctor` / `demo-run` 展示 AGENTS.md 集成闭环。
 - `recall-eval` 展示 RAG retriever 的离线评估闭环。
+- `handoff save/show` 展示跨会话 catch-up 闭环。
 
 ### 阶段二：下一步最自然的增强
 
 - `ingest`：从 Markdown 线程或总结中抽取 memory card。
+- handoff draft：从 session 结束摘要自动生成 handoff，但仍由用户确认。
 - 结构化 YAML 解析：不再只扫 raw text。
 - 更细的 memory schema：把 tool recipe、pitfall、validation 真正拆开。
 - 命中日志：记录某条 memory 是否被召回、是否有用。
@@ -773,11 +859,12 @@ PYTHONPATH=src python -m unittest discover -s tests
 
 1. 先读 `README.md`，知道命令长什么样。
 2. 再读 `cli.py` 的 `main()`，看三条命令怎么分发。
-3. 只看 `memory.py` 里的 `MemoryStore.remember()`，理解“怎么写 memory”。
-4. 再看 `MemoryStore.recall()`，理解“怎么找 memory”。
-5. 看 `compose_context()` 和 `wrapper.py`，理解“怎么喂给 Codex”。
-6. 最后看 `context.py`，理解 repo、branch、AGENTS.md 是怎么自动探测的。
-7. 看测试，确认自己能讲出每个测试在保护什么行为。
+3. 只看 `memory.py` 里的 `MemoryStore.remember()`，理解“怎么写长期 memory”。
+4. 再看 `MemoryStore.recall()`，理解“怎么找长期 memory”。
+5. 看 `handoff.py`，理解“最近交接状态为什么不进长期 RAG 语料”。
+6. 看 `compose_context()` 和 `wrapper.py`，理解“怎么喂给 Codex”。
+7. 最后看 `context.py`，理解 repo、branch、AGENTS.md 是怎么自动探测的。
+8. 看测试，确认自己能讲出每个测试在保护什么行为。
 
 ## 8. 之后每次开发前先问的几个问题
 
@@ -790,11 +877,3 @@ PYTHONPATH=src python -m unittest discover -s tests
 - 它会不会让用户更难理解当前代码？
 
 只要这些问题能答清楚，再写代码会更踏实。
-tests/test_agents_snippet.py
-  test_build_agents_snippet
-  test_agents_snippet_cli
-```
-
-`test_agents_snippet.py` 保护的是 AGENTS.md 自然语言触发入口，避免后续改文案时把关键命令或安全边界删掉。
-
-```text

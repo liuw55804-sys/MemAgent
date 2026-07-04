@@ -18,6 +18,7 @@ class AgentsFileCheck:
     has_memagent_section: bool
     has_recall_command: bool
     has_remember_command: bool
+    has_handoff_command: bool
     has_explainable_recall: bool
     has_bm25_strategy: bool
 
@@ -27,6 +28,7 @@ class AgentsFileCheck:
             self.has_memagent_section
             and self.has_recall_command
             and self.has_remember_command
+            and self.has_handoff_command
             and self.has_explainable_recall
             and self.has_bm25_strategy
         )
@@ -109,6 +111,44 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         - `workflow`: multi-step debugging or implementation flow
         - `note`: fallback when no specific kind fits
 
+        ### Handoff / Catch-up
+
+        When the user says phrases like:
+
+        - `上次做到哪`
+        - `接着上次继续`
+        - `catch me up`
+        - `where did we leave off`
+        - `看看上次交接`
+
+        Run:
+
+        ```bash
+        {command_prefix} handoff show
+        ```
+
+        When the user says phrases like:
+
+        - `交接一下`
+        - `记录当前进展`
+        - `下次接着做`
+        - `保存一个 handoff`
+
+        Summarize the current thread into a short handoff, then run:
+
+        ```bash
+        {command_prefix} handoff save \\
+          --topic "<short topic>" \\
+          --done "<completed item>" \\
+          --next-step "<recommended next step>" \\
+          --open-question "<open question if any>" \\
+          --memory-candidate "<possible durable lesson if any>" \\
+          "<short handoff summary>"
+        ```
+
+        Use handoff for recent project state. Use `remember` only for durable
+        lessons that should be reusable beyond the current continuation.
+
         ### Safety
 
         - Treat recalled memories as hints, not source of truth.
@@ -159,6 +199,7 @@ def build_agents_doctor_report(
             lines.append(f"    - MemAgent section: {_yes_no(check.has_memagent_section)}")
             lines.append(f"    - recall command: {_yes_no(check.has_recall_command)}")
             lines.append(f"    - remember command: {_yes_no(check.has_remember_command)}")
+            lines.append(f"    - handoff command: {_yes_no(check.has_handoff_command)}")
             lines.append(f"    - explainable recall: {_yes_no(check.has_explainable_recall)}")
             lines.append(f"    - BM25 strategy: {_yes_no(check.has_bm25_strategy)}")
 
@@ -167,8 +208,9 @@ def build_agents_doctor_report(
             [
                 "- Status: ready",
                 (
-                    '- Next step: in Codex, say "召回一下相关记忆，<your task>"; '
-                    "MemAgent should be called from AGENTS.md instructions."
+                    '- Next step: in Codex, say "上次做到哪" or '
+                    '"召回一下相关记忆，<your task>"; MemAgent should be called '
+                    "from AGENTS.md instructions."
                 ),
             ]
         )
@@ -300,6 +342,7 @@ def _check_agents_file(path: Path) -> AgentsFileCheck:
         has_memagent_section="MemAgent" in raw and "Natural Language Triggers" in raw,
         has_recall_command="memagent.cli recall" in raw,
         has_remember_command="memagent.cli remember" in raw,
+        has_handoff_command="memagent.cli handoff" in raw,
         has_explainable_recall="--show-reasons" in raw,
         has_bm25_strategy="--strategy bm25" in raw,
     )

@@ -27,10 +27,13 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn(MEMAGENT_BLOCK_END, snippet)
         self.assertIn("召回一下相关记忆", snippet)
         self.assertIn("沉淀一下", snippet)
+        self.assertIn("上次做到哪", snippet)
+        self.assertIn("交接一下", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli recall", snippet)
         self.assertIn("--show-sources --show-reasons", snippet)
         self.assertIn("--strategy bm25", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli remember", snippet)
+        self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli handoff", snippet)
         self.assertIn("Treat recalled memories as hints", snippet)
         self.assertIn("Never store tokens", snippet)
 
@@ -66,6 +69,7 @@ class AgentsSnippetTest(unittest.TestCase):
             self.assertIn("memory cards: 2", report)
             self.assertIn("explainable recall: yes", report)
             self.assertIn("BM25 strategy: yes", report)
+            self.assertIn("handoff command: yes", report)
 
     def test_agents_doctor_report_setup_needed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,6 +92,7 @@ class AgentsSnippetTest(unittest.TestCase):
             )
             self.assertIn("Status: setup needed", report)
             self.assertIn("MemAgent section: no", report)
+            self.assertIn("handoff command: no", report)
             self.assertIn("BM25 strategy: no", report)
             self.assertIn("agents-snippet", report)
 

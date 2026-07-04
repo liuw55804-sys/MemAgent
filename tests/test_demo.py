@@ -26,6 +26,8 @@ class DemoRunTest(unittest.TestCase):
             self.assertEqual(len(list((result.memory_home / "memories").glob("*.memory.yaml"))), 1)
             self.assertIn("Status: ready", result.transcript)
             self.assertIn("Demo attribution accuracy entrypoint", result.transcript)
+            self.assertIn("Demo continuation handoff", result.transcript)
+            self.assertTrue((result.memory_home / "handoffs").exists())
             self.assertIn("[User task]", result.transcript)
 
     def test_demo_run_cli(self) -> None:

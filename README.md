@@ -12,6 +12,7 @@ python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JS
 python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
+python -m memagent.cli handoff show
 python -m memagent.cli demo-run --reset
 python -m memagent.cli mcp-stdio
 python -m memagent.cli recall-eval
@@ -26,6 +27,7 @@ memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation
 memagent recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
 memagent agents-install
 memagent agents-doctor
+memagent handoff show
 memagent demo-run --reset
 memagent mcp-stdio
 memagent recall-eval
@@ -178,11 +180,28 @@ local_memory_demo/recall_eval/report.md
 See [docs/design_v0.10_competitive_positioning.md](docs/design_v0.10_competitive_positioning.md)
 for the competitive-scan driven positioning update.
 
+## v0.11 Design
+
+See [docs/design_v0.11_handoff.md](docs/design_v0.11_handoff.md) for the
+cross-session handoff and catch-up design.
+
+Save a handoff for the current project:
+
+```bash
+memagent handoff save --topic "demo handoff" --done "wired AGENTS.md" --next-step "run demo" "short summary"
+```
+
+Show the latest handoff:
+
+```bash
+memagent handoff show
+```
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
 integration that lets Codex call MemAgent when the user says phrases like
-`沉淀一下` or `召回一下相关记忆`.
+`沉淀一下`, `召回一下相关记忆`, or `上次做到哪`.
 
 ## Demo
 

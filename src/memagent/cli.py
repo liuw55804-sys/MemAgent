@@ -15,6 +15,7 @@ from memagent.agents import (
 from memagent.context import detect_context
 from memagent.demo import run_demo
 from memagent.eval import run_recall_eval
+from memagent.handoff import HandoffStore
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
@@ -229,6 +230,67 @@ def build_parser() -> argparse.ArgumentParser:
         help="Evaluation workspace directory. Default: local_memory_demo/recall_eval.",
     )
 
+    handoff = subparsers.add_parser(
+        "handoff",
+        help="Save or show a project handoff for cross-session catch-up.",
+    )
+    handoff_subparsers = handoff.add_subparsers(dest="handoff_command", required=True)
+
+    handoff_save = handoff_subparsers.add_parser(
+        "save",
+        help="Save the latest project handoff.",
+    )
+    handoff_save.add_argument("summary", help="Short session handoff summary.")
+    handoff_save.add_argument("--topic", help="Short handoff topic.")
+    handoff_save.add_argument(
+        "--cwd",
+        help="Project directory. Defaults to the current working directory.",
+    )
+    handoff_save.add_argument(
+        "--done",
+        action="append",
+        default=[],
+        help="Completed item. Can be repeated.",
+    )
+    handoff_save.add_argument(
+        "--next-step",
+        action="append",
+        default=[],
+        help="Recommended next step. Can be repeated.",
+    )
+    handoff_save.add_argument(
+        "--open-question",
+        action="append",
+        default=[],
+        help="Open question to carry into the next session. Can be repeated.",
+    )
+    handoff_save.add_argument(
+        "--memory-candidate",
+        action="append",
+        default=[],
+        help="Candidate lesson that may later be promoted to long-term memory. Can be repeated.",
+    )
+
+    handoff_show = handoff_subparsers.add_parser(
+        "show",
+        help="Show the latest project handoff.",
+    )
+    handoff_show.add_argument(
+        "--cwd",
+        help="Project directory. Defaults to the current working directory.",
+    )
+    handoff_show.add_argument(
+        "--max-lines",
+        type=int,
+        default=40,
+        help="Maximum lines to print. Default: 40.",
+    )
+    handoff_show.add_argument(
+        "--no-source",
+        action="store_true",
+        help="Do not print the handoff file path.",
+    )
+
     return parser
 
 
@@ -272,7 +334,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     store = MemoryStore.from_home_arg(args.home)
-
     if args.command == "agents-doctor":
         context = detect_context(Path(args.cwd) if args.cwd else None)
         print(
@@ -315,6 +376,37 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         print(f"Saved memory: {card.path}")
         return 0
+
+    if args.command == "handoff":
+        handoff_store = HandoffStore(store.home)
+        context = detect_context(Path(args.cwd) if getattr(args, "cwd", None) else None)
+        if args.handoff_command == "save":
+            try:
+                saved = handoff_store.save(
+                    context=context,
+                    summary=args.summary,
+                    topic=args.topic,
+                    done=args.done,
+                    next_steps=args.next_step,
+                    open_questions=args.open_question,
+                    memory_candidates=args.memory_candidate,
+                )
+            except ValueError as exc:
+                parser.error(str(exc))
+            print("[MemAgent handoff saved]")
+            print(f"- project key: {saved.project_key}")
+            print(f"- latest: {saved.latest_path}")
+            print(f"- history: {saved.history_path}")
+            return 0
+        if args.handoff_command == "show":
+            print(
+                handoff_store.compose_latest(
+                    context=context,
+                    max_lines=args.max_lines,
+                    show_source=not args.no_source,
+                )
+            )
+            return 0
 
     if args.command == "recall":
         context = detect_context()

@@ -8,6 +8,7 @@ from typing import Any, TextIO
 
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
+from memagent.handoff import HandoffStore
 from memagent.memory import MemoryStore
 
 
@@ -24,12 +25,15 @@ INTERNAL_ERROR = -32603
 @dataclass
 class McpServer:
     store: MemoryStore
+    handoff_store: HandoffStore
     memagent_root: Path
 
     @classmethod
     def from_home_arg(cls, home: str | None, memagent_root: str | None = None) -> "McpServer":
+        store = MemoryStore.from_home_arg(home)
         return cls(
-            store=MemoryStore.from_home_arg(home),
+            store=store,
+            handoff_store=HandoffStore(store.home),
             memagent_root=(Path(memagent_root) if memagent_root else default_memagent_root()).expanduser().resolve(),
         )
 
@@ -97,6 +101,10 @@ class McpServer:
             return _tool_text(self._tool_recall(arguments))
         if name == "memagent_remember":
             return _tool_text(self._tool_remember(arguments))
+        if name == "memagent_handoff_save":
+            return _tool_text(self._tool_handoff_save(arguments))
+        if name == "memagent_handoff_show":
+            return _tool_text(self._tool_handoff_show(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -142,6 +150,34 @@ class McpServer:
             memory_home=self.store.home,
             memory_count=self.store.count_memory_cards(),
             memagent_root=self.memagent_root,
+        )
+
+    def _tool_handoff_save(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        saved = self.handoff_store.save(
+            context=context,
+            summary=_required_str(arguments, "summary"),
+            topic=_optional_str(arguments, "topic"),
+            done=_optional_str_list(arguments, "done"),
+            next_steps=_optional_str_list(arguments, "next_steps"),
+            open_questions=_optional_str_list(arguments, "open_questions"),
+            memory_candidates=_optional_str_list(arguments, "memory_candidates"),
+        )
+        return "\n".join(
+            [
+                "[MemAgent handoff saved]",
+                f"- project key: {saved.project_key}",
+                f"- latest: {saved.latest_path}",
+                f"- history: {saved.history_path}",
+            ]
+        )
+
+    def _tool_handoff_show(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        return self.handoff_store.compose_latest(
+            context=context,
+            max_lines=_optional_int(arguments, "max_lines", 40),
+            show_source=_optional_bool(arguments, "show_source", True),
         )
 
 
@@ -203,6 +239,55 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "cwd": {"type": "string", "description": "Optional project directory."},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_handoff_save",
+            "title": "Save MemAgent Handoff",
+            "description": "Save a short project handoff for cross-session catch-up.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "Short handoff summary."},
+                    "topic": {"type": "string", "description": "Short handoff topic."},
+                    "done": {
+                        "type": "array",
+                        "description": "Completed items.",
+                        "items": {"type": "string"},
+                    },
+                    "next_steps": {
+                        "type": "array",
+                        "description": "Recommended next steps.",
+                        "items": {"type": "string"},
+                    },
+                    "open_questions": {
+                        "type": "array",
+                        "description": "Open questions for the next session.",
+                        "items": {"type": "string"},
+                    },
+                    "memory_candidates": {
+                        "type": "array",
+                        "description": "Lessons that may later become durable memory cards.",
+                        "items": {"type": "string"},
+                    },
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                },
+                "required": ["summary"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_handoff_show",
+            "title": "Show MemAgent Handoff",
+            "description": "Show the latest project handoff for cross-session catch-up.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                    "max_lines": {"type": "integer", "description": "Maximum lines to return."},
+                    "show_source": {"type": "boolean", "description": "Include the handoff file path."},
                 },
                 "additionalProperties": False,
             },
