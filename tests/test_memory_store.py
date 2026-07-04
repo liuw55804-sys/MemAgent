@@ -43,14 +43,19 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].domain, "coding")
             self.assertEqual(matches[0].kind, "note")
+            self.assertIn("rds", matches[0].matched_terms)
+            self.assertIn("json", matches[0].matched_terms)
             rendered = store.compose_context(
                 query="how to avoid RDS JSON timeout",
                 context=context,
                 matches=matches,
                 max_lines=8,
                 show_sources=True,
+                show_reasons=True,
             )
             self.assertIn("RDS query pitfall [coding/note]", rendered)
+            self.assertIn("score=", rendered)
+            self.assertIn("matched=", rendered)
             self.assertIn("split by id ranges", rendered)
 
     def test_remember_with_explicit_domain_and_kind(self) -> None:

@@ -48,6 +48,7 @@ class MemoryMatch:
     title: str
     domain: str
     kind: str
+    matched_terms: tuple[str, ...]
     lines: tuple[str, ...]
 
 
@@ -110,7 +111,7 @@ class MemoryStore:
         for path in sorted(self.memories_dir.glob("*.memory.yaml")):
             raw = path.read_text(encoding="utf-8", errors="replace")
             haystack = raw.lower()
-            score = sum(haystack.count(term) for term in terms)
+            score, matched_terms = _score_terms(haystack, terms)
             if score <= 0:
                 continue
             if context.repo_name and context.repo_name.lower() in haystack:
@@ -122,6 +123,7 @@ class MemoryStore:
                     title=_extract_value(raw, "topic") or path.stem,
                     domain=_extract_value(raw, "domain") or DEFAULT_DOMAIN,
                     kind=_extract_value(raw, "kind") or DEFAULT_KIND,
+                    matched_terms=matched_terms,
                     lines=tuple(_important_lines(raw)),
                 )
             )
@@ -136,6 +138,7 @@ class MemoryStore:
         matches: list[MemoryMatch],
         max_lines: int,
         show_sources: bool,
+        show_reasons: bool = False,
     ) -> str:
         header = "[MemAgent recalled context]"
         context_bits = [
@@ -157,6 +160,11 @@ class MemoryStore:
             prefix = f"- Memory: {match.title} [{match.domain}/{match.kind}]"
             if show_sources:
                 prefix += f" ({match.path.name})"
+            if show_reasons:
+                reason = f"score={match.score}"
+                if match.matched_terms:
+                    reason += f"; matched={', '.join(match.matched_terms[:8])}"
+                prefix += f" | {reason}"
             lines.append(prefix)
             remaining -= 1
             for item in match.lines:
@@ -291,6 +299,18 @@ def _tokenize(text: str) -> list[str]:
                 seen.add(candidate)
                 tokens.append(candidate)
     return tokens
+
+
+def _score_terms(haystack: str, terms: list[str]) -> tuple[int, tuple[str, ...]]:
+    score = 0
+    matched_terms: list[str] = []
+    for term in terms:
+        count = haystack.count(term)
+        if count <= 0:
+            continue
+        score += count
+        matched_terms.append(term)
+    return score, tuple(matched_terms)
 
 
 def _contains_cjk(text: str) -> bool:

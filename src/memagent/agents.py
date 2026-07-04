@@ -32,7 +32,7 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         Run:
 
         ```bash
-        {command_prefix} recall "<user task>" --show-sources
+        {command_prefix} recall "<user task>" --show-sources --show-reasons
         ```
 
         Then use the recalled context as hints only. Continue checking live code,
@@ -85,4 +85,3 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
           MemAgent.
         """
     ).strip()
-

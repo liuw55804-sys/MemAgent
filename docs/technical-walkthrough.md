@@ -2,7 +2,7 @@
 
 这份文档用来解释当前代码结构。后续每加一个功能，都应该同步更新这里，保证项目不是“功能堆上去了，但自己看不懂”。
 
-当前版本的 MemAgent 还很小，可以先理解成四个模块：
+当前版本的 MemAgent 还很小，可以先理解成几个核心模块：
 
 ```text
 src/memagent/
@@ -19,7 +19,7 @@ src/memagent/
 
 ```bash
 PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
-PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率"
+PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 ```
@@ -29,7 +29,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 ```bash
 python -m pip install -e .
 memagent remember --domain coding --kind note "..."
-memagent recall "..."
+memagent recall "..." --show-sources --show-reasons
 memagent codex "..."
 memagent agents-snippet
 ```
@@ -132,6 +132,7 @@ sequenceDiagram
   M->>F: read *.memory.yaml
   M->>M: tokenize query + repo + branch
   M->>M: score cards by keyword count
+  M->>M: collect matched terms
   M-->>CLI: MemoryMatch list
   CLI->>M: compose_context(...)
   M-->>CLI: short recalled context
@@ -144,12 +145,21 @@ sequenceDiagram
 - 中文短语会生成 2-4 字 n-gram，支持 `帮我判断租房偏好` 命中 `租房偏好`。
 - 扫描 `~/.memagent/memories/*.memory.yaml`。
 - 用关键词出现次数打分。
+- 记录命中的 query terms，用于解释为什么召回这条 memory。
 - 如果 query 已经命中，并且 memory card 里包含当前 repo 名，额外加分。
 - 取分数最高的前几条。
 - 读取 card 顶层的 `domain/kind`，旧 card 没有这两个字段时默认用 `coding/note`。
 - 从 `stable_facts`、`pitfalls`、`next_time_prompt` 里抽几行，组成短上下文。
 
 这不是最终算法，只是 MVP 的可解释 baseline。后续可以替换成 BM25、向量召回、rerank，但接口上可以继续保持 `store.recall(...)`。
+
+如果想看召回原因，可以加：
+
+```bash
+memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons
+```
+
+输出里的 `score=...` 是当前简单打分，`matched=...` 是 query 中命中的词。这个能力主要用于调试和演示，不代表最终检索算法必须一直是关键词计数。
 
 ### 3.3 `codex`
 
@@ -341,6 +351,7 @@ class MemoryMatch:
     title: str
     domain: str
     kind: str
+    matched_terms: tuple[str, ...]
     lines: tuple[str, ...]
 ```
 
@@ -438,11 +449,11 @@ source_note: |
 terms = tokenize(query)
 for each memory card:
   raw = read yaml text
-  score = sum(each term count in raw)
+  score, matched_terms = score each query term in raw
   if score > 0:
     if current repo_name appears in raw:
       score += 3
-    create MemoryMatch with domain/kind
+    create MemoryMatch with domain/kind/matched_terms
 sort by score desc
 return top limit
 ```
@@ -476,6 +487,14 @@ return top limit
 
 `max_lines` 控制输出行数，避免把太多历史内容塞给 Codex。
 
+如果 `show_reasons=True`，memory 行会额外包含：
+
+```text
+| score=7; matched=rds, json, timeout
+```
+
+这让 Codex 和用户都能看出“为什么是这条 memory”，也让后续替换成 BM25、vector recall 或 reranker 时有一个可解释输出的位置。
+
 ### 4.4 `wrapper.py`
 
 `wrapper.py` 现在只有一个函数：
@@ -506,12 +525,21 @@ def build_augmented_prompt(user_prompt: str, recalled_context: str) -> str:
 ```text
 tests/test_memory_store.py
   test_remember_and_recall
+  test_remember_with_explicit_domain_and_kind
+  test_domain_and_kind_are_normalized
+  test_invalid_domain_and_kind_raise
+  test_recall_older_card_without_domain_and_kind
+  test_recall_chinese_phrase_with_partial_match
 
 tests/test_wrapper.py
   test_build_augmented_prompt
   test_build_augmented_prompt_without_memory
   test_build_augmented_prompt_ignores_blank_memory
   test_normalize_remainder
+
+tests/test_agents_snippet.py
+  test_build_agents_snippet
+  test_agents_snippet_cli
 ```
 
 `test_memory_store.py` 做的是：
@@ -520,9 +548,11 @@ tests/test_wrapper.py
 - 调用 `store.remember(...)` 写一条 memory。
 - 构造一个假的 `ProjectContext`。
 - 调用 `store.recall(...)` 找回 memory。
-- 调用 `compose_context(...)` 确认输出里有标题和关键句。
+- 调用 `compose_context(...)` 确认输出里有标题、关键句和可解释召回信息。
 
 这说明当前测试关注的是“能写、能召回、能渲染”，不是复杂召回质量。
+
+`test_agents_snippet.py` 保护的是 AGENTS.md 自然语言触发入口，避免后续改文案时把关键命令或安全边界删掉。
 
 运行测试：
 
@@ -579,3 +609,11 @@ PYTHONPATH=src python -m unittest discover -s tests
 - 它会不会让用户更难理解当前代码？
 
 只要这些问题能答清楚，再写代码会更踏实。
+tests/test_agents_snippet.py
+  test_build_agents_snippet
+  test_agents_snippet_cli
+```
+
+`test_agents_snippet.py` 保护的是 AGENTS.md 自然语言触发入口，避免后续改文案时把关键命令或安全边界删掉。
+
+```text

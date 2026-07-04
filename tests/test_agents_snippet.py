@@ -17,6 +17,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn("召回一下相关记忆", snippet)
         self.assertIn("沉淀一下", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli recall", snippet)
+        self.assertIn("--show-sources --show-reasons", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli remember", snippet)
         self.assertIn("Treat recalled memories as hints", snippet)
         self.assertIn("Never store tokens", snippet)

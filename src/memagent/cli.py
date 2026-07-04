@@ -67,6 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include matching memory card file names.",
     )
+    recall.add_argument(
+        "--show-reasons",
+        action="store_true",
+        help="Include simple recall score and matched query terms.",
+    )
 
     codex = subparsers.add_parser(
         "codex",
@@ -89,6 +94,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-sources",
         action="store_true",
         help="Include matching memory card file names in the Codex prompt.",
+    )
+    codex.add_argument(
+        "--show-reasons",
+        action="store_true",
+        help="Include simple recall score and matched query terms in the Codex prompt.",
     )
     codex.add_argument(
         "--no-memory",
@@ -160,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
             matches=matches,
             max_lines=args.max_lines,
             show_sources=args.show_sources,
+            show_reasons=args.show_reasons,
         )
         print(rendered)
         return 0
@@ -175,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
                 matches=matches,
                 max_lines=args.max_lines,
                 show_sources=args.show_sources,
+                show_reasons=args.show_reasons,
             )
         final_prompt = build_augmented_prompt(args.prompt, recalled_context)
         if args.dry_run:

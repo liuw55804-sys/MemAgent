@@ -46,8 +46,12 @@ When the user says:
 Codex should call:
 
 ```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short query"
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short query" --show-sources --show-reasons
 ```
+
+`--show-sources` shows which memory card was used. `--show-reasons` shows the
+simple score and matched query terms, which makes the recall result easier to
+debug and demo.
 
 ## Safety
 

@@ -11,12 +11,16 @@ Added:
 - Recall output now labels matches as `[domain/kind]`.
 - Backward-compatible recall for old cards without `domain` or `kind`.
 - `agents-snippet` command to generate AGENTS.md natural-language trigger rules.
+- `recall --show-reasons` and `codex --show-reasons` to display simple recall scores and matched query terms.
+- Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
+- Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
 
 - Recall now requires user-query matches before applying repo-scope bonus, reducing unrelated same-repo matches.
 - Chinese query tokenization now includes lightweight 2-4 character n-grams for partial phrase matching.
 - v0.3 design now focuses on Codex natural-language integration through AGENTS.md snippets.
+- Generated AGENTS.md recall commands now include `--show-sources --show-reasons` for more transparent demos and debugging.
 
 ## v0.1.0-mvp - 2026-06-23
 

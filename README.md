@@ -9,7 +9,7 @@ session can quickly recall proven commands, failed paths, and next-step hints.
 
 ```bash
 python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
-python -m memagent.cli recall "continue checking attribution accuracy"
+python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
 ```
 
@@ -18,7 +18,7 @@ After installing the project in editable mode, the shorter form is available:
 ```bash
 python -m pip install -e .
 memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
-memagent recall "continue checking attribution accuracy"
+memagent recall "continue checking attribution accuracy" --show-sources --show-reasons
 memagent codex "continue checking attribution accuracy"
 ```
 
@@ -60,6 +60,11 @@ memagent codex --no-memory "continue checking attribution accuracy"
 ## Product Plan
 
 See [docs/product-plan.md](docs/product-plan.md).
+
+## Competitive Scan
+
+See [docs/competitive-scan.md](docs/competitive-scan.md) for similar projects and
+MemAgent's current differentiation.
 
 ## Code Walkthrough
 
@@ -103,6 +108,11 @@ memagent agents-snippet
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
 integration that lets Codex call MemAgent when the user says phrases like
 `沉淀一下` or `召回一下相关记忆`.
+
+## Demo
+
+See [docs/demo_codex_agents_flow.md](docs/demo_codex_agents_flow.md) for a
+reproducible local demo of the AGENTS.md recall/remember flow.
 
 ## Development
 
