@@ -4,6 +4,8 @@
 
 这份文档记录 MemAgent 周边已有项目和产品能力，用来帮助后续设计不要闭门造车，也方便面试时讲清楚“为什么还要做 MemAgent”。
 
+更新：更细的 GitHub landscape refresh 见 [design_v0.24_landscape_refresh.md](design_v0.24_landscape_refresh.md)。该版本补充了 agentmemory、ai-memory、Reference、cccmemory、Headroom、Basic Memory、mind 等项目的分层判断，并把下一步建议收敛到 Codex transcript ingest + memory candidate review。
+
 ## 1. 结论
 
 “coding agent memory” 已经不是空白方向。直接相似的项目已经出现，尤其是 [agentmemory](https://github.com/rohitg00/agentmemory) 和 [ai-memory](https://github.com/akitaonrails/ai-memory)。所以 MemAgent 不能只讲“跨会话记忆”或者“RAG 检索”，这些会显得像已有项目的轻量复刻。

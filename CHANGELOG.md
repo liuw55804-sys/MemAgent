@@ -51,6 +51,7 @@ Added:
 - v0.21 demo bundle design note for tying AGENTS.md, RAG, MCP, and trace feedback evidence together.
 - v0.22 MCP demo transcript design note for protocol-level MCP evidence.
 - v0.23 trace replay design note for lightweight retriever regression evaluation.
+- v0.24 landscape refresh comparing agentmemory, ai-memory, Reference, cccmemory, Headroom, Basic Memory, and mind.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
