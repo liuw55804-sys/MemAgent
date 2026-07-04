@@ -114,9 +114,10 @@ Git/versioning rhythm. Current baseline: `v0.1.0-mvp`.
 
 ## Self-Test Plan
 
-See [docs/self-test-plan.md](docs/self-test-plan.md) before adding AI/provider
-integrations. It helps decide whether the next step should be ingest, recall,
-prompt composition, or natural-language triggering.
+For the current Codex-thread product self-test, use
+[docs/selftest_v0.25_codex_thread.md](docs/selftest_v0.25_codex_thread.md).
+The older [docs/self-test-plan.md](docs/self-test-plan.md) remains as the v0.1
+manual `remember/recall` baseline.
 
 ## v2 Plan
 

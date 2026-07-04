@@ -54,6 +54,7 @@ Added:
 - v0.23 trace replay design note for lightweight retriever regression evaluation.
 - v0.24 landscape refresh comparing agentmemory, ai-memory, Reference, cccmemory, Headroom, Basic Memory, and mind.
 - v0.25 Codex transcript ingest design note for human-in-the-loop memory candidate review.
+- v0.25 Codex thread self-test playbook for product-style acceptance testing.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:

@@ -1,5 +1,8 @@
 # MemAgent v0.1.0 最小自测指南
 
+> 当前推荐自测入口已更新到 [selftest_v0.25_codex_thread.md](selftest_v0.25_codex_thread.md)。
+> 本文保留为 v0.1 手动 `remember/recall` 基线，用来对比早期闭环。
+
 这份文档只回答一个问题：
 
 > 我现在只有 Codex 的会话，怎么手动造出第一批 memory，并验证它有没有用？
