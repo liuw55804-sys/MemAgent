@@ -6,6 +6,7 @@
 agents-install 安装 + agents-doctor 自检
   -> Codex 自然语言识别 recall / remember
   -> MemAgent 本地写入和召回 memory
+  -> 从旧 Codex session 生成 review-only memory candidates
   -> 从 session notes 生成 handoff draft
   -> 保存 handoff 并在新会话 catch up
   -> promote handoff memory candidate
@@ -34,14 +35,17 @@ local_memory_demo/demo_run/
     memories/
     handoffs/
     recall_traces/
+  ingest_codex/
+    report.md
+    candidates/
   trace_eval/
     report.md
   session_notes.md
   transcript.md
 ```
 
-`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、structured JSON recall、trace list、trace label/report、codex dry-run、handoff draft/save/show、handoff promote、promoted recall 的命令和输出。
-v0.16 起 transcript 包含 `recall --json`，用于展示同一套召回结果可以作为结构化 agent contract 使用。v0.17 起 transcript 也包含 `trace list`，用于展示真实召回可留痕、可复盘。v0.18 起 transcript 还包含 `trace label/report`，用于展示真实反馈闭环。v0.20 起还会生成 `trace_eval/report.md`，用于展示真实反馈评估 artifact。
+`transcript.md` 是完整演示记录，包含 install、doctor、remember、ingest codex、recall、structured JSON recall、trace list、trace label/report、codex dry-run、handoff draft/save/show、handoff promote、promoted recall 的命令和输出。
+v0.16 起 transcript 包含 `recall --json`，用于展示同一套召回结果可以作为结构化 agent contract 使用。v0.17 起 transcript 也包含 `trace list`，用于展示真实召回可留痕、可复盘。v0.18 起 transcript 还包含 `trace label/report`，用于展示真实反馈闭环。v0.20 起还会生成 `trace_eval/report.md`，用于展示真实反馈评估 artifact。v0.25 起还会生成 `ingest_codex/report.md`，用于展示旧 Codex session 到候选记忆草稿的 human-in-the-loop 入口。
 
 如果是面试或作品集演示，优先运行完整 bundle：
 
@@ -55,13 +59,14 @@ PYTHONPATH=src python -m memagent.cli demo-bundle --reset
 local_memory_demo/demo_bundle/
   interview_demo.md
   agents_flow/transcript.md
+  agents_flow/ingest_codex/report.md
   agents_flow/trace_eval/report.md
   agents_flow/trace_replay/report.md
   recall_eval/report.md
   mcp_flow/mcp_transcript.md
 ```
 
-`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、RAG、MCP、handoff、trace feedback、trace replay 和 eval 证据串成一个可讲的系统故事。`mcp_flow/mcp_transcript.md` 可以用来证明 MCP 是真实 JSON-RPC 交互，不只是工具清单。
+`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、Codex transcript ingest、RAG、MCP、handoff、trace feedback、trace replay 和 eval 证据串成一个可讲的系统故事。`agents_flow/ingest_codex/report.md` 可以用来证明旧线程能生成 review-only memory candidates，`mcp_flow/mcp_transcript.md` 可以用来证明 MCP 是真实 JSON-RPC 交互，不只是工具清单。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -88,6 +93,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - 输出里有 recall 触发语，比如 `召回一下相关记忆`。
 - 输出里有 remember 触发语，比如 `沉淀一下`。
 - 输出里有 handoff 触发语，比如 `上次做到哪` 和 `交接一下`。
+- 输出里有 Codex ingest 触发语，比如 `从旧 Codex 线程里找可沉淀经验`。
 - recall 命令带 `--show-sources --show-reasons --strategy bm25`，能展示来源、命中原因和召回策略。
 - recall 输出包含 `Pack` 行，能展示上下文预算、去重数量和是否截断。
 - structured recall 输出包含 `"schema_version": "memagent.recall.v1"`。
@@ -95,6 +101,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - trace report 输出包含 `[MemAgent recall trace report]` 和 `useful_rate`。
 - trace eval 输出包含 `[MemAgent trace-eval]`，并写入 `trace_eval/report.md`。
 - trace replay 输出包含 `[MemAgent trace-replay]`，并写入 `trace_replay/report.md`。
+- ingest 输出包含 `[MemAgent codex ingest]`，并写入 `ingest_codex/report.md` 和 `ingest_codex/candidates/`。
 - 安全规则说明 local private memory 和 public demo 的边界。
 
 也可以用安装器预览写入当前项目 `AGENTS.md` 的效果：

@@ -22,6 +22,11 @@ from memagent.handoff import (
     render_handoff_draft,
     render_promotion_preview,
 )
+from memagent.ingest import (
+    DEFAULT_CODEX_INGEST_WORKSPACE,
+    DEFAULT_CODEX_SESSIONS_ROOT,
+    run_codex_ingest,
+)
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
@@ -284,6 +289,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="Evaluation workspace directory. Default: local_memory_demo/recall_eval.",
     )
 
+    ingest = subparsers.add_parser(
+        "ingest",
+        help="Draft memory candidates from external coding-agent transcripts.",
+    )
+    ingest_subparsers = ingest.add_subparsers(dest="ingest_command", required=True)
+    ingest_codex = ingest_subparsers.add_parser(
+        "codex",
+        help="Draft memory candidates from local Codex session JSONL files.",
+    )
+    ingest_codex.add_argument(
+        "--sessions-root",
+        default=DEFAULT_CODEX_SESSIONS_ROOT,
+        help=f"Codex sessions root. Default: {DEFAULT_CODEX_SESSIONS_ROOT}.",
+    )
+    ingest_codex.add_argument(
+        "--workspace",
+        default=DEFAULT_CODEX_INGEST_WORKSPACE,
+        help=f"Output workspace. Default: {DEFAULT_CODEX_INGEST_WORKSPACE}.",
+    )
+    ingest_codex.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum recent session files to inspect. Default: 5.",
+    )
+    ingest_codex.add_argument(
+        "--max-candidates",
+        type=int,
+        default=12,
+        help="Maximum candidate drafts to write. Default: 12.",
+    )
+    ingest_codex.add_argument(
+        "--cwd",
+        help="Project cwd used for --project-only filtering. Defaults to current directory.",
+    )
+    ingest_codex.add_argument(
+        "--project-only",
+        action="store_true",
+        help="Only inspect records whose cwd is under the detected current project.",
+    )
+
     trace = subparsers.add_parser(
         "trace",
         help="Inspect saved recall traces.",
@@ -538,6 +584,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- workspace: {result.workspace}")
         print(f"- report: {result.report_path}")
         print(f"- transcript: {result.demo.transcript_path}")
+        print(f"- ingest candidates: {result.demo.workspace / 'ingest_codex' / 'report.md'}")
         print(f"- recall eval: {result.recall_eval.report_path}")
         print(f"- trace eval: {result.demo.workspace / 'trace_eval' / 'report.md'}")
         print(f"- trace replay: {result.demo.workspace / 'trace_replay' / 'report.md'}")
@@ -577,6 +624,28 @@ def main(argv: list[str] | None = None) -> int:
                 f"hit@1={strategy_result.hit_at_1:.2f}; mrr={strategy_result.mrr:.2f}"
             )
         return 0
+
+    if args.command == "ingest":
+        if args.ingest_command == "codex":
+            context = detect_context(Path(args.cwd) if args.cwd else None)
+            result = run_codex_ingest(
+                sessions_root=Path(args.sessions_root),
+                workspace=Path(args.workspace),
+                context=context,
+                limit=args.limit,
+                max_candidates=args.max_candidates,
+                project_only=args.project_only,
+            )
+            print("[MemAgent codex ingest]")
+            print(f"- workspace: {result.workspace}")
+            print(f"- sessions root: {result.sessions_root}")
+            print(f"- sessions scanned: {result.sessions_scanned}")
+            print(f"- records scanned: {result.records_scanned}")
+            print(f"- candidates: {len(result.candidates)}")
+            print(f"- report: {result.report_path}")
+            print(f"- candidates dir: {result.candidates_dir}")
+            print("- mode: review-only; no memory cards were written")
+            return 0
 
     store = MemoryStore.from_home_arg(args.home)
     if args.command == "agents-doctor":

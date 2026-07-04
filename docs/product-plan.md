@@ -101,6 +101,7 @@ MemAgent 要重点解决的是：
 - **反馈可闭环**：`trace label/report` 支持 useful / not_useful / neutral 标注，并汇总真实召回有用率。
 - **反馈可成稿**：`trace eval` 从真实 labeled traces 生成 Markdown 报告，作为可复盘、可分享的真实使用评估 artifact。
 - **反馈可回放**：`trace replay` 回放保存过的 trace query，比较当前 retriever top match 和原 trace top match，作为轻量 regression signal。
+- **旧线程可抽取**：`ingest codex` 从本地 Codex session JSONL 生成 review-only memory candidates，先让用户审阅，再决定是否 `remember`。
 - **反馈可集成**：Codex 可通过 AGENTS.md 自然语言规则标注 trace，MCP client 可通过 trace tools 读写反馈并生成报告。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。

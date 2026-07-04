@@ -34,6 +34,7 @@ Added:
 - `trace label` and `trace report` for real-use recall feedback summaries.
 - `trace eval` command to write a Markdown evaluation report from real labeled recall traces.
 - `trace replay` command to replay saved trace queries against current retrievers.
+- `ingest codex` command to draft review-only memory candidates from local Codex session JSONL files.
 - AGENTS.md natural-language trigger rules for recall trace feedback.
 - MCP trace tools for list/show/label/report/eval/replay over saved recall traces.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
@@ -52,6 +53,7 @@ Added:
 - v0.22 MCP demo transcript design note for protocol-level MCP evidence.
 - v0.23 trace replay design note for lightweight retriever regression evaluation.
 - v0.24 landscape refresh comparing agentmemory, ai-memory, Reference, cccmemory, Headroom, Basic Memory, and mind.
+- v0.25 Codex transcript ingest design note for human-in-the-loop memory candidate review.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:

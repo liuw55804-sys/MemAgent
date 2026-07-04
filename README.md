@@ -19,6 +19,7 @@ python -m memagent.cli trace eval
 python -m memagent.cli trace replay
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
+python -m memagent.cli ingest codex --limit 5 --project-only
 python -m memagent.cli handoff show
 python -m memagent.cli handoff draft --from-file ./session_notes.md
 python -m memagent.cli handoff promote --index 1
@@ -45,6 +46,7 @@ memagent trace eval
 memagent trace replay
 memagent agents-install
 memagent agents-doctor
+memagent ingest codex --limit 5 --project-only
 memagent handoff show
 memagent handoff draft --from-file ./session_notes.md
 memagent handoff promote --index 1
@@ -313,6 +315,19 @@ protocol transcript covering initialize, tools/list, and tools/call flows.
 See [docs/design_v0.23_trace_replay.md](docs/design_v0.23_trace_replay.md) for
 trace replay evaluation. `memagent trace replay` reruns saved trace queries
 against current retrievers and writes a top-stability report.
+
+## v0.24 Design
+
+See [docs/design_v0.24_landscape_refresh.md](docs/design_v0.24_landscape_refresh.md)
+for the refreshed GitHub landscape scan and the positioning update that led to
+Codex transcript ingest.
+
+## v0.25 Design
+
+See [docs/design_v0.25_codex_ingest.md](docs/design_v0.25_codex_ingest.md) for
+Codex transcript ingest. `memagent ingest codex` scans local Codex session JSONL
+files and writes review-only memory candidate drafts. It does not write durable
+memory cards until the user edits and saves a candidate with `remember`.
 
 ## Codex Natural Language Triggers
 

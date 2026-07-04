@@ -172,10 +172,10 @@ flowchart TD
 
 MVP 切法：
 
-1. `memagent ingest codex --limit 5 --dry-run`
+1. `memagent ingest codex --limit 5 --project-only`
 2. 读取最近 Codex session 的用户 prompt、assistant final、关键 shell command。
-3. 先不用 LLM，基于规则提取“疑似可沉淀片段”，生成 `local_memory_demo/ingest_candidates/*.md`。
-4. 用户确认后再 `memagent ingest codex --save-candidates` 或复制到 `remember`。
+3. 先不用 LLM，基于规则提取“疑似可沉淀片段”，生成 review-only Markdown candidates。
+4. 用户确认后再编辑 candidate，并用 `remember` 写入长期 memory。
 5. 后续再接 DeepSeek/Qwen/GLM 做 LLM-assisted candidate extraction。
 
 这个方向面试上也更好讲：它连接了真实 Codex 使用、local-first data、RAG candidate generation、human-in-the-loop review、MCP/AGENTS.md integration 和 trace evaluation。

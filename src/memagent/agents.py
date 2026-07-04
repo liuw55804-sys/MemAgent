@@ -172,6 +172,25 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         Use handoff for recent project state. Use `remember` only for durable
         lessons that should be reusable beyond the current continuation.
 
+        ### Codex Transcript Ingest
+
+        When the user says phrases like:
+
+        - `从旧 Codex 线程里找可沉淀经验`
+        - `看看以前 Codex 会话有没有能做成 memory 的`
+        - `从历史线程生成 memory candidates`
+        - `ingest Codex sessions`
+
+        Draft review-only memory candidates from recent local Codex sessions:
+
+        ```bash
+        {command_prefix} ingest codex --limit 5 --project-only
+        ```
+
+        This writes Markdown candidates under `local_memory_demo/ingest_codex`
+        by default. Review and edit candidates before saving any durable memory
+        with `remember`.
+
         ### Promote Handoff Candidates
 
         When the user says phrases like:

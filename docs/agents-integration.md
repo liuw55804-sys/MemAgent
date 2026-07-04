@@ -164,6 +164,22 @@ workflow lessons that should be reusable beyond this one continuation.
 
 When the user says:
 
+- `从旧 Codex 线程里找可沉淀经验`
+- `看看以前 Codex 会话有没有能做成 memory 的`
+- `从历史线程生成 memory candidates`
+- `ingest Codex sessions`
+
+Codex should draft review-only memory candidates:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli ingest codex --limit 5 --project-only
+```
+
+This writes Markdown drafts under `local_memory_demo/ingest_codex` by default.
+Review and edit candidates before saving any durable memory with `remember`.
+
+When the user says:
+
 - `把 handoff 里的候选记忆沉淀一下`
 - `promote handoff candidate`
 - `把这条 handoff candidate 变成长期 memory`

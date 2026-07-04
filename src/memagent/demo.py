@@ -22,6 +22,7 @@ from memagent.handoff import (
     render_handoff_draft,
     render_promotion_preview,
 )
+from memagent.ingest import run_codex_ingest
 from memagent.memory import MemoryStore
 from memagent.mcp import MCP_PROTOCOL_VERSION, McpServer, tool_definitions
 from memagent.wrapper import build_augmented_prompt
@@ -59,6 +60,52 @@ DEMO_SESSION_NOTES = "\n".join(
         "## Memory Candidates",
         "- Codex demos benefit from showing handoff before recall.",
     ]
+)
+DEMO_CODEX_SESSION_RECORDS = (
+    {
+        "type": "session_meta",
+        "timestamp": "2026-07-04T00:00:00Z",
+        "payload": {
+            "type": "session_meta",
+            "id": "demo-codex-session",
+            "cwd": "{project_dir}",
+            "git": {"root": "{project_dir}"},
+        },
+    },
+    {
+        "type": "event_msg",
+        "timestamp": "2026-07-04T00:01:00Z",
+        "payload": {
+            "type": "exec_command",
+            "cwd": "{project_dir}",
+            "command": "bytedcli rds query --db demo_attribution --sql 'select case_id, owner from audit_owner_snapshot limit 20'",
+            "exit_code": 0,
+        },
+    },
+    {
+        "type": "response_item",
+        "timestamp": "2026-07-04T00:02:00Z",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "沉淀一下：下次做 attribution accuracy demo 时，先展示 Codex transcript ingest 生成候选记忆，再由用户决定是否 remember。",
+                }
+            ],
+        },
+    },
+    {
+        "type": "event_msg",
+        "timestamp": "2026-07-04T00:03:00Z",
+        "payload": {
+            "type": "exec_command",
+            "cwd": "{project_dir}",
+            "command": "PYTHONPATH=src python -m memagent.cli trace replay --limit 10",
+            "exit_code": 0,
+        },
+    },
 )
 
 
@@ -183,6 +230,40 @@ def run_demo(
                 f"{_quote(DEMO_MEMORY)}"
             ),
             output=f"Saved memory: {saved.path}",
+        )
+    )
+
+    codex_sessions_root = workspace / "codex_sessions"
+    _write_demo_codex_session(codex_sessions_root=codex_sessions_root, project_dir=project_dir)
+    ingest_result = run_codex_ingest(
+        sessions_root=codex_sessions_root,
+        workspace=workspace / "ingest_codex",
+        context=detect_context(project_dir),
+        limit=5,
+        max_candidates=5,
+        project_only=True,
+    )
+    steps.append(
+        DemoStep(
+            title="Draft memory candidates from Codex transcript",
+            command=(
+                f"{command_prefix} ingest codex --sessions-root {_quote(codex_sessions_root)} "
+                f"--workspace {_quote(workspace / 'ingest_codex')} --cwd {_quote(project_dir)} "
+                "--project-only --max-candidates 5"
+            ),
+            output="\n".join(
+                [
+                    "[MemAgent codex ingest]",
+                    f"- workspace: {ingest_result.workspace}",
+                    f"- sessions root: {ingest_result.sessions_root}",
+                    f"- sessions scanned: {ingest_result.sessions_scanned}",
+                    f"- records scanned: {ingest_result.records_scanned}",
+                    f"- candidates: {len(ingest_result.candidates)}",
+                    f"- report: {ingest_result.report_path}",
+                    f"- candidates dir: {ingest_result.candidates_dir}",
+                    "- mode: review-only; no memory cards were written",
+                ]
+            ),
         )
     )
 
@@ -774,6 +855,7 @@ def render_demo_bundle_report(
 ) -> str:
     trace_eval_report = demo.workspace / "trace_eval" / "report.md"
     trace_replay_report = demo.workspace / "trace_replay" / "report.md"
+    ingest_report = demo.workspace / "ingest_codex" / "report.md"
     bm25 = _strategy_summary(recall_eval, "bm25")
     keyword = _strategy_summary(recall_eval, "keyword")
     regenerate_workspace = _display_path(workspace, root=memagent_root)
@@ -787,6 +869,7 @@ def render_demo_bundle_report(
         "| Artifact | Path | What it proves |",
         "|---|---|---|",
         f"| AGENTS.md flow transcript | `{_display_path(demo.transcript_path, root=workspace)}` | Codex natural-language triggers, recall, handoff, prompt patch |",
+        f"| Codex ingest candidates | `{_display_path(ingest_report, root=workspace)}` | Old Codex session logs can become review-only memory drafts |",
         f"| Trace feedback eval | `{_display_path(trace_eval_report, root=workspace)}` | Real-use recall feedback can be labeled and reported |",
         f"| Trace replay eval | `{_display_path(trace_replay_report, root=workspace)}` | Saved trace queries can be replayed against current retrievers |",
         f"| Recall benchmark | `{_display_path(recall_eval.report_path, root=workspace)}` | BM25 recall can be compared against a keyword baseline |",
@@ -798,11 +881,12 @@ def render_demo_bundle_report(
         "```mermaid",
         "flowchart LR",
         '  A["Codex + AGENTS.md<br>Natural language trigger"] --> B["MemAgent CLI / MCP<br>tool surface"]',
-        '  B --> C["Memory Cards<br>workflow lessons"]',
-        '  C --> D["RAG Recall<br>BM25 + explanations"]',
-        '  D --> E["Context Pack<br>short Codex prompt patch"]',
-        '  E --> F["Trace Feedback<br>useful / not_useful labels"]',
-        '  F --> G["Eval Reports<br>mock + real-use evidence"]',
+        '  B --> C["Transcript Ingest<br>candidate drafts"]',
+        '  C --> D["Memory Cards<br>workflow lessons"]',
+        '  D --> E["RAG Recall<br>BM25 + explanations"]',
+        '  E --> F["Context Pack<br>short Codex prompt patch"]',
+        '  F --> G["Trace Feedback<br>useful / not_useful labels"]',
+        '  G --> H["Eval Reports<br>mock + real-use evidence"]',
         "```",
         "",
         "## Capability Evidence",
@@ -812,7 +896,7 @@ def render_demo_bundle_report(
         f"| AGENTS.md integration | `demo-run` generated `{len(demo.steps)}` reproducible steps and a ready doctor check |",
         f"| RAG evaluation | `bm25` {bm25}; `keyword` {keyword} |",
         f"| MCP protocol surface | `{len(tools)}` tools exposed with annotations; `{len(mcp_demo.exchanges)}` JSON-RPC exchanges captured |",
-        "| Agent memory lifecycle | remember -> recall -> handoff -> promote -> recall promoted memory |",
+        "| Agent memory lifecycle | ingest candidate -> remember -> recall -> handoff -> promote -> recall promoted memory |",
         "| Feedback loop | recall trace -> label useful -> report -> trace eval -> trace replay |",
         "",
         "## MCP Tool Surface",
@@ -836,17 +920,19 @@ def render_demo_bundle_report(
             "## Five-Minute Demo Script",
             "",
             "1. Open the AGENTS.md flow transcript and show the doctor output marked `Status: ready`.",
-            "2. Show the recall step with sources, matched terms, and BM25 strategy.",
-            "3. Show the Codex dry-run prompt patch to prove MemAgent augments Codex instead of replacing it.",
-            "4. Show the MCP JSON-RPC transcript to prove the protocol surface is executable.",
-            "5. Show handoff and promotion to explain memory lifecycle beyond plain RAG.",
-            "6. Show recall-eval, trace-eval, and trace-replay reports to explain offline, real-use, and regression evaluation.",
+            "2. Show Codex transcript ingest to explain how old sessions become review-only memory candidates.",
+            "3. Show the recall step with sources, matched terms, and BM25 strategy.",
+            "4. Show the Codex dry-run prompt patch to prove MemAgent augments Codex instead of replacing it.",
+            "5. Show the MCP JSON-RPC transcript to prove the protocol surface is executable.",
+            "6. Show handoff and promotion to explain memory lifecycle beyond plain RAG.",
+            "7. Show recall-eval, trace-eval, and trace-replay reports to explain offline, real-use, and regression evaluation.",
             "",
             "## Positioning",
             "",
             "MemAgent is not another general agent platform. It is a Codex-first workflow memory layer:",
             "",
             "- AGENTS.md teaches Codex when to call MemAgent.",
+            "- Codex transcript ingest turns old sessions into review-only memory candidates.",
             "- Memory cards store reusable workflow lessons, not whole chat history.",
             "- Recall output is short, source-backed, explainable, and pack-budgeted.",
             "- MCP exposes the same capabilities to other coding-agent clients.",
@@ -959,6 +1045,19 @@ def _ensure_demo_project(project_dir: Path) -> None:
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
+
+
+def _write_demo_codex_session(*, codex_sessions_root: Path, project_dir: Path) -> Path:
+    session_dir = codex_sessions_root / "2026" / "07" / "04"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    path = session_dir / "rollout-demo-codex-ingest.jsonl"
+    records = []
+    for record in DEMO_CODEX_SESSION_RECORDS:
+        encoded = json.dumps(record, ensure_ascii=False)
+        encoded = encoded.replace("{project_dir}", str(project_dir))
+        records.append(json.loads(encoded))
+    path.write_text("\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8")
+    return path
 
 
 def _command_prefix(*, root: Path, memory_home: Path) -> str:

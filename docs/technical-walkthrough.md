@@ -12,6 +12,7 @@ src/memagent/
   demo.py      运行隔离 demo，并生成可分享的 Markdown transcript
   eval.py      运行 mock recall benchmark；也从真实 trace feedback 生成 eval report
   handoff.py   生成 handoff draft，并保存/读取每个项目最近一次 catch-up 状态
+  ingest.py    从 Codex session JSONL 生成 review-only memory candidate 草稿
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
   mcp.py       最小 MCP stdio server，把 recall/remember/handoff/trace/doctor 暴露为 tools
   wrapper.py   把召回上下文拼到 Codex prompt 前
@@ -35,6 +36,7 @@ PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
 PYTHONPATH=src python -m memagent.cli agents-doctor
+PYTHONPATH=src python -m memagent.cli ingest codex --limit 5 --project-only
 PYTHONPATH=src python -m memagent.cli handoff show
 PYTHONPATH=src python -m memagent.cli handoff draft --from-file local_memory_demo/demo_run/session_notes.md
 PYTHONPATH=src python -m memagent.cli handoff promote --index 1
@@ -62,6 +64,7 @@ memagent codex "..."
 memagent agents-snippet
 memagent agents-install
 memagent agents-doctor
+memagent ingest codex --limit 5 --project-only
 memagent handoff show
 memagent handoff draft --from-file local_memory_demo/demo_run/session_notes.md
 memagent handoff promote --index 1
@@ -101,7 +104,7 @@ flowchart LR
 
 ## 3. 主要命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
+当前主要命令是 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`ingest`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
 
 ### 3.1 `remember`
 
@@ -340,7 +343,32 @@ memagent agents-doctor --cwd /path/to/project
 
 输出中的 `Status: ready` 表示 AGENTS.md 触发层已经可用；`Status: setup needed` 表示需要先运行 `agents-snippet` 并把结果复制到目标 `AGENTS.md`。
 
-### 3.7 `demo-run`
+### 3.7 `ingest codex`
+
+用途：从本地 Codex session JSONL 里生成可审阅的长期记忆候选。
+
+命令：
+
+```bash
+memagent ingest codex --limit 5 --project-only
+```
+
+默认读取：
+
+```text
+~/.codex/sessions/
+```
+
+默认写到：
+
+```text
+local_memory_demo/ingest_codex/report.md
+local_memory_demo/ingest_codex/candidates/candidate_001.md
+```
+
+它只生成 review-only Markdown 草稿，不会写 `~/.memagent/memories/`。这样做是为了避免旧线程里的临时上下文、长输出或敏感片段自动污染长期 RAG 语料。真正要保存时，用户应该先编辑 candidate，再用 `remember` 写入。
+
+### 3.8 `demo-run`
 
 用途：在隔离目录里跑一遍完整演示，并生成 Markdown transcript。
 
@@ -362,6 +390,7 @@ local_memory_demo/demo_run/
 - 安装 MemAgent AGENTS.md block。
 - 用 `agents-doctor` 检查 ready。
 - 写入一条 mock workflow memory。
+- 从 mock Codex session JSONL 生成 review-only memory candidates。
 - 运行 explainable recall。
 - 保存、标注 recall trace，并生成 trace feedback eval report 和 trace replay report。
 - 生成 `codex --dry-run` prompt patch。
@@ -374,7 +403,7 @@ local_memory_demo/demo_run/
 
 这个命令服务于演示和面试，不是核心 memory 逻辑。它把已有能力串起来，保证每次展示的路径可复现。
 
-### 3.8 `demo-bundle`
+### 3.9 `demo-bundle`
 
 用途：生成一个可分享的面试演示包入口。
 
@@ -399,7 +428,7 @@ local_memory_demo/demo_bundle/interview_demo.md
 
 所以 `demo-bundle` 不是新的 memory 逻辑，而是一个 presentation layer。它把多个可验证 artifact 串成一个入口，方便面试时按 AGENTS.md、RAG、MCP、feedback loop 的顺序讲。
 
-### 3.9 `mcp-demo`
+### 3.10 `mcp-demo`
 
 用途：生成一份 MCP JSON-RPC transcript，证明 MCP surface 可以被真实调用。
 
@@ -427,7 +456,7 @@ local_memory_demo/mcp_demo/mcp_transcript.md
 
 这里没有启动后台服务，也没有监听端口；它是一个可复现的 protocol transcript generator。真正给 MCP client 用的入口还是 `mcp-stdio`。
 
-### 3.10 `mcp-stdio`
+### 3.11 `mcp-stdio`
 
 用途：启动一个最小 MCP stdio server，把 MemAgent 能力暴露给支持 MCP 的本地 client。
 
@@ -462,7 +491,7 @@ memagent mcp-stdio
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
 
-### 3.11 `recall-eval`
+### 3.12 `recall-eval`
 
 用途：运行 mock recall benchmark，比较 `bm25` 和 `keyword` 两种策略。
 
@@ -486,7 +515,7 @@ local_memory_demo/recall_eval/report.md
 
 这个命令用于验证和展示 retriever，不读取真实 `~/.memagent`。
 
-### 3.12 `handoff`
+### 3.13 `handoff`
 
 用途：保存或展示当前项目最近一次交接状态。
 
@@ -553,7 +582,7 @@ memagent handoff promote --index 1 --write
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`ingest`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -567,6 +596,7 @@ build_parser()
   -> 定义 agents-snippet 子命令
   -> 定义 agents-install 子命令
   -> 定义 agents-doctor 子命令
+  -> 定义 ingest codex 子命令
   -> 定义 handoff 子命令
   -> 定义 demo-run 子命令
   -> 定义 demo-bundle 子命令
@@ -583,6 +613,7 @@ main(argv)
   -> if mcp-demo: run_mcp_demo
   -> if mcp-stdio: run_stdio_server
   -> if recall-eval: run_recall_eval
+  -> if ingest codex: run_codex_ingest
   -> MemoryStore.from_home_arg(args.home)
   -> if trace eval: run_trace_eval
   -> if trace replay: run_trace_replay
@@ -1057,7 +1088,7 @@ PYTHONPATH=src python -m unittest discover -s tests
 
 ### 阶段二：下一步最自然的增强
 
-- `ingest`：从 Markdown 线程或总结中抽取 memory card。
+- `ingest`：从 Codex session JSONL 生成 review-only memory candidate 草稿，后续可扩展到 Markdown 线程或总结。
 - LLM handoff draft：从 session 结束摘要自动生成更高质量 handoff，但仍由用户确认。
 - 结构化 YAML 解析：不再只扫 raw text。
 - 更细的 memory schema：把 tool recipe、pitfall、validation 真正拆开。
