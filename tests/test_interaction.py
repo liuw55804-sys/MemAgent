@@ -38,7 +38,12 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertEqual(result.route.action, "recall")
             self.assertTrue(result.executed)
             self.assertIn("recall_trace", result.writes)
+            self.assertIn("process_trace", result.writes)
             self.assertIn("trace_id", result.artifacts)
+            self.assertIn("process_trace_id", result.artifacts)
+            trace_payload = store.load_process_trace(result.artifacts["process_trace_id"])
+            self.assertEqual(trace_payload["schema_version"], "memagent.process_trace.v1")
+            self.assertEqual(trace_payload["process"]["route"]["action"], "recall")
             self.assertEqual(result.to_payload(context=context)["schema_version"], PROCESS_SCHEMA_VERSION)
 
     def test_process_draft_memory_does_not_write_memory(self) -> None:
@@ -57,8 +62,9 @@ class InteractionProcessTest(unittest.TestCase):
 
             self.assertEqual(result.route.action, "draft_memory")
             self.assertTrue(result.executed)
-            self.assertEqual(result.writes, ())
+            self.assertEqual(result.writes, ("process_trace",))
             self.assertEqual(result.artifacts["requires_confirmation"], True)
+            self.assertIn("process_trace_path", result.artifacts)
             self.assertEqual(store.count_memory_cards(), 0)
 
     def test_process_feedback_labels_latest_trace(self) -> None:
@@ -88,6 +94,7 @@ class InteractionProcessTest(unittest.TestCase):
 
             self.assertEqual(result.route.action, "label_feedback")
             self.assertIn("trace_feedback", result.writes)
+            self.assertIn("process_trace", result.writes)
             self.assertEqual(result.artifacts["trace_id"], saved.identifier)
             payload = store.load_recall_trace(saved.identifier)
             self.assertEqual(payload["feedback"]["rating"], "useful")
@@ -118,6 +125,7 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertEqual(result.route.action, "handoff_save")
             self.assertTrue(result.executed)
             self.assertIn("handoff", result.writes)
+            self.assertIn("process_trace", result.writes)
             self.assertIn("latest_path", result.artifacts)
             self.assertTrue(Path(result.artifacts["latest_path"]).exists())
 
@@ -147,9 +155,28 @@ class InteractionProcessTest(unittest.TestCase):
 
             self.assertEqual(result.route.action, "handoff_show")
             self.assertTrue(result.executed)
-            self.assertEqual(result.writes, ())
+            self.assertEqual(result.writes, ("process_trace",))
             self.assertIn("Process handoff", result.result_text)
             self.assertIn("Verify handoff process actions.", result.result_text)
+
+    def test_process_no_write_disables_process_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+
+            result = process_interaction(
+                message="解释一下这个函数现在的分支逻辑。",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+                allow_writes=False,
+            )
+
+            self.assertEqual(result.route.action, "none")
+            self.assertEqual(result.writes, ())
+            self.assertFalse(store.process_traces_dir.exists())
 
 
 def _context(project: Path) -> ProjectContext:

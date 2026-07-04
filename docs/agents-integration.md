@@ -92,6 +92,10 @@ For the normal path, Codex can call one route-and-handle entrypoint:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli process "latest user message"
 ```
 
+`process` may save local process traces so later analysis can reconstruct
+which memory action was triggered. It still must not write durable long-term
+memory cards without explicit preview and user confirmation.
+
 When the intent is unclear, Codex can ask the read-only router first:
 
 ```bash

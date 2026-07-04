@@ -62,6 +62,7 @@ Added:
 - v0.30 LLM provider readiness design note for OpenAI-compatible API checks.
 - v0.30 self-test playbook for config-only and optional live LLM provider checks.
 - v0.31 process-first Codex wrapper design note.
+- Process traces for every `process` action so product self-tests can be reconstructed from local action logs.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
@@ -83,6 +84,7 @@ Changed:
 - `llm doctor` command and `memagent_llm_doctor` MCP tool check OpenAI-compatible provider readiness without printing API keys.
 - Local LLM provider profiles can be used by `llm doctor`, `route`, `draft memory`, `process`, and `codex`.
 - `codex` command now runs MemAgent process preflight instead of hard-coding recall-first behavior.
+- v0.31 self-test now relies on automatic `process_traces/` plus natural chat feedback instead of manual product scorecards.
 
 ## v0.1.0-mvp - 2026-06-23
 

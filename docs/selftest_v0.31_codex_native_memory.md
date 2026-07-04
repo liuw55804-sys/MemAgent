@@ -131,7 +131,7 @@ PYTHONPATH=src python -m memagent.cli --home "$SELFTEST_HOME" process \
 - `route.action` 是 `recall`。
 - `executed` 是 `true`。
 - `result_text` 里能看到刚才的 live schema 提醒。
-- `writes` 包含 `recall_trace`，后续才能记录“这次召回有没有用”。
+- `writes` 包含 `recall_trace` 和 `process_trace`，后续既能记录“这次召回有没有用”，也能还原这次产品动作。
 
 ## 5. 对话中沉淀经验：只预览，不自动保存
 
@@ -163,7 +163,7 @@ PYTHONPATH=src python -m memagent.cli --home "$SELFTEST_HOME" process \
 
 - `route.action` 是 `draft_memory`。
 - `artifacts.requires_confirmation` 是 `true`。
-- `writes` 是空数组。
+- `writes` 是空数组，因为这里显式用了 `--no-write` 做安全 dry run。
 - 这一步只生成可审核 memory draft，不写长期 memory。
 
 真实 Codex 使用时，正确体验是：
@@ -186,7 +186,7 @@ PYTHONPATH=src python -m memagent.cli --home "$SELFTEST_HOME" process \
 通过标准：
 
 - `route.action` 是 `label_feedback`。
-- `writes` 包含 `trace_feedback`。
+- `writes` 包含 `trace_feedback` 和 `process_trace`。
 - `artifacts.rating` 是 `useful`。
 
 这一步验证的是产品体验：用户不需要说 `trace label`。
@@ -223,8 +223,8 @@ PYTHONPATH=src python -m memagent.cli --home "$SELFTEST_HOME" process \
 
 通过标准：
 
-- 保存时 `route.action` 是 `handoff_save`，`writes` 包含 `handoff`。
-- 恢复时 `route.action` 是 `handoff_show`。
+- 保存时 `route.action` 是 `handoff_save`，`writes` 包含 `handoff` 和 `process_trace`。
+- 恢复时 `route.action` 是 `handoff_show`，`writes` 包含 `process_trace`。
 - 恢复输出包含 Summary / Done / Next Steps。
 
 ## 8. Codex Wrapper：process-first Dry Run
@@ -266,80 +266,47 @@ cd "$MEMAGENT_ROOT"
 
 建议在 `/Users/bytedance/Desktop/work/attribution` 开一个真实 Codex 线程测试。不要主动说内部术语，也不要告诉 Codex“现在要测试 MemAgent”，否则会把产品体验测歪。
 
-### 9.0 记录测试数据
+### 9.0 自动记录测试数据
 
-为了让后续可以按数据复盘，而不是凭印象回忆，把产品自测记录集中放到：
-
-```text
-/Users/bytedance/Desktop/work/personal_agents/memagent/local_memory_demo/selftest_v0.31/product_playbook/
-```
-
-建议结构：
+产品自测不需要你手填记录表。每次 Codex 通过 `memagent process`、`memagent_process` 或 v0.31 wrapper 触发 MemAgent 时，MemAgent 会自动在本地写一条 process trace：
 
 ```text
-product_playbook/
-  summary.md
-  scenarios/
-    A_cold_start.md
-    B_memory_draft.md
-    C_feedback.md
-    D_temporary_context.md
-    E_handoff_save.md
-    F_handoff_resume.md
-    G_noise_control.md
-    H_memory_conflict.md
-  screenshots/
-  raw_outputs/
+<memory-home>/process_traces/process_trace_*.json
 ```
 
-每个场景文件至少记录这些字段：
+如果使用第 0 节的隔离 home，路径是：
 
 ```text
-场景：
-测试时间：
-Codex 线程：
-用户原话：
-Codex 是否调用 MemAgent：是/否/不确定
-MemAgent 行为：召回/预览 memory/保存 memory/记录反馈/保存 handoff/读取 handoff/无动作
-实际输出摘要：
-是否打断任务节奏：1-5
-是否真的有帮助：1-5
-问题：
-下一版建议：
+/Users/bytedance/Desktop/work/personal_agents/memagent/local_memory_demo/selftest_v0.31/home/process_traces/
 ```
 
-`summary.md` 记录总表：
+真实 Codex 集成默认使用 `~/.memagent` 时，路径是：
 
 ```text
-# v0.31 Product Self-Test Summary
-
-测试日期：
-测试 workspace：/Users/bytedance/Desktop/work/attribution
-使用模型/provider：
-
-| 场景 | 是否完成 | 触发是否准确 | 是否有帮助 | 摩擦点 | 严重程度 |
-| --- | --- | --- | --- | --- | --- |
-| A 冷启动任务 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| B 经验沉淀 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| C 召回反馈 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| D 临时上下文 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| E handoff 保存 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| F 新线程恢复 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| G 噪音控制 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| H 相似记忆冲突 | 待填 | 待填 | 待填 | 待填 | 待填 |
-
-最明显的 3 个产品问题：
-1.
-2.
-3.
-
-最应该进入 v0.32 的改进：
-1.
-2.
-3.
+/Users/bytedance/.memagent/process_traces/
 ```
 
-测完后，把整个 `product_playbook/` 路径发给我。我会结合这些记录、`home/memories/`、handoff 文件和 trace feedback，输出：
+每条 process trace 会记录：
+
+- 用户原话和当前 project context；
+- route action、confidence、signals、reason；
+- 是否执行、写了哪些本地 artifact；
+- 召回 trace、memory draft、handoff、feedback 等动作的结果摘要；
+- `none` 动作，也就是 MemAgent 判断“这次不该介入”的证据。
+
+你在产品自测时只要正常对话。发现体验问题时，直接在当前会话里告诉我，例如：
+
+```text
+刚才场景 G 不对，它明明不该触发 MemAgent，但还是触发了。
+```
+
+测完后，把对应 memory home 路径发给我即可，例如：
+
+```text
+/Users/bytedance/Desktop/work/personal_agents/memagent/local_memory_demo/selftest_v0.31/home
+```
+
+我会读取 `process_traces/`、`recall_traces/`、`memories/`、handoff 文件，并结合你在对话框里的反馈，输出：
 
 - v0.31 当前产品效果结论；
 - 哪些场景已经可用，哪些只是功能可用但体验不顺；
@@ -534,46 +501,42 @@ MemAgent 行为：召回/预览 memory/保存 memory/记录反馈/保存 handoff
 - 不说明相关性边界。
 - 被错误 memory 带偏当前任务。
 
-## 10. 产品体验打分表
+## 10. 反馈方式
 
-每个场景测完后，不要只写“通过/不通过”，建议按 1-5 打分。
-
-| 维度 | 5 分表现 | 1 分表现 | 分数 |
-| --- | --- | --- | --- |
-| 触发准确性 | 该出现时出现，不该出现时安静 | 频繁漏触发或误触发 | 待填 |
-| 召回价值 | 明显减少试错，且不替代 live 验证 | 召回无关或带偏 | 待填 |
-| 打扰成本 | 只给短提醒，不破坏任务节奏 | 大段解释内部机制 | 待填 |
-| memory 预览质量 | 短、准、可复用，保留关键入口 | 空泛或塞入整段聊天 | 待填 |
-| 确认安全感 | 写长期 memory 前总会确认 | 未确认就写入 | 待填 |
-| handoff 可接力性 | 新线程能直接继续 | 新线程仍要用户重讲 | 待填 |
-| 隐私边界 | 保留可复用命令形态，剔除 secrets | 过度脱敏或泄露敏感值 | 待填 |
-| 用户心智负担 | 用户只需自然说话 | 用户必须懂内部命令 | 待填 |
-
-## 11. 产品问题记录模板
+产品自测者不需要写打分表或问题模板。问题发生时，直接在当前 Codex 会话里自然反馈即可：
 
 ```text
-场景：
-用户原话：
-预期体验：
-实际表现：
-摩擦点：
-严重程度：P0 / P1 / P2 / P3
-可能原因：触发判断 / 召回排序 / memory 质量 / handoff 内容 / AGENTS 提示 / LLM provider
-下一版建议：
+刚才这里误触发了。
 ```
-
-示例：
 
 ```text
-场景：相似记忆冲突
-用户原话：这次不是查 schema，我想排查 owner 为什么没有刷新成功
-预期体验：召回 owner 刷新链路相关经验；如果只命中 schema，说明弱相关
-实际表现：只召回 live schema 入口，并直接按 schema 方向推进
-摩擦点：旧记忆把任务带偏
-严重程度：P1
-可能原因：trigger 过粗；缺少 memory kind/intent rerank
-下一版建议：在 recall 后加 LLM rerank，判断当前任务和 memory 的关系
+这条 memory 预览太泛了，没保留 bytedcli 入口。
 ```
+
+```text
+handoff 太空，新线程接不上。
+```
+
+```text
+刚才那条召回把方向带偏了。
+```
+
+这些反馈本身会和本地 `process_traces/` 形成互补：trace 负责还原 MemAgent 当时做了什么，用户反馈负责说明产品感哪里不对。
+
+## 11. 后续分析维度
+
+后续由 Codex 读取 trace 后输出分析，不需要产品同学手填。分析维度包括：
+
+| 维度 | 看什么证据 |
+| --- | --- |
+| 触发准确性 | `process_traces` 里的 action、confidence、signals，以及用户反馈 |
+| 召回价值 | `recall_traces` 的 matches、feedback、后续任务是否少绕路 |
+| 打扰成本 | action 频率、`none` 比例、MemAgent 输出长度 |
+| memory 预览质量 | draft payload 的 topic、kind、triggers、memory、warnings |
+| 确认安全感 | durable memory 是否只在用户确认后写入 |
+| handoff 可接力性 | handoff 内容和新线程恢复效果 |
+| 隐私边界 | 是否保存 secrets、长原始样本或不该持久化的临时猜测 |
+| 用户心智负担 | 用户是否需要说内部术语才能触发能力 |
 
 ## 12. 当前版本通过标准
 
@@ -586,7 +549,7 @@ v0.31 不要求做到“完全自动、完全正确”。这一版通过标准�
 
 ## 13. 清理
 
-如果还没有让我分析 `product_playbook/`，先不要清理。
+如果还没有让我分析 `home/process_traces/`，先不要清理。
 
 确认已经复盘完后，如果想清掉本轮自测产物：
 

@@ -63,6 +63,13 @@ class SavedRecallTrace:
 
 
 @dataclass(frozen=True)
+class SavedProcessTrace:
+    path: Path
+    identifier: str
+    payload: dict[str, object]
+
+
+@dataclass(frozen=True)
 class RecallTraceSummary:
     path: Path
     identifier: str
@@ -101,6 +108,7 @@ class MemoryStore:
         self.home = home.expanduser().resolve()
         self.memories_dir = self.home / "memories"
         self.traces_dir = self.home / "recall_traces"
+        self.process_traces_dir = self.home / "process_traces"
         self.memories_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
@@ -278,6 +286,34 @@ class MemoryStore:
         path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return SavedRecallTrace(path=path, identifier=identifier, payload=trace_payload)
 
+    def save_process_trace(self, payload: dict[str, object], *, source: str) -> SavedProcessTrace:
+        self.process_traces_dir.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc)
+        identifier = f"process_trace_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+        path = self.process_traces_dir / f"{identifier}.json"
+        trace_payload = {
+            "schema_version": "memagent.process_trace.v1",
+            "trace": {
+                "id": identifier,
+                "created_at": now.isoformat(),
+                "source": source,
+                "path": str(path),
+            },
+            "process": payload,
+        }
+        path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return SavedProcessTrace(path=path, identifier=identifier, payload=trace_payload)
+
+    def load_process_trace(self, identifier: str | None = None) -> dict[str, object]:
+        path = self._resolve_process_trace_path(identifier)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid process trace JSON: {path}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"invalid process trace payload: {path}")
+        return payload
+
     def list_recall_traces(self, *, limit: int = 5) -> list[RecallTraceSummary]:
         summaries: list[RecallTraceSummary] = []
         if not self.traces_dir.exists():
@@ -407,6 +443,23 @@ class MemoryStore:
         if path.exists():
             return path
         raise ValueError(f"recall trace not found: {identifier}")
+
+    def _resolve_process_trace_path(self, identifier: str | None) -> Path:
+        if not self.process_traces_dir.exists():
+            raise ValueError("no process traces found")
+        if not identifier:
+            paths = sorted(self.process_traces_dir.glob("process_trace_*.json"), reverse=True)
+            if not paths:
+                raise ValueError("no process traces found")
+            return paths[0]
+        raw = Path(identifier).expanduser()
+        if raw.exists():
+            return raw.resolve()
+        stem = raw.stem if raw.suffix else str(raw)
+        path = self.process_traces_dir / f"{stem}.json"
+        if path.exists():
+            return path
+        raise ValueError(f"process trace not found: {identifier}")
 
 
 def _render_memory_card(

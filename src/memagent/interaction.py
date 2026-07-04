@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 from typing import Any
@@ -78,55 +78,97 @@ def process_interaction(
     )
 
     if route.action == "recall":
-        return _process_recall(
-            route=route,
+        return _with_process_trace(
+            _process_recall(
+                route=route,
+                context=context,
+                store=store,
+                allow_writes=allow_writes,
+                trace_recall=trace_recall,
+                limit=limit,
+                max_lines=max_lines,
+                show_sources=show_sources,
+                show_reasons=show_reasons,
+                strategy=strategy,
+            ),
             context=context,
             store=store,
             allow_writes=allow_writes,
-            trace_recall=trace_recall,
-            limit=limit,
-            max_lines=max_lines,
-            show_sources=show_sources,
-            show_reasons=show_reasons,
-            strategy=strategy,
+            recent_text=recent_text,
         )
     if route.action == "draft_memory":
-        return _process_draft_memory(
-            route=route,
+        return _with_process_trace(
+            _process_draft_memory(
+                route=route,
+                context=context,
+                recent_text=recent_text,
+                provider=provider,
+                llm_profile=llm_profile,
+                llm_config_path=llm_config_path,
+            ),
             context=context,
+            store=store,
+            allow_writes=allow_writes,
             recent_text=recent_text,
-            provider=provider,
-            llm_profile=llm_profile,
-            llm_config_path=llm_config_path,
         )
     if route.action == "label_feedback":
-        return _process_label_feedback(route=route, store=store, allow_writes=allow_writes)
-    if route.action == "handoff_show":
-        return _process_handoff_show(route=route, context=context, handoff_store=handoff_store)
-    if route.action == "handoff_save":
-        return _process_handoff_save(
-            route=route,
+        return _with_process_trace(
+            _process_label_feedback(route=route, store=store, allow_writes=allow_writes),
             context=context,
-            handoff_store=handoff_store,
-            recent_text=recent_text,
-            message=message,
+            store=store,
             allow_writes=allow_writes,
+            recent_text=recent_text,
+        )
+    if route.action == "handoff_show":
+        return _with_process_trace(
+            _process_handoff_show(route=route, context=context, handoff_store=handoff_store),
+            context=context,
+            store=store,
+            allow_writes=allow_writes,
+            recent_text=recent_text,
+        )
+    if route.action == "handoff_save":
+        return _with_process_trace(
+            _process_handoff_save(
+                route=route,
+                context=context,
+                handoff_store=handoff_store,
+                recent_text=recent_text,
+                message=message,
+                allow_writes=allow_writes,
+            ),
+            context=context,
+            store=store,
+            allow_writes=allow_writes,
+            recent_text=recent_text,
         )
     if route.action == "developer_eval":
-        return _process_developer_eval(
-            route=route,
+        return _with_process_trace(
+            _process_developer_eval(
+                route=route,
+                store=store,
+                eval_workspace=eval_workspace,
+                replay_workspace=replay_workspace,
+                allow_writes=allow_writes,
+            ),
+            context=context,
             store=store,
-            eval_workspace=eval_workspace,
-            replay_workspace=replay_workspace,
             allow_writes=allow_writes,
+            recent_text=recent_text,
         )
-    return ProcessResult(
-        route=route,
-        executed=False,
-        result_text="[MemAgent process]\n- action: none\n- Continue normally without MemAgent.",
-        artifacts={},
-        writes=(),
-        warnings=(),
+    return _with_process_trace(
+        ProcessResult(
+            route=route,
+            executed=False,
+            result_text="[MemAgent process]\n- action: none\n- Continue normally without MemAgent.",
+            artifacts={},
+            writes=(),
+            warnings=(),
+        ),
+        context=context,
+        store=store,
+        allow_writes=allow_writes,
+        recent_text=recent_text,
     )
 
 
@@ -197,6 +239,29 @@ def _process_recall(
         warnings=(),
         payload=output_payload,
     )
+
+
+def _with_process_trace(
+    result: ProcessResult,
+    *,
+    context: ProjectContext,
+    store: MemoryStore,
+    allow_writes: bool,
+    recent_text: str,
+) -> ProcessResult:
+    if not allow_writes:
+        return result
+    process_payload = result.to_payload(context=context)
+    process_payload["input"] = {
+        "recent_text_present": bool(recent_text.strip()),
+        "recent_text_chars": len(recent_text),
+    }
+    saved = store.save_process_trace(process_payload, source="process")
+    artifacts = dict(result.artifacts)
+    artifacts["process_trace_id"] = saved.identifier
+    artifacts["process_trace_path"] = str(saved.path)
+    writes = tuple([*result.writes, "process_trace"])
+    return replace(result, artifacts=artifacts, writes=writes)
 
 
 def _process_draft_memory(

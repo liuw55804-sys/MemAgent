@@ -265,7 +265,8 @@ class McpServerTest(unittest.TestCase):
             payload = json.loads(response["result"]["content"][0]["text"])
             self.assertEqual(payload["schema_version"], "memagent.process.v1")
             self.assertEqual(payload["route"]["action"], "draft_memory")
-            self.assertEqual(payload["writes"], [])
+            self.assertEqual(payload["writes"], ["process_trace"])
+            self.assertIn("process_trace_path", payload["artifacts"])
 
     def test_llm_doctor_tool(self) -> None:
         with mock.patch.dict(
