@@ -6,6 +6,11 @@
 
 不再单独测旧的 `candidate`、`trace eval`、`trace replay`、`ingest` 全流程。那些属于开发者质量工具，日常使用不应该打扰用户。
 
+本文分两层：
+
+- `0-8` 是 RD smoke test：确认功能入口没有坏。
+- `9-13` 是产品体验自测：用真实 Codex 对话发现触发、打扰、预览、handoff、恢复等体验问题。
+
 ## 覆盖范围
 
 | 版本 | 能力 | 本文怎么测 |
@@ -248,55 +253,342 @@ PYTHONPATH="$MEMAGENT_ROOT/src" python -m memagent.cli --home "$SELFTEST_HOME" c
 cd "$MEMAGENT_ROOT"
 ```
 
-## 9. 真实 Codex 对话自测
+## 9. 真实 Codex 产品自测
 
-在 `/Users/bytedance/Desktop/work/attribution` 开一个 Codex 线程，不要说内部术语。
+这一节才是本轮最重要的产品自测。目标不是证明命令能跑，而是观察：
 
-依次尝试这些自然语言：
+- MemAgent 是否在该出现时出现；
+- 是否在不该出现时保持安静；
+- 召回内容是否真的减少试错；
+- memory 预览是否短、准、可确认；
+- handoff 是否能让新线程自然接上；
+- 用户是否需要理解 `recall`、`trace`、`candidate`、`eval` 这些内部术语。
+
+建议在 `/Users/bytedance/Desktop/work/attribution` 开一个真实 Codex 线程测试。不要主动说内部术语，也不要告诉 Codex“现在要测试 MemAgent”，否则会把产品体验测歪。
+
+### 9.0 记录测试数据
+
+为了让后续可以按数据复盘，而不是凭印象回忆，把产品自测记录集中放到：
 
 ```text
-帮我排查 audit_rule_lib owner 问题，先按你觉得最省时间的方式来。
+/Users/bytedance/Desktop/work/personal_agents/memagent/local_memory_demo/selftest_v0.31/product_playbook/
+```
+
+建议结构：
+
+```text
+product_playbook/
+  summary.md
+  scenarios/
+    A_cold_start.md
+    B_memory_draft.md
+    C_feedback.md
+    D_temporary_context.md
+    E_handoff_save.md
+    F_handoff_resume.md
+    G_noise_control.md
+    H_memory_conflict.md
+  screenshots/
+  raw_outputs/
+```
+
+每个场景文件至少记录这些字段：
+
+```text
+场景：
+测试时间：
+Codex 线程：
+用户原话：
+Codex 是否调用 MemAgent：是/否/不确定
+MemAgent 行为：召回/预览 memory/保存 memory/记录反馈/保存 handoff/读取 handoff/无动作
+实际输出摘要：
+是否打断任务节奏：1-5
+是否真的有帮助：1-5
+问题：
+下一版建议：
+```
+
+`summary.md` 记录总表：
+
+```text
+# v0.31 Product Self-Test Summary
+
+测试日期：
+测试 workspace：/Users/bytedance/Desktop/work/attribution
+使用模型/provider：
+
+| 场景 | 是否完成 | 触发是否准确 | 是否有帮助 | 摩擦点 | 严重程度 |
+| --- | --- | --- | --- | --- | --- |
+| A 冷启动任务 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| B 经验沉淀 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| C 召回反馈 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| D 临时上下文 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| E handoff 保存 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| F 新线程恢复 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| G 噪音控制 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| H 相似记忆冲突 | 待填 | 待填 | 待填 | 待填 | 待填 |
+
+最明显的 3 个产品问题：
+1.
+2.
+3.
+
+最应该进入 v0.32 的改进：
+1.
+2.
+3.
+```
+
+测完后，把整个 `product_playbook/` 路径发给我。我会结合这些记录、`home/memories/`、handoff 文件和 trace feedback，输出：
+
+- v0.31 当前产品效果结论；
+- 哪些场景已经可用，哪些只是功能可用但体验不顺；
+- 失败样例归因：触发判断、召回排序、memory 质量、handoff 内容、AGENTS 提示还是 LLM provider；
+- v0.32 的优先级建议。
+
+### 9.1 场景 A：冷启动任务
+
+用户输入：
+
+```text
+我刚接回 audit_rule_lib 这块，帮我排查 governance task owner 相关问题，先按你觉得最省时间的方式来。
+```
+
+观察点：
+
+- Codex 是否自然想到先查相关经验，而不是直接从零开始乱翻。
+- 如果召回到 memory，是否只用一两句话说明提醒点。
+- Codex 是否继续读 live code、IDL、schema、命令输出，而不是把 memory 当成事实终点。
+- 用户有没有被要求理解 `recall` 或 `trace`。
+
+失败信号：
+
+- 完全没有利用已有 memory，重复踩以前的坑。
+- 一上来输出一大段 MemAgent 内部解释。
+- 把旧 memory 当作当前真实 schema，不再验证 live code。
+
+### 9.2 场景 B：任务推进中沉淀经验
+
+当 Codex 或你发现一个可复用经验后，说：
+
+```text
+这个 bytedcli 查 live schema 的入口下次别忘了，后面排查类似 owner 问题可以先走这里。
+```
+
+观察点：
+
+- Codex 是否先给 memory 预览，而不是直接写入长期记忆。
+- 预览是否保留真正有用的操作入口，例如命令形态、库表范围、适用场景。
+- 预览是否去掉 token、cookie、密码、长原始样本。
+- Codex 是否问你确认保存。
+
+失败信号：
+
+- 过度泛化成“先查文档”，丢掉真正有价值的内部入口。
+- 把整段聊天、长 SQL 结果、原始业务样本塞进 memory。
+- 没确认就保存。
+
+继续测试确认：
+
+```text
+确认保存。
+```
+
+观察点：
+
+- Codex 是否调用 MemAgent 保存。
+- 保存后的 topic/triggers 是否利于下次召回。
+
+### 9.3 场景 C：召回反馈
+
+在一次召回后，如果有帮助，说：
+
+```text
+刚刚那条提醒有用，少绕了一圈。
+```
+
+如果没帮助，说：
+
+```text
+刚刚那条没帮上，我真正需要的是 owner 刷新链路，不是 schema 入口。
+```
+
+观察点：
+
+- Codex 是否能把普通中文反馈记录下来。
+- Codex 是否保持简短，不生成 eval/replay 报告。
+- 对负反馈，Codex 是否调整当前排查方向，而不是只是“记录一下”。
+
+失败信号：
+
+- 要求用户说 `trace label useful`。
+- 反馈后突然进入开发者评估模式。
+- 负反馈没有影响当前任务策略。
+
+### 9.4 场景 D：中途不该保存的临时想法
+
+用户输入：
+
+```text
+先记一下这个怀疑点，但不一定要长期保存：可能是 refresh owner 的逻辑漏了某类历史 case。
+```
+
+观察点：
+
+- Codex 是否区分“临时上下文”和“长期 memory”。
+- 如果需要保存，应更倾向 handoff 或 todo，而不是 durable memory。
+- Codex 是否向用户确认边界。
+
+失败信号：
+
+- 把未经验证的猜测直接保存成长期经验。
+- 没区分“当前排查上下文”和“跨会话复用知识”。
+
+### 9.5 场景 E：长线程 handoff
+
+在同一个真实 Codex 线程推进一段后，说：
+
+```text
+我准备开新线程继续，先到这，帮我把当前进度接力一下。
+```
+
+观察点：
+
+- handoff 是否包含已完成、下一步、未验证风险。
+- 是否只保存关键状态，而不是压缩整段聊天。
+- 是否包含必要路径、文件、命令线索，方便新线程继续。
+- 是否避免保存 token、cookie、密码、长原始样本。
+
+失败信号：
+
+- handoff 太空泛，新线程仍然不知道从哪里接。
+- handoff 太长，像聊天记录压缩。
+- 未验证猜测没有标风险。
+
+### 9.6 场景 F：新线程恢复
+
+另开一个 Codex 线程，仍在 `/Users/bytedance/Desktop/work/attribution`，输入：
+
+```text
+继续上个 audit_rule_lib owner 排查，先告诉我上次做到哪，然后继续推进。
+```
+
+观察点：
+
+- Codex 是否能自然读取 handoff。
+- 是否先用短摘要恢复状态，再继续真实排查。
+- 是否不要求你手动贴上一轮上下文。
+- 是否不会把 handoff 当成唯一事实，仍继续验证 live code。
+
+失败信号：
+
+- 新线程完全接不上。
+- 需要你说 `handoff show`。
+- 只复述 handoff，不继续推进任务。
+
+### 9.7 场景 G：误触发和噪音控制
+
+在真实线程里穿插一些不需要 MemAgent 的请求：
+
+```text
+解释一下这个函数现在的分支逻辑。
 ```
 
 ```text
-这个 bytedcli 查 live schema 的入口下次别忘了。
+帮我把这段回复写得更简洁一点。
 ```
 
 ```text
-刚刚那条提醒有用。
+这个问题先别沉淀，只在当前线程里继续看。
 ```
+
+观察点：
+
+- Codex 是否能保持安静，不为了调用 MemAgent 而调用。
+- 用户明确说“别沉淀”时，是否尊重。
+- 没有相关 memory 时，是否简短说明或直接继续，而不是制造流程感。
+
+失败信号：
+
+- 每个问题都触发 MemAgent。
+- 用户说别沉淀仍然生成 memory。
+- “没找到记忆”占据太多对话空间。
+
+### 9.8 场景 H：相似记忆冲突
+
+当你已经有多条 bytedcli、RDS、owner、schema 相关 memory 后，输入：
 
 ```text
-先到这，下次继续时帮我接上。
+这次不是查 schema，我想排查 owner 为什么没有刷新成功，先看看有没有以前踩过类似坑。
 ```
+
+观察点：
+
+- Codex 是否能区分 schema 入口和 owner 刷新链路。
+- 如果召回内容只部分相关，Codex 是否说清楚“只可作为提示”。
+- 是否会继续查真实代码链路。
+
+失败信号：
+
+- 总是命中最常见的 RDS schema memory。
+- 不说明相关性边界。
+- 被错误 memory 带偏当前任务。
+
+## 10. 产品体验打分表
+
+每个场景测完后，不要只写“通过/不通过”，建议按 1-5 打分。
+
+| 维度 | 5 分表现 | 1 分表现 | 分数 |
+| --- | --- | --- | --- |
+| 触发准确性 | 该出现时出现，不该出现时安静 | 频繁漏触发或误触发 | 待填 |
+| 召回价值 | 明显减少试错，且不替代 live 验证 | 召回无关或带偏 | 待填 |
+| 打扰成本 | 只给短提醒，不破坏任务节奏 | 大段解释内部机制 | 待填 |
+| memory 预览质量 | 短、准、可复用，保留关键入口 | 空泛或塞入整段聊天 | 待填 |
+| 确认安全感 | 写长期 memory 前总会确认 | 未确认就写入 | 待填 |
+| handoff 可接力性 | 新线程能直接继续 | 新线程仍要用户重讲 | 待填 |
+| 隐私边界 | 保留可复用命令形态，剔除 secrets | 过度脱敏或泄露敏感值 | 待填 |
+| 用户心智负担 | 用户只需自然说话 | 用户必须懂内部命令 | 待填 |
+
+## 11. 产品问题记录模板
 
 ```text
-继续上次做到哪了？
+场景：
+用户原话：
+预期体验：
+实际表现：
+摩擦点：
+严重程度：P0 / P1 / P2 / P3
+可能原因：触发判断 / 召回排序 / memory 质量 / handoff 内容 / AGENTS 提示 / LLM provider
+下一版建议：
 ```
 
-通过标准：
+示例：
 
-- Codex 可以在合适时机调用 MemAgent，但不要要求你说 `recall`、`trace`、`candidate`。
-- 沉淀 memory 前要先给你预览。
-- 反馈和 handoff 可以用普通中文触发。
-- MemAgent 只提供短上下文，Codex 仍然要读 live code、IDL、schema、命令输出。
+```text
+场景：相似记忆冲突
+用户原话：这次不是查 schema，我想排查 owner 为什么没有刷新成功
+预期体验：召回 owner 刷新链路相关经验；如果只命中 schema，说明弱相关
+实际表现：只召回 live schema 入口，并直接按 schema 方向推进
+摩擦点：旧记忆把任务带偏
+严重程度：P1
+可能原因：trigger 过粗；缺少 memory kind/intent rerank
+下一版建议：在 recall 后加 LLM rerank，判断当前任务和 memory 的关系
+```
 
-## 10. 验收表
+## 12. 当前版本通过标准
 
-| 场景 | 通过标准 | 你的结论 |
-| --- | --- | --- |
-| AGENTS 集成 | `agents-doctor` ready | 待填 |
-| LLM profile | 至少一个 profile `live_ok` | 待填 |
-| 任务开始召回 | 自然任务触发 `recall` | 待填 |
-| 经验沉淀 | 只预览 memory draft，不自动写 | 待填 |
-| 反馈闭环 | “有用/没用”触发 feedback | 待填 |
-| 长线程 handoff | “先到这/继续上次”能保存和恢复 | 待填 |
-| Codex wrapper | dry-run prompt 包含 MemAgent preflight context | 待填 |
-| 产品体感 | 用户不需要理解 trace/eval/replay/candidate | 待填 |
+v0.31 不要求做到“完全自动、完全正确”。这一版通过标准是：
 
-## 11. 清理
+- 用户能用自然语言触发 4 条主链路：召回、沉淀预览、反馈、handoff。
+- 真实 Codex 对话里，MemAgent 更像后台助手，而不是新命令行工具。
+- 至少 3 个产品场景没有明显摩擦。
+- 出现失败时，能被记录成明确的下一版产品问题。
 
-如果想清掉本轮自测产物：
+## 13. 清理
+
+如果还没有让我分析 `product_playbook/`，先不要清理。
+
+确认已经复盘完后，如果想清掉本轮自测产物：
 
 ```bash
 rm -rf /Users/bytedance/Desktop/work/personal_agents/memagent/local_memory_demo/selftest_v0.31
