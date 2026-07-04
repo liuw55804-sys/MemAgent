@@ -1,7 +1,28 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 import textwrap
+
+from memagent.context import ProjectContext
+
+
+@dataclass(frozen=True)
+class AgentsFileCheck:
+    path: Path
+    has_memagent_section: bool
+    has_recall_command: bool
+    has_remember_command: bool
+    has_explainable_recall: bool
+
+    @property
+    def is_ready(self) -> bool:
+        return (
+            self.has_memagent_section
+            and self.has_recall_command
+            and self.has_remember_command
+            and self.has_explainable_recall
+        )
 
 
 def default_memagent_root() -> Path:
@@ -85,3 +106,73 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
           MemAgent.
         """
     ).strip()
+
+
+def build_agents_doctor_report(
+    *,
+    context: ProjectContext,
+    memory_home: Path,
+    memory_count: int,
+    memagent_root: Path | None = None,
+) -> str:
+    root = (memagent_root or default_memagent_root()).expanduser().resolve()
+    command_prefix = f"PYTHONPATH={root / 'src'} python -m memagent.cli"
+    checks = [_check_agents_file(path) for path in context.agents_files]
+    ready = any(check.is_ready for check in checks)
+
+    lines = [
+        "[MemAgent AGENTS.md doctor]",
+        f"- cwd: {context.cwd}",
+        f"- repo: {context.repo_name or 'unknown'}",
+        f"- git root: {context.git_root or 'unknown'}",
+        f"- branch: {context.branch or 'unknown'}",
+        f"- memory home: {memory_home.expanduser().resolve()}",
+        f"- memory cards: {memory_count}",
+    ]
+
+    if not checks:
+        lines.append("- AGENTS.md files: none found")
+    else:
+        lines.append("- AGENTS.md files:")
+        for check in checks:
+            state = "ready" if check.is_ready else "incomplete"
+            lines.append(f"  - {check.path}: {state}")
+            lines.append(f"    - MemAgent section: {_yes_no(check.has_memagent_section)}")
+            lines.append(f"    - recall command: {_yes_no(check.has_recall_command)}")
+            lines.append(f"    - remember command: {_yes_no(check.has_remember_command)}")
+            lines.append(f"    - explainable recall: {_yes_no(check.has_explainable_recall)}")
+
+    if ready:
+        lines.extend(
+            [
+                "- Status: ready",
+                (
+                    '- Next step: in Codex, say "召回一下相关记忆，<your task>"; '
+                    "MemAgent should be called from AGENTS.md instructions."
+                ),
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "- Status: setup needed",
+                "- Next step: generate the current snippet and paste it into the target AGENTS.md:",
+                f"  {command_prefix} agents-snippet",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def _check_agents_file(path: Path) -> AgentsFileCheck:
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    return AgentsFileCheck(
+        path=path.resolve(),
+        has_memagent_section="MemAgent" in raw and "Natural Language Triggers" in raw,
+        has_recall_command="memagent.cli recall" in raw,
+        has_remember_command="memagent.cli remember" in raw,
+        has_explainable_recall="--show-reasons" in raw,
+    )
+
+
+def _yes_no(value: bool) -> str:
+    return "yes" if value else "no"

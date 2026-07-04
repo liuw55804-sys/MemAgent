@@ -6,7 +6,7 @@
 
 ```text
 src/memagent/
-  agents.py    生成可复制到 AGENTS.md 的 MemAgent 触发规则
+  agents.py    生成 AGENTS.md 触发规则，并检查 AGENTS.md 集成状态
   cli.py       命令行入口，负责把用户命令转成函数调用
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
@@ -22,6 +22,7 @@ PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "�
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
+PYTHONPATH=src python -m memagent.cli agents-doctor
 ```
 
 安装成 editable package 后，才可以直接用：
@@ -32,6 +33,7 @@ memagent remember --domain coding --kind note "..."
 memagent recall "..." --show-sources --show-reasons
 memagent codex "..."
 memagent agents-snippet
+memagent agents-doctor
 ```
 
 默认记忆文件写到：
@@ -63,7 +65,7 @@ flowchart LR
 
 ## 3. 三条命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`。
+当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-doctor`。
 
 ### 3.1 `remember`
 
@@ -224,6 +226,33 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - recalled memory 只是提示，不是事实来源。
 - 不要保存 token、cookie、密码、私钥或原始敏感样本。
 
+### 3.5 `agents-doctor`
+
+用途：检查当前项目的 `AGENTS.md` 是否已经接入 MemAgent 自然语言触发规则。
+
+命令：
+
+```bash
+memagent agents-doctor
+```
+
+也可以检查指定目录：
+
+```bash
+memagent agents-doctor --cwd /path/to/project
+```
+
+它会检查：
+
+- 当前目录和 repo 信息。
+- memory home 位置和 memory card 数量。
+- 从当前目录向上找到的 `AGENTS.md` / `AGENTS.override.md`。
+- 是否包含 MemAgent section。
+- 是否包含 `memagent.cli recall` 和 `memagent.cli remember`。
+- recall 命令是否包含 `--show-reasons`，方便演示可解释召回。
+
+输出中的 `Status: ready` 表示 AGENTS.md 触发层已经可用；`Status: setup needed` 表示需要先运行 `agents-snippet` 并把结果复制到目标 `AGENTS.md`。
+
 ## 4. 文件级讲解
 
 ### 4.1 `cli.py`
@@ -233,7 +262,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-doctor`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -245,6 +274,7 @@ build_parser()
   -> 定义 recall 子命令
   -> 定义 codex 子命令
   -> 定义 agents-snippet 子命令
+  -> 定义 agents-doctor 子命令
 
 main(argv)
   -> parse args
@@ -253,6 +283,7 @@ main(argv)
   -> if remember: detect_context + store.remember(domain, kind, ...)
   -> if recall: detect_context + store.recall + compose_context
   -> if codex: recall + build_augmented_prompt + subprocess.run
+  -> if agents-doctor: detect_context + build_agents_doctor_report
 ```
 
 这里有一个小工具函数：
@@ -326,7 +357,7 @@ def detect_context(cwd: Path | None = None) -> ProjectContext:
 - `_find_agents_files(current, git_root)`：从当前目录向上找 AGENTS 文件。
 - `_project_name(current, git_root)`：根据 `pyproject.toml`、`package.json`、`go.mod` 等 marker 判断项目名。
 
-当前 `recent_files` 和 `agents_files` 已经探测出来了，但召回算法还没有真正使用它们。这是后续增强 recall policy 的预留点。
+当前 `recent_files` 已经探测出来了，但召回算法还没有真正使用它。这是后续增强 recall policy 的预留点。`agents_files` 已经被 `agents-doctor` 用来检查 AGENTS.md 集成状态。
 
 ### 4.3 `memory.py`
 
@@ -540,6 +571,9 @@ tests/test_wrapper.py
 tests/test_agents_snippet.py
   test_build_agents_snippet
   test_agents_snippet_cli
+  test_agents_doctor_report_ready
+  test_agents_doctor_report_setup_needed
+  test_agents_doctor_cli
 ```
 
 `test_memory_store.py` 做的是：

@@ -12,6 +12,7 @@ Added:
 - Backward-compatible recall for old cards without `domain` or `kind`.
 - `agents-snippet` command to generate AGENTS.md natural-language trigger rules.
 - `recall --show-reasons` and `codex --show-reasons` to display simple recall scores and matched query terms.
+- `agents-doctor` command to inspect whether the current project AGENTS.md has MemAgent recall/remember integration.
 - Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 

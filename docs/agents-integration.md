@@ -18,6 +18,16 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 Copy the output into a project or global `AGENTS.md`.
 
+After copying the snippet, check the integration with:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli agents-doctor
+```
+
+The doctor report checks whether an `AGENTS.md` file is visible from the current
+directory, whether it contains MemAgent recall/remember commands, and whether
+recall uses `--show-reasons` for explainable demos.
+
 When the user says:
 
 - `记住这个`

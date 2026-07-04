@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from memagent.agents import build_agents_snippet
+from memagent.agents import build_agents_doctor_report, build_agents_snippet
 from memagent.context import detect_context
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
@@ -130,6 +130,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="MemAgent project root. Defaults to the installed package root.",
     )
 
+    doctor = subparsers.add_parser(
+        "agents-doctor",
+        help="Check whether the current project AGENTS.md is wired to MemAgent.",
+    )
+    doctor.add_argument(
+        "--cwd",
+        help="Project directory to inspect. Defaults to the current working directory.",
+    )
+    doctor.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+
     return parser
 
 
@@ -142,6 +155,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     store = MemoryStore.from_home_arg(args.home)
+
+    if args.command == "agents-doctor":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        print(
+            build_agents_doctor_report(
+                context=context,
+                memory_home=store.home,
+                memory_count=store.count_memory_cards(),
+                memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            )
+        )
+        return 0
 
     if args.command == "remember":
         context = detect_context()

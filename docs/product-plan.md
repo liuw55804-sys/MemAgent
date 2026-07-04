@@ -95,6 +95,7 @@ MemAgent 要重点解决的是：
 - **工具 recipe 保真**：本地私有记忆可以保留必要的 `bytedcli` 命令、库名、表名、API path、header、env 等工程入口。
 - **上下文短注入**：召回结果会被压缩成 10-30 行，避免把历史长线程塞进新会话。
 - **召回可解释**：召回时可以显示 memory 来源、简单分数和命中词，避免变成黑盒记忆。
+- **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
 - **经验生命周期**：区分一次性上下文、可复用 workflow、可升格 `AGENTS.md` 的稳定规则。
 - **跨 coding agent**：当前主攻 Codex，但 memory card 设计不绑定 Codex，未来可以服务 Cursor、Claude Code 等 coding agent。
 

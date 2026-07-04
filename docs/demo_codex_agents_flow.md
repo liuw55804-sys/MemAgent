@@ -1,9 +1,9 @@
 # Codex AGENTS.md 集成演示
 
-这份 demo 用来证明 v0.3 的核心闭环：
+这份 demo 用来证明 v0.3/v0.4 的核心闭环：
 
 ```text
-AGENTS.md 触发规则
+AGENTS.md 触发规则 + agents-doctor 自检
   -> Codex 自然语言识别 recall / remember
   -> MemAgent 本地写入和召回 memory
   -> 短上下文拼给 Codex
@@ -42,6 +42,14 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 
 ## 3. 模拟新线程：第一次 recall 没有记忆
 
+先跑一次 doctor，确认当前项目是否已经接入了 MemAgent AGENTS.md 触发规则：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli agents-doctor
+```
+
+如果当前项目的 `AGENTS.md` 还没有 MemAgent snippet，会看到 `Status: setup needed`。这不是失败，而是在提醒先把 `agents-snippet` 的输出复制到目标项目的 `AGENTS.md`。
+
 ```bash
 MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli recall \
   "召回一下相关记忆，我要排查 demo 服务的 attribution accuracy" \
@@ -62,7 +70,30 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 Codex：按 AGENTS.md 调用 memagent recall
 ```
 
-## 4. 模拟沉淀一条 workflow memory
+## 4. AGENTS.md 接入自检的展示方式
+
+在已经复制 snippet 的项目里运行：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli agents-doctor
+```
+
+预期看到：
+
+```text
+[MemAgent AGENTS.md doctor]
+- AGENTS.md files:
+  - .../AGENTS.md: ready
+    - MemAgent section: yes
+    - recall command: yes
+    - remember command: yes
+    - explainable recall: yes
+- Status: ready
+```
+
+面试时可以先展示 doctor，再展示 recall/remember。这样观众会先知道“Codex 为什么能自然语言触发 MemAgent”。
+
+## 5. 模拟沉淀一条 workflow memory
 
 ```bash
 MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli remember \
@@ -84,7 +115,7 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 Codex：总结短 memory，调用 memagent remember
 ```
 
-## 5. 再次 recall：看到来源和命中原因
+## 6. 再次 recall：看到来源和命中原因
 
 ```bash
 MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli recall \
@@ -110,7 +141,7 @@ flowchart LR
   M --> C["Context Composer<br>short prompt patch"]
 ```
 
-## 6. 演示 Codex prompt patch
+## 7. 演示 Codex prompt patch
 
 不真正启动 Codex，只看拼出来的 prompt：
 
@@ -137,17 +168,16 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 
 这一步是面试演示的关键画面：MemAgent 没有替代 Codex，而是给 Codex 注入一段短、可解释、来源明确的 workflow memory。
 
-## 7. Demo 讲解词
+## 8. Demo 讲解词
 
 可以这样讲：
 
 > 我做的不是一个通用 agent，而是 coding agent 的 workflow memory layer。用户在 Codex 里说“召回一下相关记忆”，Codex 根据 AGENTS.md 调用 MemAgent；MemAgent 从本地 memory card 里检索相关的工具入口、失败路径和验证方式，并把短上下文拼到 Codex prompt 前。召回结果会带来源和命中原因，所以它比黑盒记忆更可控。
 
-## 8. 清理 demo 数据
+## 9. 清理 demo 数据
 
 ```bash
 rm -rf local_memory_demo/agents_flow
 ```
 
 `local_memory_demo/` 已经被 Git 忽略，不会提交到远端。
-

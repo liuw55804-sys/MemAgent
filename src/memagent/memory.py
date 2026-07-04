@@ -63,6 +63,9 @@ class MemoryStore:
         raw_home = home or os.environ.get("MEMAGENT_HOME") or "~/.memagent"
         return cls(Path(raw_home))
 
+    def count_memory_cards(self) -> int:
+        return sum(1 for _ in self.memories_dir.glob("*.memory.yaml"))
+
     def remember(
         self,
         *,

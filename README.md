@@ -10,6 +10,7 @@ session can quickly recall proven commands, failed paths, and next-step hints.
 ```bash
 python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons
+python -m memagent.cli agents-doctor
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
 ```
 
@@ -19,6 +20,7 @@ After installing the project in editable mode, the shorter form is available:
 python -m pip install -e .
 memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 memagent recall "continue checking attribution accuracy" --show-sources --show-reasons
+memagent agents-doctor
 memagent codex "continue checking attribution accuracy"
 ```
 
@@ -102,6 +104,17 @@ Generate a copyable `AGENTS.md` snippet:
 ```bash
 memagent agents-snippet
 ```
+
+Check whether the current project has usable MemAgent AGENTS.md integration:
+
+```bash
+memagent agents-doctor
+```
+
+## v0.4 Design
+
+See [docs/design_v0.4_agents_doctor.md](docs/design_v0.4_agents_doctor.md) for
+the AGENTS.md integration self-check design.
 
 ## Codex Natural Language Triggers
 
