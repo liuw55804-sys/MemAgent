@@ -32,6 +32,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn("先按你觉得最省时间的方式来", snippet)
         self.assertIn("沉淀一下", snippet)
         self.assertIn("这个入口下次别忘了", snippet)
+        self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli draft memory", snippet)
         self.assertIn("Ask the user to confirm before saving", snippet)
         self.assertIn("上次做到哪", snippet)
         self.assertIn("交接一下", snippet)

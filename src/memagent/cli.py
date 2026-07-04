@@ -15,6 +15,7 @@ from memagent.agents import (
 )
 from memagent.context import detect_context
 from memagent.demo import run_demo, run_demo_bundle, run_mcp_demo
+from memagent.draft import draft_memory, render_memory_draft
 from memagent.eval import run_recall_eval, run_trace_eval, run_trace_replay
 from memagent.handoff import (
     HandoffStore,
@@ -144,6 +145,48 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print structured route payload instead of text.",
+    )
+
+    draft = subparsers.add_parser(
+        "draft",
+        help="Draft reviewable MemAgent artifacts without writing durable memory.",
+    )
+    draft_subparsers = draft.add_subparsers(dest="draft_command", required=True)
+    draft_memory_parser = draft_subparsers.add_parser(
+        "memory",
+        help="Draft a reviewable memory card preview from text.",
+    )
+    draft_memory_parser.add_argument(
+        "text",
+        nargs="?",
+        help="Source text to rewrite into a memory draft.",
+    )
+    draft_memory_parser.add_argument(
+        "--from-file",
+        help='Read source text from a file, or "-" for stdin.',
+    )
+    draft_memory_parser.add_argument(
+        "--cwd",
+        help="Project directory for draft context. Defaults to the current working directory.",
+    )
+    draft_memory_parser.add_argument(
+        "--provider",
+        default="heuristic",
+        choices=["heuristic", "openai-compatible"],
+        help="Drafting provider. Default: heuristic.",
+    )
+    draft_memory_parser.add_argument("--topic", help="Optional topic override.")
+    draft_memory_parser.add_argument("--kind", help="Optional memory kind override.")
+    draft_memory_parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=420,
+        help="Maximum characters in drafted memory text. Default: 420.",
+    )
+    draft_memory_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print structured memory draft payload instead of text.",
     )
 
     codex = subparsers.add_parser(
@@ -731,6 +774,33 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(render_route_decision(decision, context=context))
         return 0
+
+    if args.command == "draft":
+        if args.draft_command == "memory":
+            context = detect_context(Path(args.cwd) if args.cwd else None)
+            source_parts = [args.text] if args.text else []
+            if args.from_file:
+                source_text = sys.stdin.read() if args.from_file == "-" else Path(args.from_file).expanduser().read_text(encoding="utf-8")
+                source_parts.append(source_text)
+            source_text = "\n".join(part for part in source_parts if part)
+            if not source_text.strip():
+                parser.error("draft memory requires text or --from-file")
+            try:
+                memory_draft = draft_memory(
+                    source_text,
+                    context=context,
+                    provider=args.provider,
+                    topic=args.topic,
+                    kind=args.kind,
+                    max_chars=args.max_chars,
+                )
+            except ValueError as exc:
+                parser.error(str(exc))
+            if args.json:
+                print(json.dumps(memory_draft.to_payload(context=context), ensure_ascii=False, indent=2))
+            else:
+                print(render_memory_draft(memory_draft, context=context))
+            return 0
 
     if args.command == "trace":
         try:

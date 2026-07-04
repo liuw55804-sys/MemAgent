@@ -38,6 +38,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_remember",
                     "memagent_agents_doctor",
                     "memagent_route",
+                    "memagent_memory_draft",
                     "memagent_handoff_save",
                     "memagent_handoff_show",
                     "memagent_handoff_draft",
@@ -69,6 +70,7 @@ class McpServerTest(unittest.TestCase):
             "memagent_recall",
             "memagent_agents_doctor",
             "memagent_route",
+            "memagent_memory_draft",
             "memagent_handoff_show",
             "memagent_trace_list",
             "memagent_trace_show",
@@ -82,6 +84,7 @@ class McpServerTest(unittest.TestCase):
             "memagent_trace_show",
             "memagent_trace_report",
             "memagent_route",
+            "memagent_memory_draft",
             "memagent_trace_eval",
             "memagent_trace_replay",
         }
@@ -199,6 +202,35 @@ class McpServerTest(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "memagent.route.v1")
             self.assertEqual(payload["action"], "label_feedback")
             self.assertEqual(payload["feedback_rating"], "useful")
+
+    def test_memory_draft_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+            server = McpServer.from_home_arg(str(Path(tmp) / "home"), "/tmp/memagent")
+
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_memory_draft",
+                        "arguments": {
+                            "text": "这个 bytedcli 查 live schema 的入口下次别忘了：bytedcli rds db table schema demo_db demo_table --region cn。",
+                            "cwd": str(project),
+                            "format": "json",
+                        },
+                    },
+                }
+            )
+
+            self.assertFalse(response["result"]["isError"])
+            payload = json.loads(response["result"]["content"][0]["text"])
+            self.assertEqual(payload["schema_version"], "memagent.memory_draft.v1")
+            self.assertEqual(payload["quality_label"], "keep")
+            self.assertTrue(payload["requires_confirmation"])
 
     def test_handoff_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

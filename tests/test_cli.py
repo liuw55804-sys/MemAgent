@@ -12,6 +12,33 @@ from memagent.cli import main
 
 
 class CliTest(unittest.TestCase):
+    def test_draft_memory_json_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "draft",
+                        "memory",
+                        "这个 bytedcli 查 live schema 的入口下次别忘了：bytedcli rds db table schema demo_db demo_table --region cn。",
+                        "--cwd",
+                        str(project),
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["schema_version"], "memagent.memory_draft.v1")
+            self.assertEqual(payload["kind"], "data_entrypoint")
+            self.assertEqual(payload["quality_label"], "keep")
+            self.assertTrue(payload["requires_confirmation"])
+            self.assertEqual(payload["context"]["repo_name"], "project")
+
     def test_route_json_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"

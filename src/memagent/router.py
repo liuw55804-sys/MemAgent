@@ -231,7 +231,7 @@ def route_with_heuristics(
                 provider="heuristic",
                 requires_confirmation=True,
                 recent_text_used=bool(recent_text.strip()),
-                suggested_next="Draft topic/kind/triggers/memory preview and wait for confirmation before remember.",
+                suggested_next="Run draft memory for a preview, then wait for confirmation before remember.",
             )
         )
 

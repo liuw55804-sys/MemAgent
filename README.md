@@ -344,6 +344,13 @@ LLM-assisted router contract. `memagent route` classifies ordinary Codex
 messages into suggested memory actions with a deterministic baseline and an
 optional OpenAI-compatible provider.
 
+## v0.28 Design
+
+See [docs/design_v0.28_memory_draft.md](docs/design_v0.28_memory_draft.md) for
+reviewable memory drafting. `memagent draft memory` rewrites a conversation
+snippet into topic/kind/triggers/memory plus a quality label, but never writes a
+durable memory card without user confirmation.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

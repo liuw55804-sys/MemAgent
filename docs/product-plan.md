@@ -101,7 +101,8 @@ MemAgent 要重点解决的是：
 - **召回可追踪**：`recall --trace` 把真实召回 payload 保存为本地 trace，后续可做人工标注、回放和质量评估。
 - **反馈可闭环**：用户可以用“这个有用”“刚刚那条没帮上忙”等普通语言表达反馈，Codex 再映射到 `trace label/report`。
 - **开发者质量报告**：`trace eval` 和 `trace replay` 退到开发者视角，用真实 labeled traces 生成 Markdown 报告和 top-stability regression signal。
-- **旧线程可抽取**：`ingest codex` 从本地 Codex session JSONL 生成 review-only memory candidates，先让用户审阅，再决定是否 `remember`。
+- **记忆可草稿化**：`draft memory` 把对话片段或候选经验改写成 topic/kind/triggers/memory，并给出 keep/revise/reject 质量判断；确认后才 `remember`。
+- **旧线程可抽取**：`ingest codex` 从本地 Codex session JSONL 生成 review-only memory candidates，先让用户审阅，再决定是否 `draft memory` / `remember`。
 - **反馈可集成**：Codex 可通过 AGENTS.md 自然语言规则标注 trace，MCP client 可通过 trace tools 读写反馈并生成报告。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
@@ -205,7 +206,7 @@ memagent codex "继续查机审归因准确率"
   -> memagent 写入、召回或标注本地记忆
 ```
 
-这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 将判断逻辑抽成 `memagent route` / `memagent_route`，用同一份 schema 支持本地 heuristic 和 OpenAI-compatible LLM provider。
+这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 将判断逻辑抽成 `memagent route` / `memagent_route`；v0.28 用 `draft memory` / `memagent_memory_draft` 做候选改写和质量判断。两者都用同一类 schema 支持本地 heuristic 和 OpenAI-compatible LLM provider。
 
 ### 8.3 第三阶段：半自动提示
 

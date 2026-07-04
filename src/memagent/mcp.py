@@ -8,6 +8,7 @@ from typing import Any, TextIO
 
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
+from memagent.draft import draft_memory, render_memory_draft
 from memagent.eval import run_trace_eval, run_trace_replay
 from memagent.handoff import (
     HandoffStore,
@@ -130,6 +131,8 @@ class McpServer:
             return _tool_text(self._tool_trace_replay(arguments))
         if name == "memagent_route":
             return _tool_text(self._tool_route(arguments))
+        if name == "memagent_memory_draft":
+            return _tool_text(self._tool_memory_draft(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -191,6 +194,23 @@ class McpServer:
         if response_format == "json":
             return json.dumps(decision.to_payload(context=context), ensure_ascii=False, indent=2)
         return render_route_decision(decision, context=context)
+
+    def _tool_memory_draft(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        memory_draft = draft_memory(
+            _required_str(arguments, "text"),
+            context=context,
+            provider=_optional_str(arguments, "provider") or "heuristic",
+            topic=_optional_str(arguments, "topic"),
+            kind=_optional_str(arguments, "kind"),
+            max_chars=_optional_int(arguments, "max_chars", 420),
+        )
+        response_format = _optional_str(arguments, "format") or "text"
+        if response_format not in {"text", "json"}:
+            raise ValueError("format must be text or json")
+        if response_format == "json":
+            return json.dumps(memory_draft.to_payload(context=context), ensure_ascii=False, indent=2)
+        return render_memory_draft(memory_draft, context=context)
 
     def _tool_agents_doctor(self, arguments: dict[str, Any]) -> str:
         context = detect_context(_optional_path(arguments, "cwd"))
@@ -459,6 +479,34 @@ def tool_definitions() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["message"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_memory_draft",
+            "title": "Draft MemAgent Memory",
+            "description": "Draft a reviewable memory preview without writing a durable memory card.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Source text to rewrite into a memory draft."},
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                    "provider": {
+                        "type": "string",
+                        "description": "Drafting provider.",
+                        "enum": ["heuristic", "openai-compatible"],
+                    },
+                    "topic": {"type": "string", "description": "Optional topic override."},
+                    "kind": {"type": "string", "description": "Optional memory kind override."},
+                    "max_chars": {"type": "integer", "description": "Maximum characters in drafted memory text."},
+                    "format": {
+                        "type": "string",
+                        "description": "Return format: text or json.",
+                        "enum": ["text", "json"],
+                    },
+                },
+                "required": ["text"],
                 "additionalProperties": False,
             },
         },

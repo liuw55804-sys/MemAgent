@@ -132,7 +132,13 @@ reusable workflow lesson, Codex should draft a short memory preview first:
 - `刚刚绕路的原因记一下`
 
 The preview should include `topic`, `kind`, `triggers`, and a 1-3 sentence
-memory. Only after the user accepts the preview, Codex should call:
+memory. Codex can generate the preview with:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli draft memory "recent lesson text"
+```
+
+Only after the user accepts the preview, Codex should call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli remember \

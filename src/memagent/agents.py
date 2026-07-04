@@ -114,8 +114,14 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         - `刚刚绕路的原因记一下`
 
         The preview should include `topic`, `kind`, `triggers`, and a 1-3
-        sentence memory. Ask the user to confirm before saving. After the user
-        accepts the preview, run:
+        sentence memory. Draft the preview first:
+
+        ```bash
+        {command_prefix} draft memory "<recent lesson text>"
+        ```
+
+        Ask the user to confirm before saving. After the user accepts the
+        preview, run:
 
         ```bash
         {command_prefix} remember \\
