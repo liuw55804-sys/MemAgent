@@ -38,6 +38,7 @@ local_memory_demo/demo_run/
 ```
 
 `transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run、handoff draft/save/show、handoff promote、promoted recall 的命令和输出。
+v0.16 起 transcript 也包含 `recall --json`，用于展示同一套召回结果可以作为结构化 agent contract 使用。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -66,6 +67,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - 输出里有 handoff 触发语，比如 `上次做到哪` 和 `交接一下`。
 - recall 命令带 `--show-sources --show-reasons --strategy bm25`，能展示来源、命中原因和召回策略。
 - recall 输出包含 `Pack` 行，能展示上下文预算、去重数量和是否截断。
+- structured recall 输出包含 `"schema_version": "memagent.recall.v1"`。
 - 安全规则说明 local private memory 和 public demo 的边界。
 
 也可以用安装器预览写入当前项目 `AGENTS.md` 的效果：

@@ -10,6 +10,7 @@ session can quickly recall proven commands, failed paths, and next-step hints.
 ```bash
 python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
+python -m memagent.cli recall "continue checking attribution accuracy" --json
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli handoff show
@@ -27,6 +28,7 @@ After installing the project in editable mode, the shorter form is available:
 python -m pip install -e .
 memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 memagent recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
+memagent recall "continue checking attribution accuracy" --json
 memagent agents-install
 memagent agents-doctor
 memagent handoff show
@@ -246,6 +248,12 @@ read-only, write-capable, destructive, idempotent, and closed-world.
 See [docs/design_v0.15_context_packing.md](docs/design_v0.15_context_packing.md)
 for the context-packing design. Recall output now includes a small pack summary
 showing memory budget, dedupe count, and truncation status.
+
+## v0.16 Design
+
+See [docs/design_v0.16_structured_recall.md](docs/design_v0.16_structured_recall.md)
+for the structured recall contract. `memagent recall --json` emits a versioned
+payload for other agents, MCP clients, evaluations, or future UI surfaces.
 
 ## Codex Natural Language Triggers
 

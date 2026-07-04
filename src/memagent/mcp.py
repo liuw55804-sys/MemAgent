@@ -128,7 +128,7 @@ class McpServer:
             limit=_optional_int(arguments, "limit", 5),
             strategy=strategy,
         )
-        return self.store.compose_context(
+        payload = self.store.build_recall_payload(
             query=query,
             context=context,
             matches=matches,
@@ -136,6 +136,12 @@ class McpServer:
             show_sources=_optional_bool(arguments, "show_sources", True),
             show_reasons=_optional_bool(arguments, "show_reasons", True),
         )
+        response_format = _optional_str(arguments, "format") or "text"
+        if response_format not in {"text", "json"}:
+            raise ValueError("format must be text or json")
+        if response_format == "json":
+            return json.dumps(payload, ensure_ascii=False, indent=2)
+        return str(payload["text"])
 
     def _tool_remember(self, arguments: dict[str, Any]) -> str:
         text = _required_str(arguments, "text")
@@ -261,6 +267,11 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "type": "string",
                         "description": "Recall scoring strategy: bm25 or keyword.",
                         "enum": ["bm25", "keyword"],
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Return format: text or json.",
+                        "enum": ["text", "json"],
                     },
                 },
                 "required": ["query"],

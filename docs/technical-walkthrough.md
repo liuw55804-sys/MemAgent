@@ -24,6 +24,7 @@ src/memagent/
 ```bash
 PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons --strategy bm25
+PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --json
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
@@ -42,6 +43,7 @@ PYTHONPATH=src python -m memagent.cli recall-eval
 python -m pip install -e .
 memagent remember --domain coding --kind note "..."
 memagent recall "..." --show-sources --show-reasons --strategy bm25
+memagent recall "..." --json
 memagent codex "..."
 memagent agents-snippet
 memagent agents-install
@@ -154,8 +156,8 @@ sequenceDiagram
   M->>M: score cards by BM25-style scoring
   M->>M: collect matched terms
   M-->>CLI: MemoryMatch list
-  CLI->>M: compose_context(...)
-  M-->>CLI: short recalled context
+  CLI->>M: build_recall_payload(...)
+  M-->>CLI: structured payload + text context
   CLI-->>U: print context
 ```
 
@@ -181,6 +183,14 @@ memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --
 ```
 
 输出里的 `score=...` 是当前策略的打分，`strategy=...` 是使用的召回策略，`matched=...` 是 query 中命中的词。`Pack` 行里的 `budget`、`deduped`、`truncated` 用来说明最终注入 prompt 的上下文是否被压缩或截断。这个能力主要用于调试和演示。
+
+如果要给其它 agent、MCP client、评估脚本或未来 UI 用，可以输出结构化 JSON：
+
+```bash
+memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --strategy bm25 --json
+```
+
+JSON 使用 `schema_version: memagent.recall.v1`，包含 `query`、`context`、`matches`、`pack` 和 `text`。其中 `text` 是普通 recall 的 prompt patch，`matches/pack` 是机器可稳定读取的结构化字段。
 
 ### 3.3 `codex`
 
@@ -734,6 +744,20 @@ return top limit
 
 这让 Codex 和用户都能看出“为什么是这条 memory”，也给后续 vector recall 或 reranker 留出可解释输出的位置。
 
+#### `MemoryStore.build_recall_payload`
+
+v0.16 起，`compose_context(...)` 不再直接拼完所有结果，而是调用 `build_recall_payload(...)`：
+
+```text
+MemoryMatch list
+  -> context pack
+  -> payload["matches"]
+  -> payload["pack"]
+  -> payload["text"]
+```
+
+`payload["text"]` 是给 Codex prompt 用的短上下文；`payload["matches"]` 和 `payload["pack"]` 是给 agent/MCP/评估脚本用的结构化字段。CLI 的 `recall --json` 和 MCP 的 `memagent_recall format=json` 都复用这份 payload。
+
 ### 4.4 `handoff.py`
 
 `handoff.py` 负责每个项目最近一次交接状态。
@@ -809,6 +833,9 @@ tests/test_memory_store.py
   test_bm25_prefers_multi_term_match_over_repeated_single_term
   test_compose_context_dedupes_repeated_memory_lines
   test_compose_context_marks_budget_truncation
+
+tests/test_cli.py
+  test_recall_json_cli
 
 tests/test_wrapper.py
   test_build_augmented_prompt

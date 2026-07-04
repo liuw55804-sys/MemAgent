@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import shutil
 import shlex
 import subprocess
@@ -167,6 +168,22 @@ def run_demo(
             title="Recall with sources and reasons",
             command=f"{command_prefix} recall {_quote(DEMO_QUERY)} --show-sources --show-reasons --strategy bm25",
             output=recalled_context,
+        )
+    )
+
+    structured_recall = store.build_recall_payload(
+        query=DEMO_QUERY,
+        context=recall_context,
+        matches=matches,
+        max_lines=12,
+        show_sources=True,
+        show_reasons=True,
+    )
+    steps.append(
+        DemoStep(
+            title="Recall as structured JSON",
+            command=f"{command_prefix} recall {_quote(DEMO_QUERY)} --show-sources --show-reasons --strategy bm25 --json",
+            output=json.dumps(structured_recall, ensure_ascii=False, indent=2),
         )
     )
 

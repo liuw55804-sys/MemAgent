@@ -121,6 +121,27 @@ class McpServerTest(unittest.TestCase):
             self.assertIn("strategy=bm25", text)
             self.assertIn("matched=attribution, accuracy", text)
 
+            json_recall_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_recall",
+                        "arguments": {
+                            "query": "attribution accuracy",
+                            "cwd": str(project),
+                            "strategy": "bm25",
+                            "format": "json",
+                        },
+                    },
+                }
+            )
+            payload = json.loads(json_recall_response["result"]["content"][0]["text"])
+            self.assertEqual(payload["schema_version"], "memagent.recall.v1")
+            self.assertEqual(payload["matches"][0]["title"], "Attribution accuracy pitfall")
+            self.assertIn("text", payload)
+
     def test_handoff_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"

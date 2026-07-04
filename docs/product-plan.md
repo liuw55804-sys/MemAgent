@@ -96,6 +96,7 @@ MemAgent 要重点解决的是：
 - **上下文短注入**：召回结果会被压缩成 10-30 行，避免把历史长线程塞进新会话。
 - **召回可解释**：召回时可以显示 memory 来源、简单分数和命中词，避免变成黑盒记忆。
 - **上下文可打包**：召回结果会经过 context packer，去重重复建议，控制短上下文预算，并标记是否截断。
+- **输出可结构化**：`recall --json` 和 MCP `format=json` 输出版本化 payload，避免其它 agent 解析 Markdown。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
 - **演示可复现**：通过 `demo-run` 在隔离目录里生成 mock 项目和 transcript，稳定展示 install、doctor、recall、prompt patch。
@@ -400,6 +401,7 @@ timeline
 - **Schema of Memory**：用结构化 memory card 表示 topic、trigger、scope、pitfall、tool recipe、next action、validation、sensitivity。
 - **Context-aware Recall**：结合 cwd、git root、branch、prompt、最近修改文件、AGENTS.md 摘要做召回。
 - **Context Composition**：把多条记忆融合成短提示，控制注入上下文长度，去重重复建议，并显式展示 pack budget / truncation。
+- **Structured Agent Contract**：用 `memagent.recall.v1` JSON payload 表示 query、context、matches、pack 和 prompt text，便于 MCP、评估和未来 UI 消费。
 - **Lifecycle Management**：区分动态 memory 和稳定规则，未来支持过期、冲突检测、召回效果评估、AGENTS.md 升格建议。
 - **MCP Protocol Surface**：通过 MCP tools 暴露 recall/remember/handoff，并用 tool annotations 区分只读、写入、幂等和外部访问风险。
 - **Local-first Safety**：私有本地记忆可保留精确工程入口；公开导出时再脱敏。

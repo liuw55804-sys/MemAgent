@@ -28,6 +28,7 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("Demo attribution accuracy entrypoint", result.transcript)
             self.assertIn("Demo continuation handoff", result.transcript)
             self.assertIn("Promote handoff memory candidate", result.transcript)
+            self.assertIn('"schema_version": "memagent.recall.v1"', result.transcript)
             self.assertTrue((result.memory_home / "handoffs").exists())
             self.assertIn("[User task]", result.transcript)
 

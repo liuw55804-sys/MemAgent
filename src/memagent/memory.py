@@ -172,6 +172,26 @@ class MemoryStore:
         show_sources: bool,
         show_reasons: bool = False,
     ) -> str:
+        payload = self.build_recall_payload(
+            query=query,
+            context=context,
+            matches=matches,
+            max_lines=max_lines,
+            show_sources=show_sources,
+            show_reasons=show_reasons,
+        )
+        return str(payload["text"])
+
+    def build_recall_payload(
+        self,
+        *,
+        query: str,
+        context: ProjectContext,
+        matches: list[MemoryMatch],
+        max_lines: int,
+        show_sources: bool,
+        show_reasons: bool = False,
+    ) -> dict[str, object]:
         header = "[MemAgent recalled context]"
         context_bits = [
             f"cwd: {context.cwd}",
@@ -181,9 +201,25 @@ class MemoryStore:
             context_bits.append(f"branch: {context.branch}")
 
         lines = [header, f"- Task: {query}", f"- Context: {'; '.join(context_bits)}"]
+        payload: dict[str, object] = {
+            "schema_version": "memagent.recall.v1",
+            "query": query,
+            "context": _context_payload(context),
+            "total_matches": len(matches),
+            "matches": [_match_payload(match) for match in matches],
+        }
         if not matches:
             lines.append("- No related memories found.")
-            return "\n".join(lines)
+            payload["pack"] = {
+                "emitted_matches": 0,
+                "line_budget": 0,
+                "char_budget": 0,
+                "deduped": 0,
+                "truncated": False,
+                "lines": [],
+            }
+            payload["text"] = "\n".join(lines)
+            return payload
 
         total_line_budget = max(max_lines, len(lines) + 2)
         memory_line_budget = max(total_line_budget - len(lines) - 1, 1)
@@ -197,7 +233,9 @@ class MemoryStore:
         )
         lines.append(_render_pack_summary(packed=packed, total_matches=len(matches)))
         lines.extend(packed.lines)
-        return "\n".join(lines)
+        payload["pack"] = _pack_payload(packed)
+        payload["text"] = "\n".join(lines)
+        return payload
 
 
 def _render_memory_card(
@@ -245,6 +283,43 @@ def _render_memory_card(
             "",
         ]
     )
+
+
+def _context_payload(context: ProjectContext) -> dict[str, object]:
+    return {
+        "cwd": str(context.cwd),
+        "git_root": str(context.git_root) if context.git_root else None,
+        "branch": context.branch,
+        "repo_name": context.repo_name,
+        "recent_files": [str(path) for path in context.recent_files],
+        "agents_files": [str(path) for path in context.agents_files],
+    }
+
+
+def _match_payload(match: MemoryMatch) -> dict[str, object]:
+    return {
+        "path": str(match.path),
+        "file": match.path.name,
+        "score": match.score,
+        "score_text": _format_score(match.score),
+        "title": match.title,
+        "domain": match.domain,
+        "kind": match.kind,
+        "strategy": match.strategy,
+        "matched_terms": list(match.matched_terms),
+        "lines": list(match.lines),
+    }
+
+
+def _pack_payload(packed: PackedMemoryContext) -> dict[str, object]:
+    return {
+        "emitted_matches": packed.emitted_matches,
+        "line_budget": packed.line_budget,
+        "char_budget": packed.char_budget,
+        "deduped": packed.skipped_duplicate_lines,
+        "truncated": packed.truncated,
+        "lines": list(packed.lines),
+    }
 
 
 def _derive_topic(text: str) -> str:

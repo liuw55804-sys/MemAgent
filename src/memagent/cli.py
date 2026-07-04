@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -92,6 +93,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RECALL_STRATEGY,
         choices=["bm25", "keyword"],
         help="Recall scoring strategy. Default: bm25.",
+    )
+    recall.add_argument(
+        "--json",
+        action="store_true",
+        help="Print structured JSON recall payload instead of text.",
     )
 
     codex = subparsers.add_parser(
@@ -530,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "recall":
         context = detect_context()
         matches = store.recall(args.query, context=context, limit=args.limit, strategy=args.strategy)
-        rendered = store.compose_context(
+        payload = store.build_recall_payload(
             query=args.query,
             context=context,
             matches=matches,
@@ -538,7 +544,10 @@ def main(argv: list[str] | None = None) -> int:
             show_sources=args.show_sources,
             show_reasons=args.show_reasons,
         )
-        print(rendered)
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(payload["text"])
         return 0
 
     if args.command == "codex":

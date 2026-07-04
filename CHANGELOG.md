@@ -26,6 +26,8 @@ Added:
 - MCP tool for promoting handoff memory candidates.
 - MCP tool annotations for read-only/write-capable, destructive, idempotent, and open-world behavior hints.
 - Context packing in recall output, including memory budget, dedupe count, and truncation status.
+- `recall --json` structured recall output with the `memagent.recall.v1` schema.
+- MCP `memagent_recall` `format=json` output for agent-consumable recall payloads.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
 - v0.11 handoff design note for separating recent continuation state from durable workflow memory.
@@ -33,6 +35,7 @@ Added:
 - v0.13 handoff promotion design note for memory lifecycle promotion.
 - v0.14 MCP annotations design note for protocol-aware tool safety hints.
 - v0.15 context packing design note for budgeted prompt patches.
+- v0.16 structured recall design note for stable agent-consumable output.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:

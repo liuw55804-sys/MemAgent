@@ -58,6 +58,21 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertIn("matched=", rendered)
             self.assertIn("- Pack:", rendered)
             self.assertIn("split by id ranges", rendered)
+            payload = store.build_recall_payload(
+                query="how to avoid RDS JSON timeout",
+                context=context,
+                matches=matches,
+                max_lines=8,
+                show_sources=True,
+                show_reasons=True,
+            )
+            self.assertEqual(payload["schema_version"], "memagent.recall.v1")
+            self.assertEqual(payload["total_matches"], 1)
+            self.assertIn("text", payload)
+            self.assertEqual(payload["context"]["repo_name"], "walle")
+            self.assertEqual(payload["matches"][0]["title"], "RDS query pitfall")
+            self.assertEqual(payload["pack"]["emitted_matches"], 1)
+            self.assertFalse(payload["pack"]["truncated"])
 
     def test_remember_with_explicit_domain_and_kind(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
