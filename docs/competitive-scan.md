@@ -107,7 +107,7 @@ MemAgent 已经有 `handoff save/show/draft/promote`，后续可以继续往这�
 
 ### 4.1 Headroom
 
-Headroom 不是纯 memory backend，而是 context compression layer。它最值得 MemAgent 学的是：不要把召回结果原样塞进 prompt，而是做 token-aware context packing。
+Headroom 不是纯 memory backend，而是 context compression layer。它最值得 MemAgent 学的是：不要把召回结果原样塞进 prompt，而是做 token-aware context packing。MemAgent v0.15 已经落地第一版本地 context packer：先做去重、行数/字符预算和 truncation 标记，后续再扩成 tokenizer-aware 或 LLM compression。
 
 后续 MemAgent 可以做：
 

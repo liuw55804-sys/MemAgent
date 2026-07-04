@@ -170,6 +170,7 @@ sequenceDiagram
 - 取分数最高的前几条。
 - 读取 card 顶层的 `domain/kind`，旧 card 没有这两个字段时默认用 `coding/note`。
 - 从 `stable_facts`、`pitfalls`、`next_time_prompt` 里抽几行，组成短上下文。
+- 在 `compose_context(...)` 中做 context packing：去重重复建议，控制 memory 行数和字符预算，并输出 `Pack` summary。
 
 也可以用 `--strategy keyword` 回到早期关键词计数 baseline，方便调试和对比。后续可以继续扩展成 BM25 + vector + rerank 的 hybrid retriever，但接口上可以继续保持 `store.recall(...)`。
 
@@ -179,7 +180,7 @@ sequenceDiagram
 memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --strategy bm25
 ```
 
-输出里的 `score=...` 是当前策略的打分，`strategy=...` 是使用的召回策略，`matched=...` 是 query 中命中的词。这个能力主要用于调试和演示。
+输出里的 `score=...` 是当前策略的打分，`strategy=...` 是使用的召回策略，`matched=...` 是 query 中命中的词。`Pack` 行里的 `budget`、`deduped`、`truncated` 用来说明最终注入 prompt 的上下文是否被压缩或截断。这个能力主要用于调试和演示。
 
 ### 3.3 `codex`
 
@@ -712,12 +713,18 @@ return top limit
 [MemAgent recalled context]
 - Task: how to avoid RDS JSON timeout
 - Context: cwd: /path; repo: memagent; branch: main
+- Pack: 1/3 memories; budget=8 memory lines/1200 chars; deduped=1; truncated=no
 - Memory: RDS query pitfall [coding/pitfall]
   - RDS JSON aggregation timed out; split by id ranges before grouping.
   - Before continuing, recall this lesson: ...
 ```
 
-`max_lines` 控制输出行数，避免把太多历史内容塞给 Codex。
+`max_lines` 控制输出行数，避免把太多历史内容塞给 Codex。v0.15 起，`compose_context(...)` 内部会先生成 context pack：
+
+- `line_budget`：可用于 memory 内容的行数。
+- `char_budget`：基于行数推导的轻量字符预算，用作 token budget 近似值。
+- `deduped`：跨 memory 去掉的重复建议行数量。
+- `truncated`：是否有召回内容因为预算不足而没有进入 prompt patch。
 
 如果 `show_reasons=True`，memory 行会额外包含：
 
@@ -799,6 +806,9 @@ tests/test_memory_store.py
   test_invalid_domain_and_kind_raise
   test_recall_older_card_without_domain_and_kind
   test_recall_chinese_phrase_with_partial_match
+  test_bm25_prefers_multi_term_match_over_repeated_single_term
+  test_compose_context_dedupes_repeated_memory_lines
+  test_compose_context_marks_budget_truncation
 
 tests/test_wrapper.py
   test_build_augmented_prompt
@@ -834,6 +844,7 @@ tests/test_handoff.py
 tests/test_mcp.py
   test_initialize_and_tools_list
   test_tool_definitions_have_valid_basic_schema
+  test_tool_annotations_classify_read_and_write_tools
   test_remember_and_recall_tools
   test_handoff_tools
   test_handoff_draft_tool
@@ -852,7 +863,7 @@ tests/test_eval.py
 - 调用 `store.remember(...)` 写一条 memory。
 - 构造一个假的 `ProjectContext`。
 - 调用 `store.recall(...)` 找回 memory。
-- 调用 `compose_context(...)` 确认输出里有标题、关键句和可解释召回信息。
+- 调用 `compose_context(...)` 确认输出里有标题、关键句、可解释召回信息和 context packing 行为。
 
 这说明当前测试关注的是“能写、能召回、能交接、能渲染、能安装、能自检、能演示”，不是复杂召回质量。
 

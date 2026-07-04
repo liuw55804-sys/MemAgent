@@ -8,6 +8,7 @@ query
   -> BM25-style scoring
   -> repo scope bonus
   -> explainable context
+  -> context pack
   -> Codex prompt patch
 ```
 
@@ -53,6 +54,7 @@ memagent codex --dry-run --strategy bm25 "continue attribution accuracy debuggin
 `--show-reasons` 输出：
 
 ```text
+- Pack: 1/3 memories; budget=8 memory lines/1200 chars; deduped=0; truncated=no
 - Memory: ... | score=2.41; strategy=bm25; matched=attribution, accuracy
 ```
 
@@ -61,6 +63,7 @@ memagent codex --dry-run --strategy bm25 "continue attribution accuracy debuggin
 - 这条 memory 为什么被召回。
 - 当前使用的是哪个 scoring strategy。
 - 命中了哪些 query terms。
+- 最终 prompt patch 是否经过预算截断或重复建议去重。
 
 ## 4. 为什么不是向量召回
 
@@ -85,4 +88,3 @@ BM25 candidates
 可以这样讲：
 
 > MemAgent 的 memory card 是 RAG 语料，recall 是 retriever，prompt patch 是检索增强上下文。早期我用 keyword count 做 baseline，v0.8 加了 BM25-style scoring，解决词频刷分和长文档偏置问题，同时保留 matched terms 和 strategy 作为 explainability。
-

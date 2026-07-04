@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from memagent.context import ProjectContext
-from memagent.memory import MemoryStore
+from memagent.memory import MemoryMatch, MemoryStore
 
 
 def project_context(repo_name: str = "walle") -> ProjectContext:
@@ -56,6 +56,7 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertIn("RDS query pitfall [coding/note]", rendered)
             self.assertIn("score=", rendered)
             self.assertIn("matched=", rendered)
+            self.assertIn("- Pack:", rendered)
             self.assertIn("split by id ranges", rendered)
 
     def test_remember_with_explicit_domain_and_kind(self) -> None:
@@ -200,6 +201,71 @@ class MemoryStoreTest(unittest.TestCase):
             store = MemoryStore(Path(tmp))
             with self.assertRaisesRegex(ValueError, "invalid recall strategy"):
                 store.recall("anything", context=project_context("demo"), limit=1, strategy="vector")
+
+    def test_compose_context_dedupes_repeated_memory_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MemoryStore(Path(tmp))
+            matches = [
+                MemoryMatch(
+                    path=Path(tmp) / "one.memory.yaml",
+                    score=3.0,
+                    title="First route",
+                    domain="coding",
+                    kind="tool_recipe",
+                    strategy="bm25",
+                    matched_terms=("rds",),
+                    lines=("Use id ranges before grouping.", "Check owner config first."),
+                ),
+                MemoryMatch(
+                    path=Path(tmp) / "two.memory.yaml",
+                    score=2.0,
+                    title="Second route",
+                    domain="coding",
+                    kind="pitfall",
+                    strategy="bm25",
+                    matched_terms=("rds",),
+                    lines=("Use id ranges before grouping.", "Avoid full-table aggregation."),
+                ),
+            ]
+            rendered = store.compose_context(
+                query="RDS owner query",
+                context=project_context(),
+                matches=matches,
+                max_lines=10,
+                show_sources=False,
+                show_reasons=False,
+            )
+            self.assertEqual(rendered.count("Use id ranges before grouping."), 1)
+            self.assertIn("deduped=1", rendered)
+            self.assertIn("truncated=no", rendered)
+
+    def test_compose_context_marks_budget_truncation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MemoryStore(Path(tmp))
+            matches = [
+                MemoryMatch(
+                    path=Path(tmp) / f"{index}.memory.yaml",
+                    score=float(10 - index),
+                    title=f"Memory {index}",
+                    domain="coding",
+                    kind="workflow",
+                    strategy="bm25",
+                    matched_terms=("demo",),
+                    lines=(f"Important step {index}", f"Validation step {index}"),
+                )
+                for index in range(5)
+            ]
+            rendered = store.compose_context(
+                query="demo workflow",
+                context=project_context("demo"),
+                matches=matches,
+                max_lines=6,
+                show_sources=True,
+                show_reasons=True,
+            )
+            self.assertLessEqual(len(rendered.splitlines()), 6)
+            self.assertIn("truncated=yes", rendered)
+            self.assertIn("budget=2 memory lines", rendered)
 
 
 if __name__ == "__main__":

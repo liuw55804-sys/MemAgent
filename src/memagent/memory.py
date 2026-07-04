@@ -61,6 +61,16 @@ class MemoryMatch:
     lines: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class PackedMemoryContext:
+    lines: tuple[str, ...]
+    emitted_matches: int
+    skipped_duplicate_lines: int
+    truncated: bool
+    line_budget: int
+    char_budget: int
+
+
 class MemoryStore:
     def __init__(self, home: Path) -> None:
         self.home = home.expanduser().resolve()
@@ -175,25 +185,18 @@ class MemoryStore:
             lines.append("- No related memories found.")
             return "\n".join(lines)
 
-        remaining = max(max_lines - len(lines), 1)
-        for match in matches:
-            if remaining <= 0:
-                break
-            prefix = f"- Memory: {match.title} [{match.domain}/{match.kind}]"
-            if show_sources:
-                prefix += f" ({match.path.name})"
-            if show_reasons:
-                reason = f"score={_format_score(match.score)}; strategy={match.strategy}"
-                if match.matched_terms:
-                    reason += f"; matched={', '.join(match.matched_terms[:8])}"
-                prefix += f" | {reason}"
-            lines.append(prefix)
-            remaining -= 1
-            for item in match.lines:
-                if remaining <= 0:
-                    break
-                lines.append(f"  - {item}")
-                remaining -= 1
+        total_line_budget = max(max_lines, len(lines) + 2)
+        memory_line_budget = max(total_line_budget - len(lines) - 1, 1)
+        memory_char_budget = _context_char_budget(total_line_budget)
+        packed = _pack_memory_matches(
+            matches=matches,
+            line_budget=memory_line_budget,
+            char_budget=memory_char_budget,
+            show_sources=show_sources,
+            show_reasons=show_reasons,
+        )
+        lines.append(_render_pack_summary(packed=packed, total_matches=len(matches)))
+        lines.extend(packed.lines)
         return "\n".join(lines)
 
 
@@ -395,6 +398,117 @@ def _score_bm25(candidates: list[tuple[Path, str]], terms: list[str]) -> list[tu
 
 def _repo_scope_bonus(strategy: str) -> float:
     return 0.75 if strategy == "bm25" else 3.0
+
+
+def _pack_memory_matches(
+    *,
+    matches: list[MemoryMatch],
+    line_budget: int,
+    char_budget: int,
+    show_sources: bool,
+    show_reasons: bool,
+) -> PackedMemoryContext:
+    packed_lines: list[str] = []
+    seen_items: set[str] = set()
+    used_chars = 0
+    emitted_matches = 0
+    skipped_duplicates = 0
+    truncated = False
+
+    for match in matches:
+        if len(packed_lines) >= line_budget:
+            truncated = True
+            break
+
+        match_lines: list[str] = []
+        prefix = _render_match_prefix(
+            match=match,
+            show_sources=show_sources,
+            show_reasons=show_reasons,
+        )
+        fitted_prefix, prefix_truncated = _fit_pack_line(prefix, char_budget - used_chars)
+        if not fitted_prefix:
+            truncated = True
+            break
+        match_lines.append(fitted_prefix)
+        used_chars += len(fitted_prefix) + 1
+        if prefix_truncated:
+            truncated = True
+
+        for item in match.lines:
+            normalized_item = _normalize_pack_item(item)
+            if normalized_item in seen_items:
+                skipped_duplicates += 1
+                continue
+            if len(packed_lines) + len(match_lines) >= line_budget:
+                truncated = True
+                break
+
+            rendered_item = f"  - {item}"
+            fitted_item, item_truncated = _fit_pack_line(rendered_item, char_budget - used_chars)
+            if not fitted_item:
+                truncated = True
+                break
+            match_lines.append(fitted_item)
+            seen_items.add(normalized_item)
+            used_chars += len(fitted_item) + 1
+            if item_truncated:
+                truncated = True
+
+        packed_lines.extend(match_lines)
+        emitted_matches += 1
+
+    if emitted_matches < len(matches):
+        truncated = True
+
+    return PackedMemoryContext(
+        lines=tuple(packed_lines),
+        emitted_matches=emitted_matches,
+        skipped_duplicate_lines=skipped_duplicates,
+        truncated=truncated,
+        line_budget=line_budget,
+        char_budget=char_budget,
+    )
+
+
+def _render_match_prefix(*, match: MemoryMatch, show_sources: bool, show_reasons: bool) -> str:
+    prefix = f"- Memory: {match.title} [{match.domain}/{match.kind}]"
+    if show_sources:
+        prefix += f" ({match.path.name})"
+    if show_reasons:
+        reason = f"score={_format_score(match.score)}; strategy={match.strategy}"
+        if match.matched_terms:
+            reason += f"; matched={', '.join(match.matched_terms[:8])}"
+        prefix += f" | {reason}"
+    return prefix
+
+
+def _render_pack_summary(*, packed: PackedMemoryContext, total_matches: int) -> str:
+    return (
+        "- Pack: "
+        f"{packed.emitted_matches}/{total_matches} memories; "
+        f"budget={packed.line_budget} memory lines/{packed.char_budget} chars; "
+        f"deduped={packed.skipped_duplicate_lines}; "
+        f"truncated={'yes' if packed.truncated else 'no'}"
+    )
+
+
+def _context_char_budget(total_line_budget: int) -> int:
+    return max(360, total_line_budget * 120)
+
+
+def _fit_pack_line(line: str, remaining_chars: int) -> tuple[str, bool]:
+    if remaining_chars <= 0:
+        return "", False
+    if len(line) <= remaining_chars:
+        return line, False
+    if remaining_chars <= 12:
+        return "", True
+    return line[: remaining_chars - 3].rstrip() + "...", True
+
+
+def _normalize_pack_item(item: str) -> str:
+    return " ".join(item.strip().lower().split())
 
 
 def _format_score(score: float) -> str:

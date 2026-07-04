@@ -49,20 +49,20 @@ Codex-first workflow memory lifecycle
 
 > 我先把范围收窄到个人 Codex 工程流，重点解决真实线程里的工具经验复用。相比通用 memory backend，MemAgent 的 memory card 更偏 workflow object，包括适用范围、触发词、工具 recipe、失败路径、验证方式和下一步提示。召回结果不是一个普通知识片段，而是可以直接进入 Codex prompt 的短 action context。
 
-### 3.2 Headroom 更适合做后续增强层
+### 3.2 Headroom 更适合做上下文增强层
 
-Headroom 的启发是：memory 不是越多越好。未来 MemAgent 需要一个 context packing 层：
+Headroom 的启发是：memory 不是越多越好。MemAgent v0.15 已经加入第一版 context packing：
 
 ```mermaid
 flowchart LR
   A["Recall Top-K"] --> B["Dedupe"]
   B --> C["Prioritize"]
-  C --> D["Compress"]
+  C --> D["Budget / Truncate"]
   D --> E["Prompt Patch"]
-  E --> F["Retrieve Full Memory<br>on demand"]
+  E --> F["Future<br>retrieve full memory on demand"]
 ```
 
-这能把 MemAgent 从“RAG 检索器”往“coding-agent context engineering layer”推进。
+当前实现先做去重、行数预算、字符预算和 truncation 标记。后续可以继续做 tokenizer-aware budget、LLM compression 和 retrieve-on-demand，把 MemAgent 从“RAG 检索器”继续往“coding-agent context engineering layer”推进。
 
 ### 3.3 Basic Memory 证明本地文件路线成立
 
@@ -86,7 +86,7 @@ MemAgent 不必急着引入复杂数据库。当前 memory card 文件作为 sou
    引入 LLM extraction，但默认生成 draft，不自动写入长期 memory。用户确认后再保存。
 
 3. **context packing**
-   对召回结果做去重、排序、压缩和 token budget 控制。
+   v0.15 已落地第一版去重、预算和 truncation 标记；后续补 tokenizer-aware budget 和 LLM compression。
 
 4. **MCP tool annotations**
    让 MCP tools 明确哪些是 read-only、哪些会写入 memory，降低 coding agent 误用概率。
