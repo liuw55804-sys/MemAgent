@@ -14,7 +14,7 @@ from memagent.agents import (
 )
 from memagent.context import detect_context
 from memagent.demo import run_demo
-from memagent.memory import MemoryStore
+from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
 
@@ -80,6 +80,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include simple recall score and matched query terms.",
     )
+    recall.add_argument(
+        "--strategy",
+        default=DEFAULT_RECALL_STRATEGY,
+        choices=["bm25", "keyword"],
+        help="Recall scoring strategy. Default: bm25.",
+    )
 
     codex = subparsers.add_parser(
         "codex",
@@ -107,6 +113,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-reasons",
         action="store_true",
         help="Include simple recall score and matched query terms in the Codex prompt.",
+    )
+    codex.add_argument(
+        "--strategy",
+        default=DEFAULT_RECALL_STRATEGY,
+        choices=["bm25", "keyword"],
+        help="Recall scoring strategy. Default: bm25.",
     )
     codex.add_argument(
         "--no-memory",
@@ -281,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "recall":
         context = detect_context()
-        matches = store.recall(args.query, context=context, limit=args.limit)
+        matches = store.recall(args.query, context=context, limit=args.limit, strategy=args.strategy)
         rendered = store.compose_context(
             query=args.query,
             context=context,
@@ -295,7 +307,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "codex":
         context = detect_context()
-        matches = [] if args.no_memory else store.recall(args.prompt, context=context, limit=args.limit)
+        matches = [] if args.no_memory else store.recall(
+            args.prompt,
+            context=context,
+            limit=args.limit,
+            strategy=args.strategy,
+        )
         recalled_context = ""
         if not args.no_memory and matches:
             recalled_context = store.compose_context(

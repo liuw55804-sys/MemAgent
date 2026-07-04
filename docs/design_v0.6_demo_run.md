@@ -7,7 +7,7 @@ demo-run
   -> agents-install --write
   -> agents-doctor
   -> remember mock workflow memory
-  -> recall --show-sources --show-reasons
+  -> recall --show-sources --show-reasons --strategy bm25
   -> codex --dry-run
   -> transcript.md
 ```
@@ -84,4 +84,3 @@ flowchart LR
 - `--scenario pitfall`：展示失败路径和 next-time prompt。
 - `--format html`：生成更适合展示的静态页面。
 - `--open`：生成后打开 transcript。
-

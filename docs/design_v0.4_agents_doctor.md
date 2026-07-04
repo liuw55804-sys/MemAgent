@@ -32,6 +32,7 @@ memagent agents-doctor
 - AGENTS.md 是否包含 MemAgent 自然语言触发 section。
 - 是否包含 `memagent.cli recall` 和 `memagent.cli remember`。
 - recall 是否带 `--show-reasons`，支持可解释召回演示。
+- recall 是否带 `--strategy bm25`，支持当前推荐的 BM25-style RAG 召回。
 
 ## 3. 非目标
 
@@ -53,7 +54,7 @@ memagent agents-doctor
 1. memagent agents-doctor
    证明当前项目 AGENTS.md 已经接入 MemAgent
 
-2. memagent recall --show-sources --show-reasons
+2. memagent recall --show-sources --show-reasons --strategy bm25
    展示可解释 RAG-style 召回
 
 3. memagent remember
@@ -74,4 +75,3 @@ flowchart LR
 ```
 
 `agents-doctor` 不参与记忆召回主链路，它是 AGENTS.md 集成的可观测性工具。
-

@@ -19,6 +19,7 @@ class AgentsFileCheck:
     has_recall_command: bool
     has_remember_command: bool
     has_explainable_recall: bool
+    has_bm25_strategy: bool
 
     @property
     def is_ready(self) -> bool:
@@ -27,6 +28,7 @@ class AgentsFileCheck:
             and self.has_recall_command
             and self.has_remember_command
             and self.has_explainable_recall
+            and self.has_bm25_strategy
         )
 
 
@@ -69,7 +71,7 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         Run:
 
         ```bash
-        {command_prefix} recall "<user task>" --show-sources --show-reasons
+        {command_prefix} recall "<user task>" --show-sources --show-reasons --strategy bm25
         ```
 
         Then use the recalled context as hints only. Continue checking live code,
@@ -158,6 +160,7 @@ def build_agents_doctor_report(
             lines.append(f"    - recall command: {_yes_no(check.has_recall_command)}")
             lines.append(f"    - remember command: {_yes_no(check.has_remember_command)}")
             lines.append(f"    - explainable recall: {_yes_no(check.has_explainable_recall)}")
+            lines.append(f"    - BM25 strategy: {_yes_no(check.has_bm25_strategy)}")
 
     if ready:
         lines.extend(
@@ -298,6 +301,7 @@ def _check_agents_file(path: Path) -> AgentsFileCheck:
         has_recall_command="memagent.cli recall" in raw,
         has_remember_command="memagent.cli remember" in raw,
         has_explainable_recall="--show-reasons" in raw,
+        has_bm25_strategy="--strategy bm25" in raw,
     )
 
 

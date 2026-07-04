@@ -104,7 +104,13 @@ class McpServer:
     def _tool_recall(self, arguments: dict[str, Any]) -> str:
         query = _required_str(arguments, "query")
         context = detect_context(_optional_path(arguments, "cwd"))
-        matches = self.store.recall(query, context=context, limit=_optional_int(arguments, "limit", 5))
+        strategy = _optional_str(arguments, "strategy") or "bm25"
+        matches = self.store.recall(
+            query,
+            context=context,
+            limit=_optional_int(arguments, "limit", 5),
+            strategy=strategy,
+        )
         return self.store.compose_context(
             query=query,
             context=context,
@@ -154,6 +160,11 @@ def tool_definitions() -> list[dict[str, Any]]:
                     "max_lines": {"type": "integer", "description": "Maximum lines in the composed context."},
                     "show_sources": {"type": "boolean", "description": "Include memory file names."},
                     "show_reasons": {"type": "boolean", "description": "Include score and matched query terms."},
+                    "strategy": {
+                        "type": "string",
+                        "description": "Recall scoring strategy: bm25 or keyword.",
+                        "enum": ["bm25", "keyword"],
+                    },
                 },
                 "required": ["query"],
                 "additionalProperties": False,

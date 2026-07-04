@@ -75,12 +75,14 @@ class McpServerTest(unittest.TestCase):
                         "arguments": {
                             "query": "attribution accuracy",
                             "cwd": str(project),
+                            "strategy": "bm25",
                         },
                     },
                 }
             )
             text = recall_response["result"]["content"][0]["text"]
             self.assertIn("Attribution accuracy pitfall", text)
+            self.assertIn("strategy=bm25", text)
             self.assertIn("matched=attribution, accuracy", text)
 
     def test_stdio_server(self) -> None:

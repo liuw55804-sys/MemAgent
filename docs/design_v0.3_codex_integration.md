@@ -88,13 +88,13 @@ v0.3 不做 copy-and-fill YAML templates。
 Codex 执行：
 
 ```bash
-PYTHONPATH=<memagent-src> python -m memagent.cli recall "<user task>" --show-sources --show-reasons
+PYTHONPATH=<memagent-src> python -m memagent.cli recall "<user task>" --show-sources --show-reasons --strategy bm25
 ```
 
 然后：
 
 - 把召回结果作为 hints。
-- 用 `--show-sources` 和 `--show-reasons` 显示来源与命中原因，方便调试和演示。
+- 用 `--show-sources`、`--show-reasons` 和 `--strategy bm25` 显示来源、命中原因和召回策略，方便调试和演示。
 - 不把 memory 当作 source of truth。
 - 继续检查真实代码、命令输出、数据库 schema、文档。
 
@@ -152,7 +152,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 输出里的命令应使用当前项目绝对路径，例如：
 
 ```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "<query>" --show-sources --show-reasons
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "<query>" --show-sources --show-reasons --strategy bm25
 ```
 
 原因：
@@ -265,7 +265,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 沉淀一下
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli remember
---show-sources --show-reasons
+--show-sources --show-reasons --strategy bm25
 ```
 
 把输出复制到某个测试项目的 `AGENTS.md`。

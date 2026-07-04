@@ -35,7 +35,7 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 The doctor report checks whether an `AGENTS.md` file is visible from the current
 directory, whether it contains MemAgent recall/remember commands, and whether
-recall uses `--show-reasons` for explainable demos.
+recall uses `--show-reasons --strategy bm25` for explainable BM25-style demos.
 
 For a full mock demo transcript, run:
 
@@ -78,12 +78,13 @@ When the user says:
 Codex should call:
 
 ```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short query" --show-sources --show-reasons
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short query" --show-sources --show-reasons --strategy bm25
 ```
 
 `--show-sources` shows which memory card was used. `--show-reasons` shows the
 simple score and matched query terms, which makes the recall result easier to
-debug and demo.
+debug and demo. `--strategy bm25` uses the default BM25-style retriever
+explicitly, so the AGENTS.md rule documents the RAG scoring strategy.
 
 ## Safety
 

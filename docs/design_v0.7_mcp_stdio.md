@@ -51,6 +51,7 @@ PYTHONPATH=src python -m memagent.cli mcp-stdio
 - `max_lines`
 - `show_sources`
 - `show_reasons`
+- `strategy`
 
 ### `memagent_remember`
 
@@ -109,4 +110,3 @@ MCP integration:
 可以这样讲：
 
 > MemAgent 的核心不是 MCP，而是 coding workflow memory。但为了让这层 memory 能被不同 coding agent 使用，我把 recall、remember 和 AGENTS.md doctor 包成了 MCP tools。这样 Codex 可以走 AGENTS.md，自带 MCP client 的 IDE 或 agent 可以走 MCP。两条入口共用同一套 memory store 和 recall logic。
-

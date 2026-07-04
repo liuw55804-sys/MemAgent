@@ -167,6 +167,40 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertEqual(matches[0].domain, "life")
             self.assertEqual(matches[0].kind, "preference")
 
+    def test_bm25_prefers_multi_term_match_over_repeated_single_term(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MemoryStore(Path(tmp))
+            store.remember(
+                text="accuracy " * 30,
+                topic="Repeated accuracy note",
+                domain="coding",
+                kind="note",
+                repo="demo",
+                module=None,
+                triggers=["accuracy"],
+                exportable=False,
+            )
+            store.remember(
+                text="For attribution accuracy checks, compare model labels with reviewed labels.",
+                topic="Attribution accuracy workflow",
+                domain="coding",
+                kind="workflow",
+                repo="demo",
+                module=None,
+                triggers=["attribution", "accuracy"],
+                exportable=False,
+            )
+            matches = store.recall("attribution accuracy", context=project_context("demo"), limit=2, strategy="bm25")
+            self.assertGreaterEqual(len(matches), 2)
+            self.assertEqual(matches[0].title, "Attribution accuracy workflow")
+            self.assertEqual(matches[0].strategy, "bm25")
+
+    def test_invalid_recall_strategy_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MemoryStore(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "invalid recall strategy"):
+                store.recall("anything", context=project_context("demo"), limit=1, strategy="vector")
+
 
 if __name__ == "__main__":
     unittest.main()

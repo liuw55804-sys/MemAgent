@@ -9,7 +9,7 @@ session can quickly recall proven commands, failed paths, and next-step hints.
 
 ```bash
 python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
-python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons
+python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli demo-run --reset
@@ -22,7 +22,7 @@ After installing the project in editable mode, the shorter form is available:
 ```bash
 python -m pip install -e .
 memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
-memagent recall "continue checking attribution accuracy" --show-sources --show-reasons
+memagent recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
 memagent agents-install
 memagent agents-doctor
 memagent demo-run --reset
@@ -148,6 +148,11 @@ reproducible demo transcript design.
 
 See [docs/design_v0.7_mcp_stdio.md](docs/design_v0.7_mcp_stdio.md) for the
 minimal MCP stdio adapter design.
+
+## v0.8 Design
+
+See [docs/design_v0.8_rag_recall.md](docs/design_v0.8_rag_recall.md) for the
+BM25-style RAG recall design.
 
 ## Codex Natural Language Triggers
 

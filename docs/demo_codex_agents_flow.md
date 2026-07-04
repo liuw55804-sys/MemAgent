@@ -57,7 +57,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 
 - 输出里有 recall 触发语，比如 `召回一下相关记忆`。
 - 输出里有 remember 触发语，比如 `沉淀一下`。
-- recall 命令带 `--show-sources --show-reasons`，能展示来源和命中原因。
+- recall 命令带 `--show-sources --show-reasons --strategy bm25`，能展示来源、命中原因和召回策略。
 - 安全规则说明 local private memory 和 public demo 的边界。
 
 也可以用安装器预览写入当前项目 `AGENTS.md` 的效果：
@@ -87,7 +87,7 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 ```bash
 MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli recall \
   "召回一下相关记忆，我要排查 demo 服务的 attribution accuracy" \
-  --show-sources --show-reasons
+  --show-sources --show-reasons --strategy bm25
 ```
 
 预期会看到：
@@ -154,7 +154,7 @@ Codex：总结短 memory，调用 memagent remember
 ```bash
 MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli recall \
   "先看看之前有没有 attribution accuracy 的相关经验" \
-  --show-sources --show-reasons
+  --show-sources --show-reasons --strategy bm25
 ```
 
 预期输出包含：

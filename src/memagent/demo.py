@@ -132,7 +132,7 @@ def run_demo(
     steps.append(
         DemoStep(
             title="Recall with sources and reasons",
-            command=f"{command_prefix} recall {_quote(DEMO_QUERY)} --show-sources --show-reasons",
+            command=f"{command_prefix} recall {_quote(DEMO_QUERY)} --show-sources --show-reasons --strategy bm25",
             output=recalled_context,
         )
     )
@@ -151,7 +151,7 @@ def run_demo(
         DemoStep(
             title="Preview Codex prompt patch",
             command=(
-                f"{command_prefix} codex --dry-run --show-sources --show-reasons "
+                f"{command_prefix} codex --dry-run --show-sources --show-reasons --strategy bm25 "
                 f"{_quote(DEMO_CODEX_PROMPT)}"
             ),
             output=final_prompt,

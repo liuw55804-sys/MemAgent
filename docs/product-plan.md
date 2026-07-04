@@ -300,7 +300,7 @@ flowchart LR
   CLI --> ING["Remember / Ingest Pipeline"]
   ING --> EXT["Lesson Extractor<br>rules + optional LLM"]
   EXT --> STORE["Memory Store<br>YAML now / SQLite later"]
-  STORE --> RET["Retriever<br>keyword / BM25 / vector"]
+  STORE --> RET["Retriever<br>BM25 now / vector later"]
   RET --> CMP["Context Composer"]
   CMP --> WRAP["Codex Wrapper<br>memagent codex"]
 
@@ -312,7 +312,7 @@ flowchart LR
 
 - CLI：MVP 用 Python 标准库 `argparse` 保持零依赖，后续可换 Typer 提升交互体验。
 - 存储：当前 YAML memory cards，后续加 SQLite 保存索引、命中日志和评估信号。
-- 检索：当前 keyword scoring，后续补 BM25、向量召回和 rerank。
+- 检索：当前 BM25-style scoring，后续补向量召回和 rerank。
 - 模型：DeepSeek/Qwen 作为默认便宜模型，GLM 作为复杂分析 fallback。
 - Codex 集成：先 CLI wrapper，后 AGENTS.md/Skill 自然语言触发，再 Hooks/MCP/Plugin
 

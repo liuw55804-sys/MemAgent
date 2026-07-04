@@ -21,7 +21,7 @@ src/memagent/
 
 ```bash
 PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
-PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons
+PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons --strategy bm25
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
@@ -35,7 +35,7 @@ PYTHONPATH=src python -m memagent.cli mcp-stdio
 ```bash
 python -m pip install -e .
 memagent remember --domain coding --kind note "..."
-memagent recall "..." --show-sources --show-reasons
+memagent recall "..." --show-sources --show-reasons --strategy bm25
 memagent codex "..."
 memagent agents-snippet
 memagent agents-install
@@ -141,7 +141,7 @@ sequenceDiagram
   CLI->>M: store.recall(query, context)
   M->>F: read *.memory.yaml
   M->>M: tokenize query + repo + branch
-  M->>M: score cards by keyword count
+  M->>M: score cards by BM25-style scoring
   M->>M: collect matched terms
   M-->>CLI: MemoryMatch list
   CLI->>M: compose_context(...)
@@ -149,27 +149,27 @@ sequenceDiagram
   CLI-->>U: print context
 ```
 
-当前召回算法很简单：
+当前默认召回策略是 `bm25`：
 
 - 把用户 `query` 分词。
 - 中文短语会生成 2-4 字 n-gram，支持 `帮我判断租房偏好` 命中 `租房偏好`。
 - 扫描 `~/.memagent/memories/*.memory.yaml`。
-- 用关键词出现次数打分。
+- 用 BM25-style scoring 打分，减少单个词重复刷分和长文本偏置。
 - 记录命中的 query terms，用于解释为什么召回这条 memory。
 - 如果 query 已经命中，并且 memory card 里包含当前 repo 名，额外加分。
 - 取分数最高的前几条。
 - 读取 card 顶层的 `domain/kind`，旧 card 没有这两个字段时默认用 `coding/note`。
 - 从 `stable_facts`、`pitfalls`、`next_time_prompt` 里抽几行，组成短上下文。
 
-这不是最终算法，只是 MVP 的可解释 baseline。后续可以替换成 BM25、向量召回、rerank，但接口上可以继续保持 `store.recall(...)`。
+也可以用 `--strategy keyword` 回到早期关键词计数 baseline，方便调试和对比。后续可以继续扩展成 BM25 + vector + rerank 的 hybrid retriever，但接口上可以继续保持 `store.recall(...)`。
 
 如果想看召回原因，可以加：
 
 ```bash
-memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons
+memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --strategy bm25
 ```
 
-输出里的 `score=...` 是当前简单打分，`matched=...` 是 query 中命中的词。这个能力主要用于调试和演示，不代表最终检索算法必须一直是关键词计数。
+输出里的 `score=...` 是当前策略的打分，`strategy=...` 是使用的召回策略，`matched=...` 是 query 中命中的词。这个能力主要用于调试和演示。
 
 ### 3.3 `codex`
 
@@ -284,6 +284,7 @@ memagent agents-doctor --cwd /path/to/project
 - 是否包含 MemAgent section。
 - 是否包含 `memagent.cli recall` 和 `memagent.cli remember`。
 - recall 命令是否包含 `--show-reasons`，方便演示可解释召回。
+- recall 命令是否包含 `--strategy bm25`，确保使用当前推荐的 RAG scoring。
 
 输出中的 `Status: ready` 表示 AGENTS.md 触发层已经可用；`Status: setup needed` 表示需要先运行 `agents-snippet` 并把结果复制到目标 `AGENTS.md`。
 
@@ -464,10 +465,11 @@ class SavedMemory:
 @dataclass(frozen=True)
 class MemoryMatch:
     path: Path
-    score: int
+    score: float
     title: str
     domain: str
     kind: str
+    strategy: str
     matched_terms: tuple[str, ...]
     lines: tuple[str, ...]
 ```
@@ -564,13 +566,14 @@ source_note: |
 
 ```text
 terms = tokenize(query)
+strategy = bm25 by default
 for each memory card:
   raw = read yaml text
-  score, matched_terms = score each query term in raw
+  score, matched_terms = score with bm25 or keyword strategy
   if score > 0:
     if current repo_name appears in raw:
-      score += 3
-    create MemoryMatch with domain/kind/matched_terms
+      score += repo scope bonus
+    create MemoryMatch with domain/kind/strategy/matched_terms
 sort by score desc
 return top limit
 ```
@@ -607,10 +610,10 @@ return top limit
 如果 `show_reasons=True`，memory 行会额外包含：
 
 ```text
-| score=7; matched=rds, json, timeout
+| score=2.41; strategy=bm25; matched=rds, json, timeout
 ```
 
-这让 Codex 和用户都能看出“为什么是这条 memory”，也让后续替换成 BM25、vector recall 或 reranker 时有一个可解释输出的位置。
+这让 Codex 和用户都能看出“为什么是这条 memory”，也给后续 vector recall 或 reranker 留出可解释输出的位置。
 
 ### 4.4 `wrapper.py`
 
@@ -708,7 +711,7 @@ PYTHONPATH=src python -m unittest discover -s tests
 
 - 手动 `remember`。
 - 本地 YAML 存储。
-- keyword 召回。
+- BM25-style explainable recall。
 - `recall` 预览短上下文。
 - `codex --dry-run` 查看最终 prompt。
 - `agents-install` / `agents-doctor` / `demo-run` 展示 AGENTS.md 集成闭环。

@@ -16,6 +16,7 @@ Added:
 - `agents-doctor` command to inspect whether the current project AGENTS.md has MemAgent recall/remember integration.
 - `demo-run` command to create an isolated mock project and write a shareable AGENTS.md integration transcript.
 - `mcp-stdio` command exposing MemAgent recall, remember, and AGENTS.md doctor as MCP tools over stdio.
+- BM25-style recall scoring as the default strategy, with `--strategy keyword` retained as a baseline.
 - Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
@@ -27,6 +28,7 @@ Changed:
 - Generated AGENTS.md recall commands now include `--show-sources --show-reasons` for more transparent demos and debugging.
 - Generated AGENTS.md snippets now include managed Markdown markers for safe replacement by `agents-install`.
 - Demo documentation now points to the generated transcript flow as the fastest presentation path.
+- Generated AGENTS.md recall commands now explicitly use `--strategy bm25`.
 
 ## v0.1.0-mvp - 2026-06-23
 
@@ -45,6 +47,6 @@ Added:
 Known limitations:
 
 - `ingest` is not implemented yet.
-- Recall uses simple keyword scoring, not BM25/vector retrieval.
+- Vector retrieval and rerank are not implemented yet.
 - Memory cards are written as YAML text but not parsed structurally during recall.
 - LLM-assisted extraction, compression, conflict detection, and lifecycle evaluation are future work.

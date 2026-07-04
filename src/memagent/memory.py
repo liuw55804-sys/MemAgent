@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from collections import Counter
+import math
 import os
 import re
 import textwrap
@@ -12,6 +14,12 @@ from memagent.context import ProjectContext
 
 DEFAULT_DOMAIN = "coding"
 DEFAULT_KIND = "note"
+DEFAULT_RECALL_STRATEGY = "bm25"
+
+ALLOWED_RECALL_STRATEGIES = {
+    "bm25",
+    "keyword",
+}
 
 ALLOWED_DOMAINS = {
     "coding",
@@ -44,10 +52,11 @@ class SavedMemory:
 @dataclass(frozen=True)
 class MemoryMatch:
     path: Path
-    score: int
+    score: float
     title: str
     domain: str
     kind: str
+    strategy: str
     matched_terms: tuple[str, ...]
     lines: tuple[str, ...]
 
@@ -106,19 +115,28 @@ class MemoryStore:
         *,
         context: ProjectContext,
         limit: int,
+        strategy: str = DEFAULT_RECALL_STRATEGY,
     ) -> list[MemoryMatch]:
         terms = _tokenize(query)
         if not terms:
             return []
-        matches: list[MemoryMatch] = []
+        normalized_strategy = normalize_recall_strategy(strategy)
+        candidates = []
         for path in sorted(self.memories_dir.glob("*.memory.yaml")):
             raw = path.read_text(encoding="utf-8", errors="replace")
+            candidates.append((path, raw))
+        if normalized_strategy == "bm25":
+            scored = _score_bm25(candidates, terms)
+        else:
+            scored = _score_keyword(candidates, terms)
+
+        matches: list[MemoryMatch] = []
+        for path, raw, score, matched_terms in scored:
             haystack = raw.lower()
-            score, matched_terms = _score_terms(haystack, terms)
             if score <= 0:
                 continue
             if context.repo_name and context.repo_name.lower() in haystack:
-                score += 3
+                score += _repo_scope_bonus(normalized_strategy)
             matches.append(
                 MemoryMatch(
                     path=path,
@@ -126,6 +144,7 @@ class MemoryStore:
                     title=_extract_value(raw, "topic") or path.stem,
                     domain=_extract_value(raw, "domain") or DEFAULT_DOMAIN,
                     kind=_extract_value(raw, "kind") or DEFAULT_KIND,
+                    strategy=normalized_strategy,
                     matched_terms=matched_terms,
                     lines=tuple(_important_lines(raw)),
                 )
@@ -164,7 +183,7 @@ class MemoryStore:
             if show_sources:
                 prefix += f" ({match.path.name})"
             if show_reasons:
-                reason = f"score={match.score}"
+                reason = f"score={_format_score(match.score)}; strategy={match.strategy}"
                 if match.matched_terms:
                     reason += f"; matched={', '.join(match.matched_terms[:8])}"
                 prefix += f" | {reason}"
@@ -271,6 +290,14 @@ def normalize_kind(value: str | None) -> str:
     )
 
 
+def normalize_recall_strategy(value: str | None) -> str:
+    normalized = (value or DEFAULT_RECALL_STRATEGY).strip().lower().replace("-", "_")
+    if normalized not in ALLOWED_RECALL_STRATEGIES:
+        allowed_values = ", ".join(sorted(ALLOWED_RECALL_STRATEGIES))
+        raise ValueError(f"invalid recall strategy: {value}. Allowed values: {allowed_values}")
+    return normalized
+
+
 def _normalize_enum(
     *,
     value: str | None,
@@ -290,18 +317,31 @@ def _normalize_enum(
 def _tokenize(text: str) -> list[str]:
     tokens: list[str] = []
     seen: set[str] = set()
+    for candidate in _tokenize_all(text):
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            tokens.append(candidate)
+    return tokens
+
+
+def _tokenize_all(text: str) -> list[str]:
+    tokens: list[str] = []
     for raw_token in re.findall(r"[\w\u4e00-\u9fff]+", text):
         token = raw_token.lower()
-        candidates = [token]
+        tokens.append(token)
         if _contains_cjk(token) and len(token) > 1:
             max_size = min(len(token), 4)
             for size in range(2, max_size + 1):
-                candidates.extend(token[index : index + size] for index in range(len(token) - size + 1))
-        for candidate in candidates:
-            if candidate and candidate not in seen:
-                seen.add(candidate)
-                tokens.append(candidate)
+                tokens.extend(token[index : index + size] for index in range(len(token) - size + 1))
     return tokens
+
+
+def _score_keyword(candidates: list[tuple[Path, str]], terms: list[str]) -> list[tuple[Path, str, float, tuple[str, ...]]]:
+    return [
+        (path, raw, float(score), matched_terms)
+        for path, raw in candidates
+        for score, matched_terms in [_score_terms(raw.lower(), terms)]
+    ]
 
 
 def _score_terms(haystack: str, terms: list[str]) -> tuple[int, tuple[str, ...]]:
@@ -314,6 +354,53 @@ def _score_terms(haystack: str, terms: list[str]) -> tuple[int, tuple[str, ...]]
         score += count
         matched_terms.append(term)
     return score, tuple(matched_terms)
+
+
+def _score_bm25(candidates: list[tuple[Path, str]], terms: list[str]) -> list[tuple[Path, str, float, tuple[str, ...]]]:
+    if not candidates:
+        return []
+    token_counts: list[Counter[str]] = []
+    doc_lengths: list[int] = []
+    doc_freq: Counter[str] = Counter()
+    for _, raw in candidates:
+        tokens = _tokenize_all(raw)
+        counts = Counter(tokens)
+        token_counts.append(counts)
+        doc_lengths.append(max(sum(counts.values()), 1))
+        for term in terms:
+            if counts.get(term, 0) > 0:
+                doc_freq[term] += 1
+
+    total_docs = len(candidates)
+    avg_doc_length = sum(doc_lengths) / total_docs
+    k1 = 1.5
+    b = 0.75
+    scored: list[tuple[Path, str, float, tuple[str, ...]]] = []
+    for index, (path, raw) in enumerate(candidates):
+        counts = token_counts[index]
+        doc_length = doc_lengths[index]
+        score = 0.0
+        matched_terms: list[str] = []
+        for term in terms:
+            term_freq = counts.get(term, 0)
+            if term_freq <= 0:
+                continue
+            matched_terms.append(term)
+            idf = math.log(1 + (total_docs - doc_freq[term] + 0.5) / (doc_freq[term] + 0.5))
+            denominator = term_freq + k1 * (1 - b + b * doc_length / avg_doc_length)
+            score += idf * (term_freq * (k1 + 1)) / denominator
+        scored.append((path, raw, score, tuple(matched_terms)))
+    return scored
+
+
+def _repo_scope_bonus(strategy: str) -> float:
+    return 0.75 if strategy == "bm25" else 3.0
+
+
+def _format_score(score: float) -> str:
+    if score.is_integer():
+        return str(int(score))
+    return f"{score:.2f}"
 
 
 def _contains_cjk(text: str) -> bool:
