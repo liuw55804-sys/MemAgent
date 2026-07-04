@@ -66,6 +66,7 @@ def process_interaction(
     strategy: str = DEFAULT_RECALL_STRATEGY,
     eval_workspace: Path | None = None,
     replay_workspace: Path | None = None,
+    trace_none: bool = False,
 ) -> ProcessResult:
     route = route_interaction(
         message,
@@ -95,6 +96,7 @@ def process_interaction(
             store=store,
             allow_writes=allow_writes,
             recent_text=recent_text,
+            trace_none=trace_none,
         )
     if route.action == "draft_memory":
         return _with_process_trace(
@@ -110,6 +112,7 @@ def process_interaction(
             store=store,
             allow_writes=allow_writes,
             recent_text=recent_text,
+            trace_none=trace_none,
         )
     if route.action == "label_feedback":
         return _with_process_trace(
@@ -118,6 +121,7 @@ def process_interaction(
             store=store,
             allow_writes=allow_writes,
             recent_text=recent_text,
+            trace_none=trace_none,
         )
     if route.action == "handoff_show":
         return _with_process_trace(
@@ -126,6 +130,7 @@ def process_interaction(
             store=store,
             allow_writes=allow_writes,
             recent_text=recent_text,
+            trace_none=trace_none,
         )
     if route.action == "handoff_save":
         return _with_process_trace(
@@ -141,6 +146,7 @@ def process_interaction(
             store=store,
             allow_writes=allow_writes,
             recent_text=recent_text,
+            trace_none=trace_none,
         )
     if route.action == "developer_eval":
         return _with_process_trace(
@@ -155,6 +161,7 @@ def process_interaction(
             store=store,
             allow_writes=allow_writes,
             recent_text=recent_text,
+            trace_none=trace_none,
         )
     return _with_process_trace(
         ProcessResult(
@@ -169,6 +176,7 @@ def process_interaction(
         store=store,
         allow_writes=allow_writes,
         recent_text=recent_text,
+        trace_none=trace_none,
     )
 
 
@@ -248,8 +256,11 @@ def _with_process_trace(
     store: MemoryStore,
     allow_writes: bool,
     recent_text: str,
+    trace_none: bool,
 ) -> ProcessResult:
     if not allow_writes:
+        return result
+    if result.route.action == "none" and not trace_none:
         return result
     process_payload = result.to_payload(context=context)
     process_payload["input"] = {

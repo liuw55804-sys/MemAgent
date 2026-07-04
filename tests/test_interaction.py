@@ -159,6 +159,44 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertIn("Process handoff", result.result_text)
             self.assertIn("Verify handoff process actions.", result.result_text)
 
+    def test_process_none_does_not_save_trace_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+
+            result = process_interaction(
+                message="解释一下这个函数现在的分支逻辑。",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+            )
+
+            self.assertEqual(result.route.action, "none")
+            self.assertEqual(result.writes, ())
+            self.assertFalse(store.process_traces_dir.exists())
+
+    def test_process_trace_none_saves_noop_trace_for_debug(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+
+            result = process_interaction(
+                message="解释一下这个函数现在的分支逻辑。",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+                trace_none=True,
+            )
+
+            self.assertEqual(result.route.action, "none")
+            self.assertEqual(result.writes, ("process_trace",))
+            payload = store.load_process_trace(result.artifacts["process_trace_id"])
+            self.assertEqual(payload["process"]["route"]["action"], "none")
+
     def test_process_no_write_disables_process_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -172,6 +210,7 @@ class InteractionProcessTest(unittest.TestCase):
                 store=store,
                 handoff_store=HandoffStore(store.home),
                 allow_writes=False,
+                trace_none=True,
             )
 
             self.assertEqual(result.route.action, "none")

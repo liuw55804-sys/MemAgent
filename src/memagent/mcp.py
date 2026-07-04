@@ -235,6 +235,7 @@ class McpServer:
             llm_config_path=_optional_path(arguments, "llm_config_path"),
             allow_writes=_optional_bool(arguments, "allow_writes", True),
             trace_recall=_optional_bool(arguments, "trace_recall", True),
+            trace_none=_optional_bool(arguments, "trace_none", False),
             limit=_optional_int(arguments, "limit", 5),
             max_lines=_optional_int(arguments, "max_lines", 12),
             strategy=_optional_str(arguments, "strategy") or "bm25",
@@ -588,6 +589,10 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Allow local trace, feedback, handoff, or eval writes.",
                     },
                     "trace_recall": {"type": "boolean", "description": "Save recall traces for recall actions."},
+                    "trace_none": {
+                        "type": "boolean",
+                        "description": "Also save process traces for no-op actions during self-tests or debugging.",
+                    },
                     "limit": {"type": "integer", "description": "Maximum memory cards to inspect for recall."},
                     "max_lines": {"type": "integer", "description": "Maximum lines in recalled context."},
                     "strategy": {

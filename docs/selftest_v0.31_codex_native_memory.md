@@ -268,7 +268,13 @@ cd "$MEMAGENT_ROOT"
 
 ### 9.0 自动记录测试数据
 
-产品自测不需要你手填记录表。每次 Codex 通过 `memagent process`、`memagent_process` 或 v0.31 wrapper 触发 MemAgent 时，MemAgent 会自动在本地写一条 process trace：
+产品自测不需要你手填记录表。日常默认只记录有动作的 MemAgent 调用：
+
+```text
+recall / draft_memory / label_feedback / handoff_save / handoff_show / developer_eval
+```
+
+当 Codex 通过 `memagent process`、`memagent_process` 或 v0.31 wrapper 触发这些动作时，MemAgent 会自动在本地写一条 process trace：
 
 ```text
 <memory-home>/process_traces/process_trace_*.json
@@ -291,8 +297,17 @@ cd "$MEMAGENT_ROOT"
 - 用户原话和当前 project context；
 - route action、confidence、signals、reason；
 - 是否执行、写了哪些本地 artifact；
-- 召回 trace、memory draft、handoff、feedback 等动作的结果摘要；
-- `none` 动作，也就是 MemAgent 判断“这次不该介入”的证据。
+- 召回 trace、memory draft、handoff、feedback 等动作的结果摘要。
+
+`none` 动作默认不记录，避免日常开发里产生大量无效噪音。只有在专门自测误触发/漏触发时，才打开 debug 记录：
+
+```bash
+PYTHONPATH=src python -m memagent.cli --home "$SELFTEST_HOME" process \
+  --cwd "$SELFTEST_PROJECT" \
+  --trace-none \
+  --json \
+  "解释一下这个函数现在的分支逻辑。"
+```
 
 你在产品自测时只要正常对话。发现体验问题时，直接在当前会话里告诉我，例如：
 
@@ -531,7 +546,7 @@ handoff 太空，新线程接不上。
 | --- | --- |
 | 触发准确性 | `process_traces` 里的 action、confidence、signals，以及用户反馈 |
 | 召回价值 | `recall_traces` 的 matches、feedback、后续任务是否少绕路 |
-| 打扰成本 | action 频率、`none` 比例、MemAgent 输出长度 |
+| 打扰成本 | action 频率、MemAgent 输出长度；若开启 `--trace-none`，再看 `none` 比例 |
 | memory 预览质量 | draft payload 的 topic、kind、triggers、memory、warnings |
 | 确认安全感 | durable memory 是否只在用户确认后写入 |
 | handoff 可接力性 | handoff 内容和新线程恢复效果 |

@@ -188,6 +188,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not save recall traces when processing recall actions.",
     )
     process.add_argument(
+        "--trace-none",
+        action="store_true",
+        help="Also save process traces for no-op actions. Useful for self-tests or debug sessions.",
+    )
+    process.add_argument(
         "--limit",
         type=int,
         default=5,
@@ -347,6 +352,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-trace",
         action="store_true",
         help="Do not save recall traces during preflight recall actions.",
+    )
+    codex.add_argument(
+        "--trace-none",
+        action="store_true",
+        help="Also save process traces for no-op preflight actions. Useful for self-tests or debug sessions.",
     )
     codex.add_argument(
         "--no-memory",
@@ -938,6 +948,7 @@ def main(argv: list[str] | None = None) -> int:
                 llm_config_path=Path(args.llm_config) if args.llm_config else None,
                 allow_writes=not args.no_write,
                 trace_recall=not args.no_trace,
+                trace_none=args.trace_none,
                 limit=args.limit,
                 max_lines=args.max_lines,
                 strategy=args.strategy,
@@ -1178,6 +1189,7 @@ def main(argv: list[str] | None = None) -> int:
                     llm_config_path=Path(args.llm_config) if args.llm_config else None,
                     allow_writes=not args.no_write,
                     trace_recall=not args.no_trace,
+                    trace_none=args.trace_none,
                     limit=args.limit,
                     max_lines=args.max_lines,
                     show_sources=args.show_sources,

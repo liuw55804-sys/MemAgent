@@ -104,6 +104,50 @@ class CliTest(unittest.TestCase):
             self.assertIn("process_trace_path", payload["artifacts"])
             self.assertEqual(payload["context"]["repo_name"], "project")
 
+    def test_process_trace_none_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+
+            default_stdout = StringIO()
+            with redirect_stdout(default_stdout):
+                default_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "process",
+                        "解释一下这个函数现在的分支逻辑。",
+                        "--cwd",
+                        str(project),
+                        "--json",
+                    ]
+                )
+            self.assertEqual(default_code, 0)
+            default_payload = json.loads(default_stdout.getvalue())
+            self.assertEqual(default_payload["route"]["action"], "none")
+            self.assertEqual(default_payload["writes"], [])
+
+            debug_stdout = StringIO()
+            with redirect_stdout(debug_stdout):
+                debug_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "process",
+                        "解释一下这个函数现在的分支逻辑。",
+                        "--cwd",
+                        str(project),
+                        "--trace-none",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(debug_code, 0)
+            debug_payload = json.loads(debug_stdout.getvalue())
+            self.assertEqual(debug_payload["route"]["action"], "none")
+            self.assertEqual(debug_payload["writes"], ["process_trace"])
+
     def test_codex_dry_run_uses_process_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

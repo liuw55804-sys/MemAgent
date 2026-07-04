@@ -84,7 +84,7 @@ Changed:
 - `llm doctor` command and `memagent_llm_doctor` MCP tool check OpenAI-compatible provider readiness without printing API keys.
 - Local LLM provider profiles can be used by `llm doctor`, `route`, `draft memory`, `process`, and `codex`.
 - `codex` command now runs MemAgent process preflight instead of hard-coding recall-first behavior.
-- v0.31 self-test now relies on automatic `process_traces/` plus natural chat feedback instead of manual product scorecards.
+- v0.31 self-test now relies on actionable `process_traces/` plus natural chat feedback instead of manual product scorecards; no-op traces are debug-only.
 
 ## v0.1.0-mvp - 2026-06-23
 

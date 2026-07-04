@@ -73,9 +73,10 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} process "<latest user message>"
         ```
 
-        `process` may save local process traces, recall traces, trace feedback,
-        or handoffs, but it must not write durable long-term memory cards.
-        Durable memory still requires an explicit preview and user confirmation.
+        `process` may save local process traces for actionable memory operations,
+        recall traces, trace feedback, or handoffs, but it must not write durable
+        long-term memory cards. Durable memory still requires an explicit preview
+        and user confirmation. No-op process traces are debug/self-test only.
 
         ### LLM Provider Readiness
 
