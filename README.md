@@ -13,6 +13,7 @@ python -m memagent.cli recall "continue checking attribution accuracy" --show-so
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli handoff show
+python -m memagent.cli handoff draft --from-file ./session_notes.md
 python -m memagent.cli demo-run --reset
 python -m memagent.cli mcp-stdio
 python -m memagent.cli recall-eval
@@ -28,6 +29,7 @@ memagent recall "continue checking attribution accuracy" --show-sources --show-r
 memagent agents-install
 memagent agents-doctor
 memagent handoff show
+memagent handoff draft --from-file ./session_notes.md
 memagent demo-run --reset
 memagent mcp-stdio
 memagent recall-eval
@@ -195,6 +197,23 @@ Show the latest handoff:
 
 ```bash
 memagent handoff show
+```
+
+## v0.12 Design
+
+See [docs/design_v0.12_handoff_draft.md](docs/design_v0.12_handoff_draft.md)
+for the reviewable handoff draft design.
+
+Draft a handoff from session notes:
+
+```bash
+memagent handoff draft --from-file ./session_notes.md
+```
+
+Save the accepted draft:
+
+```bash
+memagent handoff draft --from-file ./session_notes.md --save
 ```
 
 ## Codex Natural Language Triggers

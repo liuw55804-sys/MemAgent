@@ -14,7 +14,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
-from memagent.handoff import HandoffStore
+from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
 
@@ -30,6 +30,27 @@ DEMO_HANDOFF = (
     "Demo session wired AGENTS.md, saved one attribution accuracy memory, and "
     "verified recall plus Codex prompt patch. Next session should extend the "
     "demo with handoff/catch-up before adding automatic hooks."
+)
+DEMO_SESSION_NOTES = "\n".join(
+    [
+        "## Summary",
+        DEMO_HANDOFF,
+        "",
+        "## Done",
+        "- Installed MemAgent AGENTS.md block.",
+        "- Saved one mock attribution accuracy memory.",
+        "- Verified recall with sources and reasons.",
+        "",
+        "## Next Steps",
+        "- Use the handoff as the next-session catch-up context.",
+        "- Decide whether the mock workflow should become a durable memory card.",
+        "",
+        "## Open Questions",
+        "- Should handoff drafts be generated automatically from session logs?",
+        "",
+        "## Memory Candidates",
+        "- Codex demos benefit from showing handoff before recall.",
+    ]
 )
 
 
@@ -165,38 +186,36 @@ def run_demo(
         )
     )
 
-    saved_handoff = handoff_store.save(
-        context=recall_context,
-        summary=DEMO_HANDOFF,
+    session_notes_path = workspace / "session_notes.md"
+    session_notes_path.write_text(DEMO_SESSION_NOTES, encoding="utf-8")
+    handoff_draft = draft_handoff_from_text(
+        DEMO_SESSION_NOTES,
         topic="Demo continuation handoff",
-        done=[
-            "Installed MemAgent AGENTS.md block.",
-            "Saved one mock attribution accuracy memory.",
-            "Verified recall with sources and reasons.",
-        ],
-        next_steps=[
-            "Use the handoff as the next-session catch-up context.",
-            "Decide whether the mock workflow should become a durable memory card.",
-        ],
-        open_questions=["Should handoff drafts be generated automatically from session logs?"],
-        memory_candidates=["Codex demos benefit from showing handoff before recall."],
+    )
+    draft_command = (
+        f"{command_prefix} handoff draft --from-file {_quote(session_notes_path)} "
+        '--topic "Demo continuation handoff"'
     )
     steps.append(
         DemoStep(
-            title="Save session handoff",
-            command=(
-                f"{command_prefix} handoff save --topic \"Demo continuation handoff\" "
-                "--done \"Installed MemAgent AGENTS.md block.\" "
-                "--done \"Saved one mock attribution accuracy memory.\" "
-                "--done \"Verified recall with sources and reasons.\" "
-                "--next-step \"Use the handoff as the next-session catch-up context.\" "
-                "--next-step \"Decide whether the mock workflow should become a durable memory card.\" "
-                "--open-question \"Should handoff drafts be generated automatically from session logs?\" "
-                "--memory-candidate \"Codex demos benefit from showing handoff before recall.\" "
-                f"{_quote(DEMO_HANDOFF)}"
-            ),
+            title="Draft session handoff from notes",
+            command=draft_command,
+            output=render_handoff_draft(handoff_draft, source=session_notes_path),
+        )
+    )
+
+    saved_handoff = handoff_store.save_draft(
+        context=recall_context,
+        draft=handoff_draft,
+    )
+    steps.append(
+        DemoStep(
+            title="Save drafted session handoff",
+            command=f"{draft_command} --save",
             output="\n".join(
                 [
+                    render_handoff_draft(handoff_draft, source=session_notes_path),
+                    "",
                     "[MemAgent handoff saved]",
                     f"- project key: {saved_handoff.project_key}",
                     f"- latest: {saved_handoff.latest_path}",

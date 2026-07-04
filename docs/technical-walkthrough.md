@@ -11,7 +11,7 @@ src/memagent/
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
   demo.py      运行隔离 demo，并生成可分享的 Markdown transcript
   eval.py      运行 mock recall benchmark，并生成 hit@1 / MRR report
-  handoff.py   保存和读取每个项目最近一次 handoff/catch-up 状态
+  handoff.py   生成 handoff draft，并保存/读取每个项目最近一次 catch-up 状态
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
   mcp.py       最小 MCP stdio server，把 recall/remember/handoff/doctor 暴露为 tools
   wrapper.py   把召回上下文拼到 Codex prompt 前
@@ -29,6 +29,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
 PYTHONPATH=src python -m memagent.cli agents-doctor
 PYTHONPATH=src python -m memagent.cli handoff show
+PYTHONPATH=src python -m memagent.cli handoff draft --from-file local_memory_demo/demo_run/session_notes.md
 PYTHONPATH=src python -m memagent.cli demo-run --reset
 PYTHONPATH=src python -m memagent.cli mcp-stdio
 PYTHONPATH=src python -m memagent.cli recall-eval
@@ -45,6 +46,7 @@ memagent agents-snippet
 memagent agents-install
 memagent agents-doctor
 memagent handoff show
+memagent handoff draft --from-file local_memory_demo/demo_run/session_notes.md
 memagent demo-run --reset
 memagent mcp-stdio
 memagent recall-eval
@@ -318,7 +320,8 @@ local_memory_demo/demo_run/
 - 写入一条 mock workflow memory。
 - 运行 explainable recall。
 - 生成 `codex --dry-run` prompt patch。
-- 保存一次 session handoff。
+- 从 session notes 生成 handoff draft。
+- 保存一次 drafted session handoff。
 - 展示下一次会话的 catch-up 内容。
 - 把所有命令和输出写到 `transcript.md`。
 
@@ -334,12 +337,13 @@ local_memory_demo/demo_run/
 memagent mcp-stdio
 ```
 
-当前暴露五个 tools：
+当前暴露六个 tools：
 
 - `memagent_recall`：召回相关 workflow memory。
 - `memagent_remember`：写入一条短 memory。
 - `memagent_handoff_save`：保存当前项目的 session handoff。
 - `memagent_handoff_show`：读取当前项目的 latest handoff。
+- `memagent_handoff_draft`：从 session text 生成 handoff draft，可选保存。
 - `memagent_agents_doctor`：检查 AGENTS.md 集成状态。
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
@@ -386,6 +390,18 @@ memagent handoff save \
 
 ```bash
 memagent handoff show
+```
+
+从 session notes 生成草稿：
+
+```bash
+memagent handoff draft --from-file ./session_notes.md
+```
+
+保存用户确认后的草稿：
+
+```bash
+memagent handoff draft --from-file ./session_notes.md --save
 ```
 
 它和 `remember` 的区别：
@@ -701,7 +717,9 @@ class HandoffStore:
 主要方法：
 
 ```text
+draft_handoff_from_text(...)  从 session notes/transcript 抽取 handoff draft
 save(...)            写 latest.md 和 history/*.md
+save_draft(...)      把 HandoffDraft 保存成 latest/history
 latest(...)          读取当前项目 latest.md
 compose_latest(...)  输出短 catch-up context
 ```
@@ -718,7 +736,7 @@ compose_latest(...)  输出短 catch-up context
 ~/.memagent/handoffs/
 ```
 
-后续如果加 hooks 或 LLM extraction，可以先生成 handoff draft，再由用户决定哪些 `memory_candidates` 需要用 `remember` 升级成长期 memory。
+当前 `draft_handoff_from_text(...)` 是 deterministic parser：优先识别 Markdown section，比如 `Summary`、`Done`、`Next Steps`、`Open Questions`、`Memory Candidates`；如果没有这些 section，再用关键词兜底。后续如果加 hooks 或 LLM extraction，可以复用 `HandoffDraft` 这层结构，再由用户决定哪些 `memory_candidates` 需要用 `remember` 升级成长期 memory。
 
 ### 4.5 `wrapper.py`
 
@@ -780,15 +798,18 @@ tests/test_demo.py
   test_demo_run_cli
 
 tests/test_handoff.py
+  test_draft_handoff_from_markdown_sections
   test_save_and_show_latest_handoff
   test_show_without_handoff
   test_handoff_cli_save_and_show
+  test_handoff_cli_draft_and_save
 
 tests/test_mcp.py
   test_initialize_and_tools_list
   test_tool_definitions_have_valid_basic_schema
   test_remember_and_recall_tools
   test_handoff_tools
+  test_handoff_draft_tool
   test_stdio_server
   test_invalid_tool_call_returns_tool_error
 
@@ -811,7 +832,7 @@ tests/test_eval.py
 
 `test_demo.py` 保护的是演示闭环：能生成 mock project、AGENTS.md、memory card 和 transcript。
 
-`test_handoff.py` 保护的是交接闭环：能按项目保存 `latest.md`/`history`，能在新会话用 `handoff show` 取回短 catch-up context。
+`test_handoff.py` 保护的是交接闭环：能从 Markdown section 生成 handoff draft，能按项目保存 `latest.md`/`history`，能在新会话用 `handoff show` 取回短 catch-up context。
 
 `test_mcp.py` 保护的是 MCP adapter：initialize、tools/list、tools/call、handoff tools 和 stdio JSON-RPC 基本链路。
 
@@ -835,12 +856,12 @@ PYTHONPATH=src python -m unittest discover -s tests
 - `codex --dry-run` 查看最终 prompt。
 - `agents-install` / `agents-doctor` / `demo-run` 展示 AGENTS.md 集成闭环。
 - `recall-eval` 展示 RAG retriever 的离线评估闭环。
-- `handoff save/show` 展示跨会话 catch-up 闭环。
+- `handoff draft/save/show` 展示跨会话 catch-up 闭环。
 
 ### 阶段二：下一步最自然的增强
 
 - `ingest`：从 Markdown 线程或总结中抽取 memory card。
-- handoff draft：从 session 结束摘要自动生成 handoff，但仍由用户确认。
+- LLM handoff draft：从 session 结束摘要自动生成更高质量 handoff，但仍由用户确认。
 - 结构化 YAML 解析：不再只扫 raw text。
 - 更细的 memory schema：把 tool recipe、pitfall、validation 真正拆开。
 - 命中日志：记录某条 memory 是否被召回、是否有用。

@@ -133,8 +133,22 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         - `记录当前进展`
         - `下次接着做`
         - `保存一个 handoff`
+        - `生成 handoff draft`
 
-        Summarize the current thread into a short handoff, then run:
+        If a session note, transcript, or summary file is available, draft first:
+
+        ```bash
+        {command_prefix} handoff draft --from-file "<path-to-session-notes>"
+        ```
+
+        After the user accepts the draft, save it:
+
+        ```bash
+        {command_prefix} handoff draft --from-file "<path-to-session-notes>" --save
+        ```
+
+        If no source file is available, summarize the current thread into a
+        short handoff, then run:
 
         ```bash
         {command_prefix} handoff save \\

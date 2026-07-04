@@ -6,6 +6,7 @@
 agents-install 安装 + agents-doctor 自检
   -> Codex 自然语言识别 recall / remember
   -> MemAgent 本地写入和召回 memory
+  -> 从 session notes 生成 handoff draft
   -> 保存 handoff 并在新会话 catch up
   -> 短上下文拼给 Codex
 ```
@@ -30,10 +31,11 @@ local_memory_demo/demo_run/
   memagent_home/
     memories/
     handoffs/
+  session_notes.md
   transcript.md
 ```
 
-`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run、handoff save/show 的命令和输出。
+`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run、handoff draft/save/show 的命令和输出。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -208,16 +210,40 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 
 ## 8. 演示 handoff / catch-up
 
-保存当前线程交接：
+准备一份 session notes：
 
 ```bash
-MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff save \
+cat > local_memory_demo/agents_flow/session_notes.md <<'EOF'
+## Summary
+Demo session wired AGENTS.md, saved one attribution accuracy memory, and verified recall plus Codex prompt patch.
+
+## Done
+- Installed AGENTS.md block.
+- Verified recall with sources and reasons.
+
+## Next Steps
+- Use the handoff as the next-session catch-up context.
+
+## Open Questions
+- Should handoff drafts be generated automatically from session logs?
+EOF
+```
+
+先生成可审阅草稿：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff draft \
+  --from-file local_memory_demo/agents_flow/session_notes.md \
+  --topic "Demo continuation handoff"
+```
+
+确认草稿没问题后保存：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff draft \
+  --from-file local_memory_demo/agents_flow/session_notes.md \
   --topic "Demo continuation handoff" \
-  --done "Installed AGENTS.md block." \
-  --done "Verified recall with sources and reasons." \
-  --next-step "Use the handoff as the next-session catch-up context." \
-  --open-question "Should handoff drafts be generated automatically from session logs?" \
-  "Demo session wired AGENTS.md, saved one attribution accuracy memory, and verified recall plus Codex prompt patch."
+  --save
 ```
 
 新会话开始时 catch up：
@@ -230,6 +256,7 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 
 - handoff 是最近项目状态，解决“上次做到哪”。
 - memory card 是长期经验，解决“类似问题下次怎么做”。
+- `handoff draft` 是写入前的可审阅草稿，避免 agent 自动污染长期或近期状态。
 
 ## 9. Demo 讲解词
 

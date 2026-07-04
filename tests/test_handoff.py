@@ -8,7 +8,7 @@ import unittest
 
 from memagent.cli import main
 from memagent.context import ProjectContext
-from memagent.handoff import HandoffStore, project_handoff_key
+from memagent.handoff import HandoffStore, draft_handoff_from_text, project_handoff_key
 
 
 def project_context(project: Path) -> ProjectContext:
@@ -23,6 +23,37 @@ def project_context(project: Path) -> ProjectContext:
 
 
 class HandoffStoreTest(unittest.TestCase):
+    def test_draft_handoff_from_markdown_sections(self) -> None:
+        draft = draft_handoff_from_text(
+            "\n".join(
+                [
+                    "# Session Notes",
+                    "",
+                    "## Summary",
+                    "Wired AGENTS.md and verified explainable recall.",
+                    "",
+                    "## Done",
+                    "- Added handoff draft command.",
+                    "- Verified tests passed.",
+                    "",
+                    "## Next Steps",
+                    "- Add MCP draft tool.",
+                    "",
+                    "## Open Questions",
+                    "- Should LLM extraction replace this rule parser?",
+                    "",
+                    "## Memory Candidates",
+                    "- Handoff draft should stay reviewable before save.",
+                ]
+            ),
+            topic=None,
+        )
+        self.assertEqual(draft.topic, "Wired AGENTS.md and verified explainable recall.")
+        self.assertIn("Added handoff draft command.", draft.done)
+        self.assertIn("Add MCP draft tool.", draft.next_steps)
+        self.assertIn("Should LLM extraction replace this rule parser?", draft.open_questions)
+        self.assertIn("Handoff draft should stay reviewable before save.", draft.memory_candidates)
+
     def test_save_and_show_latest_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
@@ -101,6 +132,49 @@ class HandoffStoreTest(unittest.TestCase):
             output = stdout.getvalue()
             self.assertIn("CLI handoff", output)
             self.assertIn("Run full validation", output)
+
+    def test_handoff_cli_draft_and_save(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project = Path(tmp) / "project"
+            project.mkdir()
+            source = Path(tmp) / "notes.md"
+            source.write_text(
+                "\n".join(
+                    [
+                        "## Summary",
+                        "Drafted handoff from notes.",
+                        "",
+                        "## Done",
+                        "- Added CLI draft path.",
+                        "",
+                        "## Next Steps",
+                        "- Document the draft flow.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "handoff",
+                        "draft",
+                        "--cwd",
+                        str(project),
+                        "--from-file",
+                        str(source),
+                        "--save",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            output = stdout.getvalue()
+            self.assertIn("[MemAgent handoff draft]", output)
+            self.assertIn("Added CLI draft path.", output)
+            self.assertIn("[MemAgent handoff saved]", output)
+            self.assertTrue(any((home / "handoffs").glob("*/latest.md")))
 
 
 if __name__ == "__main__":

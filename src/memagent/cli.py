@@ -15,7 +15,7 @@ from memagent.agents import (
 from memagent.context import detect_context
 from memagent.demo import run_demo
 from memagent.eval import run_recall_eval
-from memagent.handoff import HandoffStore
+from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
@@ -291,6 +291,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not print the handoff file path.",
     )
 
+    handoff_draft = handoff_subparsers.add_parser(
+        "draft",
+        help="Draft a handoff from a Markdown/session note file.",
+    )
+    handoff_draft.add_argument(
+        "--from-file",
+        required=True,
+        help='Source Markdown/session note file. Use "-" to read stdin.',
+    )
+    handoff_draft.add_argument("--topic", help="Override the draft topic.")
+    handoff_draft.add_argument(
+        "--cwd",
+        help="Project directory. Defaults to the current working directory.",
+    )
+    handoff_draft.add_argument(
+        "--max-items",
+        type=int,
+        default=5,
+        help="Maximum items per draft section. Default: 5.",
+    )
+    handoff_draft.add_argument(
+        "--save",
+        action="store_true",
+        help="Save the draft as the latest handoff after printing it.",
+    )
+
     return parser
 
 
@@ -406,6 +432,26 @@ def main(argv: list[str] | None = None) -> int:
                     show_source=not args.no_source,
                 )
             )
+            return 0
+        if args.handoff_command == "draft":
+            source_path = None if args.from_file == "-" else Path(args.from_file).expanduser().resolve()
+            source_text = sys.stdin.read() if args.from_file == "-" else source_path.read_text(encoding="utf-8")
+            try:
+                draft = draft_handoff_from_text(
+                    source_text,
+                    topic=args.topic,
+                    max_items=args.max_items,
+                )
+            except ValueError as exc:
+                parser.error(str(exc))
+            print(render_handoff_draft(draft, source=source_path))
+            if args.save:
+                saved = handoff_store.save_draft(context=context, draft=draft)
+                print("")
+                print("[MemAgent handoff saved]")
+                print(f"- project key: {saved.project_key}")
+                print(f"- latest: {saved.latest_path}")
+                print(f"- history: {saved.history_path}")
             return 0
 
     if args.command == "recall":

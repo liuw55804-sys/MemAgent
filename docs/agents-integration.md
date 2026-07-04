@@ -112,8 +112,23 @@ When the user says:
 - `记录当前进展`
 - `下次接着做`
 - `保存一个 handoff`
+- `生成 handoff draft`
 
-Codex should summarize the current thread and call:
+If a session note, transcript, or summary file is available, Codex should draft
+first:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff draft --from-file "path/to/session_notes.md"
+```
+
+After the user accepts the draft, Codex can save it:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff draft --from-file "path/to/session_notes.md" --save
+```
+
+If no source file is available, Codex should summarize the current thread and
+call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff save \

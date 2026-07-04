@@ -39,6 +39,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_agents_doctor",
                     "memagent_handoff_save",
                     "memagent_handoff_show",
+                    "memagent_handoff_draft",
                 ],
             )
 
@@ -137,6 +138,42 @@ class McpServerTest(unittest.TestCase):
             text = show_response["result"]["content"][0]["text"]
             self.assertIn("MCP handoff", text)
             self.assertIn("Run MCP tests", text)
+
+    def test_handoff_draft_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            server = McpServer.from_home_arg(str(Path(tmp) / "home"), "/tmp/memagent")
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_handoff_draft",
+                        "arguments": {
+                            "text": "\n".join(
+                                [
+                                    "## Summary",
+                                    "Drafted MCP handoff.",
+                                    "",
+                                    "## Done",
+                                    "- Added MCP draft tool.",
+                                    "",
+                                    "## Next Steps",
+                                    "- Run full tests.",
+                                ]
+                            ),
+                            "save": True,
+                            "cwd": str(project),
+                        },
+                    },
+                }
+            )
+            text = response["result"]["content"][0]["text"]
+            self.assertIn("[MemAgent handoff draft]", text)
+            self.assertIn("Added MCP draft tool.", text)
+            self.assertIn("[MemAgent handoff saved]", text)
 
     def test_stdio_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

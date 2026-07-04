@@ -24,6 +24,16 @@ class HandoffMatch:
     text: str
 
 
+@dataclass(frozen=True)
+class HandoffDraft:
+    topic: str
+    summary: str
+    done: tuple[str, ...]
+    next_steps: tuple[str, ...]
+    open_questions: tuple[str, ...]
+    memory_candidates: tuple[str, ...]
+
+
 class HandoffStore:
     def __init__(self, home: Path) -> None:
         self.home = home.expanduser().resolve()
@@ -68,6 +78,17 @@ class HandoffStore:
         history_path.write_text(body, encoding="utf-8")
         return SavedHandoff(latest_path=latest_path, history_path=history_path, project_key=project_key)
 
+    def save_draft(self, *, context: ProjectContext, draft: HandoffDraft) -> SavedHandoff:
+        return self.save(
+            context=context,
+            summary=draft.summary,
+            topic=draft.topic,
+            done=list(draft.done),
+            next_steps=list(draft.next_steps),
+            open_questions=list(draft.open_questions),
+            memory_candidates=list(draft.memory_candidates),
+        )
+
     def latest(self, *, context: ProjectContext) -> HandoffMatch | None:
         project_key = project_handoff_key(context)
         path = self.handoffs_dir / project_key / "latest.md"
@@ -101,6 +122,79 @@ class HandoffStore:
         remaining = max(max_lines - len(lines), 1)
         lines.extend(_trim_lines(_content_lines(latest.text), remaining))
         return "\n".join(lines)
+
+
+def draft_handoff_from_text(
+    text: str,
+    *,
+    topic: str | None = None,
+    max_items: int = 5,
+) -> HandoffDraft:
+    cleaned = text.strip()
+    if not cleaned:
+        raise ValueError("handoff draft source cannot be empty")
+    max_items = max(max_items, 1)
+    sections = _extract_sections(cleaned)
+    plain_lines = [_clean(_strip_markdown_prefix(line)) for line in cleaned.splitlines()]
+    plain_lines = [line for line in plain_lines if line]
+
+    summary = _first_section_text(sections, SUMMARY_HEADINGS) or _first_paragraph(cleaned)
+    done = _items_from_sections(sections, DONE_HEADINGS, max_items=max_items)
+    if not done:
+        done = _keyword_items(plain_lines, DONE_KEYWORDS, max_items=max_items)
+    next_steps = _items_from_sections(sections, NEXT_HEADINGS, max_items=max_items)
+    if not next_steps:
+        next_steps = _keyword_items(plain_lines, NEXT_KEYWORDS, max_items=max_items)
+    open_questions = _items_from_sections(sections, OPEN_HEADINGS, max_items=max_items)
+    if not open_questions:
+        open_questions = _question_items(plain_lines, max_items=max_items)
+    memory_candidates = _items_from_sections(sections, MEMORY_HEADINGS, max_items=max_items)
+    if not memory_candidates:
+        memory_candidates = _keyword_items(plain_lines, MEMORY_KEYWORDS, max_items=max_items)
+
+    topic_value = _clean(topic or "") or _derive_draft_topic(summary, plain_lines)
+    return HandoffDraft(
+        topic=topic_value,
+        summary=summary,
+        done=tuple(done),
+        next_steps=tuple(next_steps),
+        open_questions=tuple(open_questions),
+        memory_candidates=tuple(memory_candidates),
+    )
+
+
+def render_handoff_draft(draft: HandoffDraft, *, source: Path | None = None) -> str:
+    lines = [
+        "[MemAgent handoff draft]",
+        f"- Topic: {draft.topic}",
+    ]
+    if source is not None:
+        lines.append(f"- Source: {source}")
+    lines.extend(
+        [
+            "",
+            "## Summary",
+            "",
+            draft.summary,
+            "",
+            "## Done",
+            "",
+            *_bullet_lines(list(draft.done), fallback="No completed work detected."),
+            "",
+            "## Next Steps",
+            "",
+            *_bullet_lines(list(draft.next_steps), fallback="No next step detected."),
+            "",
+            "## Open Questions",
+            "",
+            *_bullet_lines(list(draft.open_questions), fallback="No open question detected."),
+            "",
+            "## Memory Candidates",
+            "",
+            *_bullet_lines(list(draft.memory_candidates), fallback="No durable memory candidate detected."),
+        ]
+    )
+    return "\n".join(lines)
 
 
 def project_handoff_key(context: ProjectContext) -> str:
@@ -189,6 +283,166 @@ def _content_lines(text: str) -> list[str]:
             skip_metadata = False
         if not skip_metadata:
             result.append(line)
+    return result
+
+
+SUMMARY_HEADINGS = ("summary", "概要", "总结", "本轮总结", "session summary")
+DONE_HEADINGS = ("done", "completed", "已完成", "完成", "本轮完成", "progress", "变更", "changes")
+NEXT_HEADINGS = ("next", "next steps", "todo", "todos", "下一步", "后续", "待办")
+OPEN_HEADINGS = ("open", "open questions", "questions", "问题", "开放问题")
+MEMORY_HEADINGS = ("memory", "memory candidates", "lessons", "经验", "可沉淀", "候选记忆")
+
+DONE_KEYWORDS = (
+    "done",
+    "completed",
+    "implemented",
+    "added",
+    "verified",
+    "passed",
+    "已完成",
+    "完成",
+    "新增",
+    "实现",
+    "验证",
+    "通过",
+)
+NEXT_KEYWORDS = (
+    "next",
+    "todo",
+    "follow up",
+    "should",
+    "need to",
+    "下一步",
+    "后续",
+    "待办",
+    "需要",
+    "可以继续",
+)
+MEMORY_KEYWORDS = (
+    "memory",
+    "remember",
+    "lesson",
+    "pitfall",
+    "recipe",
+    "handoff",
+    "记忆",
+    "沉淀",
+    "经验",
+    "下次",
+    "坑",
+)
+
+
+def _extract_sections(text: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current = "preamble"
+    for raw_line in text.splitlines():
+        heading = _heading_text(raw_line)
+        if heading:
+            current = heading
+            sections.setdefault(current, [])
+            continue
+        sections.setdefault(current, []).append(raw_line)
+    return sections
+
+
+def _heading_text(line: str) -> str | None:
+    match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", line)
+    if not match:
+        return None
+    return _clean(match.group(1).strip("#")).lower()
+
+
+def _first_section_text(sections: dict[str, list[str]], aliases: tuple[str, ...]) -> str | None:
+    for lines in _matching_sections(sections, aliases):
+        paragraph = _first_clean_paragraph(lines)
+        if paragraph:
+            return paragraph
+    return None
+
+
+def _items_from_sections(
+    sections: dict[str, list[str]],
+    aliases: tuple[str, ...],
+    *,
+    max_items: int,
+) -> list[str]:
+    items: list[str] = []
+    for lines in _matching_sections(sections, aliases):
+        for line in lines:
+            item = _clean(_strip_markdown_prefix(line))
+            if item:
+                items.append(item)
+            if len(items) >= max_items:
+                return _dedupe(items)
+    return _dedupe(items)[:max_items]
+
+
+def _matching_sections(sections: dict[str, list[str]], aliases: tuple[str, ...]) -> list[list[str]]:
+    matches: list[list[str]] = []
+    for heading, lines in sections.items():
+        if any(alias in heading for alias in aliases):
+            matches.append(lines)
+    return matches
+
+
+def _first_paragraph(text: str) -> str:
+    paragraph = _first_clean_paragraph(text.splitlines())
+    return paragraph or "No summary detected."
+
+
+def _first_clean_paragraph(lines: list[str]) -> str | None:
+    collected: list[str] = []
+    for raw_line in lines:
+        line = _clean(_strip_markdown_prefix(raw_line))
+        if not line:
+            if collected:
+                break
+            continue
+        if line.startswith("#"):
+            continue
+        collected.append(line)
+        if len(" ".join(collected)) >= 160:
+            break
+    return " ".join(collected) if collected else None
+
+
+def _keyword_items(lines: list[str], keywords: tuple[str, ...], *, max_items: int) -> list[str]:
+    items = [line for line in lines if any(keyword.lower() in line.lower() for keyword in keywords)]
+    return _dedupe(items)[:max_items]
+
+
+def _question_items(lines: list[str], *, max_items: int) -> list[str]:
+    items = [
+        line
+        for line in lines
+        if "?" in line or "？" in line or "问题" in line or "是否" in line
+    ]
+    return _dedupe(items)[:max_items]
+
+
+def _strip_markdown_prefix(line: str) -> str:
+    stripped = line.strip()
+    stripped = re.sub(r"^[-*+]\s+", "", stripped)
+    stripped = re.sub(r"^\d+[.)]\s+", "", stripped)
+    stripped = re.sub(r"^>\s*", "", stripped)
+    return stripped.strip()
+
+
+def _derive_draft_topic(summary: str, lines: list[str]) -> str:
+    source = summary if summary != "No summary detected." else (lines[0] if lines else "Project handoff")
+    return source[:60]
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
     return result
 
 

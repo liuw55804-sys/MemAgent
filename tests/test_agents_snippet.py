@@ -29,6 +29,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn("沉淀一下", snippet)
         self.assertIn("上次做到哪", snippet)
         self.assertIn("交接一下", snippet)
+        self.assertIn("handoff draft", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli recall", snippet)
         self.assertIn("--show-sources --show-reasons", snippet)
         self.assertIn("--strategy bm25", snippet)

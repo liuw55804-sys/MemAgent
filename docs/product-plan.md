@@ -101,6 +101,7 @@ MemAgent 要重点解决的是：
 - **协议可扩展**：通过 `mcp-stdio` 把 recall、remember、doctor 暴露成 MCP tools，服务未来 Cursor、Claude Code 等 MCP client。
 - **召回可评估**：通过 `recall-eval` 用 mock benchmark 对比 BM25 和 keyword baseline，输出 hit@1 / MRR 报告。
 - **交接可延续**：通过 `handoff save/show` 保存每个项目最近一次交接状态，让新会话可以先 catch up，再决定是否召回长期 memory。
+- **交接可草稿化**：通过 `handoff draft --from-file` 从线程笔记或 transcript 生成可审阅 handoff draft，用户确认后再 `--save`。
 - **经验生命周期**：区分一次性上下文、可复用 workflow、可升格 `AGENTS.md` 的稳定规则。
 - **跨 coding agent**：当前主攻 Codex，但 memory card 设计不绑定 Codex，未来可以服务 Cursor、Claude Code 等 coding agent。
 

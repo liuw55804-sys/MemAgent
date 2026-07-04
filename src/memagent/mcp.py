@@ -8,7 +8,7 @@ from typing import Any, TextIO
 
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
-from memagent.handoff import HandoffStore
+from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
 from memagent.memory import MemoryStore
 
 
@@ -105,6 +105,8 @@ class McpServer:
             return _tool_text(self._tool_handoff_save(arguments))
         if name == "memagent_handoff_show":
             return _tool_text(self._tool_handoff_show(arguments))
+        if name == "memagent_handoff_draft":
+            return _tool_text(self._tool_handoff_draft(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -178,6 +180,28 @@ class McpServer:
             context=context,
             max_lines=_optional_int(arguments, "max_lines", 40),
             show_source=_optional_bool(arguments, "show_source", True),
+        )
+
+    def _tool_handoff_draft(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        draft = draft_handoff_from_text(
+            _required_str(arguments, "text"),
+            topic=_optional_str(arguments, "topic"),
+            max_items=_optional_int(arguments, "max_items", 5),
+        )
+        rendered = render_handoff_draft(draft)
+        if not _optional_bool(arguments, "save", False):
+            return rendered
+        saved = self.handoff_store.save_draft(context=context, draft=draft)
+        return "\n".join(
+            [
+                rendered,
+                "",
+                "[MemAgent handoff saved]",
+                f"- project key: {saved.project_key}",
+                f"- latest: {saved.latest_path}",
+                f"- history: {saved.history_path}",
+            ]
         )
 
 
@@ -289,6 +313,23 @@ def tool_definitions() -> list[dict[str, Any]]:
                     "max_lines": {"type": "integer", "description": "Maximum lines to return."},
                     "show_source": {"type": "boolean", "description": "Include the handoff file path."},
                 },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_handoff_draft",
+            "title": "Draft MemAgent Handoff",
+            "description": "Draft a project handoff from session notes, optionally saving it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Session notes or transcript text."},
+                    "topic": {"type": "string", "description": "Optional draft topic override."},
+                    "max_items": {"type": "integer", "description": "Maximum items per draft section."},
+                    "save": {"type": "boolean", "description": "Save the draft as the latest handoff."},
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                },
+                "required": ["text"],
                 "additionalProperties": False,
             },
         },

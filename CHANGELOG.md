@@ -19,10 +19,13 @@ Added:
 - BM25-style recall scoring as the default strategy, with `--strategy keyword` retained as a baseline.
 - `recall-eval` command to run a mock retrieval benchmark and write a Markdown report.
 - `handoff save/show` commands for per-project cross-session catch-up.
+- `handoff draft --from-file` to generate a reviewable handoff draft from session notes before saving.
 - MCP tools for saving and showing project handoffs.
+- MCP tool for drafting and optionally saving handoffs from session text.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
 - v0.11 handoff design note for separating recent continuation state from durable workflow memory.
+- v0.12 handoff draft design note for draft-review-save capture.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
@@ -35,6 +38,7 @@ Changed:
 - Demo documentation now points to the generated transcript flow as the fastest presentation path.
 - Generated AGENTS.md recall commands now explicitly use `--strategy bm25`.
 - Generated AGENTS.md snippets now include handoff/catch-up natural-language triggers.
+- Generated AGENTS.md snippets now recommend draft-first handoff capture when a session note file is available.
 
 ## v0.1.0-mvp - 2026-06-23
 
