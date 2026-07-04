@@ -8,7 +8,12 @@ import unittest
 
 from memagent.cli import main
 from memagent.context import ProjectContext
-from memagent.handoff import HandoffStore, draft_handoff_from_text, project_handoff_key
+from memagent.handoff import (
+    HandoffStore,
+    draft_handoff_from_text,
+    memory_candidates_from_handoff,
+    project_handoff_key,
+)
 
 
 def project_context(project: Path) -> ProjectContext:
@@ -16,7 +21,7 @@ def project_context(project: Path) -> ProjectContext:
         cwd=project,
         git_root=project,
         branch="main",
-        repo_name="demo",
+        repo_name=project.name,
         recent_files=(),
         agents_files=(),
     )
@@ -79,6 +84,9 @@ class HandoffStoreTest(unittest.TestCase):
             self.assertIn("Demo handoff", rendered)
             self.assertIn("Installed AGENTS.md integration", rendered)
             self.assertIn("Add MCP handoff tools", rendered)
+
+            candidates = memory_candidates_from_handoff(saved.latest_path.read_text(encoding="utf-8"))
+            self.assertEqual(candidates, ("Handoff should stay separate from durable memory.",))
 
     def test_show_without_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -175,6 +183,62 @@ class HandoffStoreTest(unittest.TestCase):
             self.assertIn("Added CLI draft path.", output)
             self.assertIn("[MemAgent handoff saved]", output)
             self.assertTrue(any((home / "handoffs").glob("*/latest.md")))
+
+    def test_handoff_cli_promote_preview_and_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project = Path(tmp) / "project"
+            project.mkdir()
+            context = project_context(project)
+            store = HandoffStore(home)
+            store.save(
+                context=context,
+                summary="Ready to promote a candidate.",
+                topic="Promotion handoff",
+                done=[],
+                next_steps=[],
+                open_questions=[],
+                memory_candidates=["Promote this lesson into durable memory."],
+            )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "handoff",
+                        "promote",
+                        "--cwd",
+                        str(project),
+                        "--index",
+                        "1",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("preview only", stdout.getvalue())
+            self.assertEqual(list((home / "memories").glob("*.memory.yaml")), [])
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "handoff",
+                        "promote",
+                        "--cwd",
+                        str(project),
+                        "--index",
+                        "1",
+                        "--write",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Status: promoted", stdout.getvalue())
+            cards = list((home / "memories").glob("*.memory.yaml"))
+            self.assertEqual(len(cards), 1)
+            self.assertIn("Promote this lesson", cards[0].read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_handoff_save",
                     "memagent_handoff_show",
                     "memagent_handoff_draft",
+                    "memagent_handoff_promote",
                 ],
             )
 
@@ -174,6 +175,48 @@ class McpServerTest(unittest.TestCase):
             self.assertIn("[MemAgent handoff draft]", text)
             self.assertIn("Added MCP draft tool.", text)
             self.assertIn("[MemAgent handoff saved]", text)
+
+    def test_handoff_promote_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            home = Path(tmp) / "home"
+            server = McpServer.from_home_arg(str(home), "/tmp/memagent")
+            server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_handoff_save",
+                        "arguments": {
+                            "summary": "Promotion source handoff.",
+                            "topic": "Promotion",
+                            "memory_candidates": ["MCP promotion should create memory."],
+                            "cwd": str(project),
+                        },
+                    },
+                }
+            )
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_handoff_promote",
+                        "arguments": {
+                            "cwd": str(project),
+                            "indices": [1],
+                            "write": True,
+                        },
+                    },
+                }
+            )
+            text = response["result"]["content"][0]["text"]
+            self.assertIn("MCP promotion should create memory", text)
+            self.assertIn("Status: promoted", text)
+            self.assertEqual(len(list((home / "memories").glob("*.memory.yaml"))), 1)
 
     def test_stdio_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

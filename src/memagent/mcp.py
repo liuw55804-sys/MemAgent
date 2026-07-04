@@ -8,7 +8,12 @@ from typing import Any, TextIO
 
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
-from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
+from memagent.handoff import (
+    HandoffStore,
+    draft_handoff_from_text,
+    render_handoff_draft,
+    render_promotion_preview,
+)
 from memagent.memory import MemoryStore
 
 
@@ -107,6 +112,8 @@ class McpServer:
             return _tool_text(self._tool_handoff_show(arguments))
         if name == "memagent_handoff_draft":
             return _tool_text(self._tool_handoff_draft(arguments))
+        if name == "memagent_handoff_promote":
+            return _tool_text(self._tool_handoff_promote(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -203,6 +210,35 @@ class McpServer:
                 f"- history: {saved.history_path}",
             ]
         )
+
+    def _tool_handoff_promote(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        write = _optional_bool(arguments, "write", False)
+        selection = self.handoff_store.promotion_selection(
+            context=context,
+            indices=_optional_int_list(arguments, "indices"),
+            select_all=_optional_bool(arguments, "all", False),
+        )
+        lines = [render_promotion_preview(selection, write=write)]
+        if write:
+            kind = _optional_str(arguments, "kind") or "workflow"
+            module = _optional_str(arguments, "module")
+            triggers = _optional_str_list(arguments, "triggers")
+            exportable = _optional_bool(arguments, "exportable", False)
+            for index, candidate in zip(selection.selected_indices, selection.selected_candidates):
+                saved = self.store.remember(
+                    text=candidate,
+                    topic=f"Handoff candidate {index}: {candidate[:48]}",
+                    domain="coding",
+                    kind=kind,
+                    repo=context.repo_name,
+                    module=module,
+                    triggers=triggers,
+                    exportable=exportable,
+                )
+                lines.append(f"- Saved memory: {saved.path}")
+            lines.append("- Status: promoted")
+        return "\n".join(lines)
 
 
 def tool_definitions() -> list[dict[str, Any]]:
@@ -333,6 +369,33 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "memagent_handoff_promote",
+            "title": "Promote MemAgent Handoff Candidate",
+            "description": "Promote memory candidates from the latest handoff into durable memory cards.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                    "indices": {
+                        "type": "array",
+                        "description": "1-based memory candidate indices. Default: [1].",
+                        "items": {"type": "integer"},
+                    },
+                    "all": {"type": "boolean", "description": "Promote all candidates."},
+                    "kind": {"type": "string", "description": "Memory kind for promoted cards."},
+                    "module": {"type": "string", "description": "Module or subsystem scope."},
+                    "triggers": {
+                        "type": "array",
+                        "description": "Extra recall trigger keywords.",
+                        "items": {"type": "string"},
+                    },
+                    "exportable": {"type": "boolean", "description": "Whether promoted cards are exportable."},
+                    "write": {"type": "boolean", "description": "Actually save memory cards. Default is preview."},
+                },
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -448,4 +511,13 @@ def _optional_str_list(arguments: dict[str, Any], key: str) -> list[str]:
         return []
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError(f"{key} must be an array of strings")
+    return value
+
+
+def _optional_int_list(arguments: dict[str, Any], key: str) -> list[int]:
+    value = arguments.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(item, int) for item in value):
+        raise ValueError(f"{key} must be an array of integers")
     return value

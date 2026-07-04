@@ -143,6 +143,26 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 Use `handoff` for recent continuation state. Use `remember` only for durable
 workflow lessons that should be reusable beyond this one continuation.
 
+When the user says:
+
+- `把 handoff 里的候选记忆沉淀一下`
+- `promote handoff candidate`
+- `把这条 handoff candidate 变成长期 memory`
+
+Codex should preview first:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff promote --index 1
+```
+
+Only after the user accepts the preview, Codex should write:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli handoff promote --index 1 --write
+```
+
+Promotion writes durable memory cards, so do not skip the preview step.
+
 ## Safety
 
 - Treat recalled memories as hints, not source of truth.

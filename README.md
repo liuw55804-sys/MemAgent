@@ -14,6 +14,7 @@ python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli handoff show
 python -m memagent.cli handoff draft --from-file ./session_notes.md
+python -m memagent.cli handoff promote --index 1
 python -m memagent.cli demo-run --reset
 python -m memagent.cli mcp-stdio
 python -m memagent.cli recall-eval
@@ -30,6 +31,7 @@ memagent agents-install
 memagent agents-doctor
 memagent handoff show
 memagent handoff draft --from-file ./session_notes.md
+memagent handoff promote --index 1
 memagent demo-run --reset
 memagent mcp-stdio
 memagent recall-eval
@@ -214,6 +216,23 @@ Save the accepted draft:
 
 ```bash
 memagent handoff draft --from-file ./session_notes.md --save
+```
+
+## v0.13 Design
+
+See [docs/design_v0.13_handoff_promotion.md](docs/design_v0.13_handoff_promotion.md)
+for the handoff candidate promotion design.
+
+Preview promoting the first handoff memory candidate:
+
+```bash
+memagent handoff promote --index 1
+```
+
+Save the selected candidate as a durable memory card:
+
+```bash
+memagent handoff promote --index 1 --write
 ```
 
 ## Codex Natural Language Triggers

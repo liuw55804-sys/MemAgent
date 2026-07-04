@@ -23,10 +23,11 @@ class DemoRunTest(unittest.TestCase):
             self.assertTrue(result.transcript_path.exists())
             self.assertTrue((result.project_dir / "AGENTS.md").exists())
             self.assertIn(MEMAGENT_BLOCK_START, (result.project_dir / "AGENTS.md").read_text(encoding="utf-8"))
-            self.assertEqual(len(list((result.memory_home / "memories").glob("*.memory.yaml"))), 1)
+            self.assertEqual(len(list((result.memory_home / "memories").glob("*.memory.yaml"))), 2)
             self.assertIn("Status: ready", result.transcript)
             self.assertIn("Demo attribution accuracy entrypoint", result.transcript)
             self.assertIn("Demo continuation handoff", result.transcript)
+            self.assertIn("Promote handoff memory candidate", result.transcript)
             self.assertTrue((result.memory_home / "handoffs").exists())
             self.assertIn("[User task]", result.transcript)
 

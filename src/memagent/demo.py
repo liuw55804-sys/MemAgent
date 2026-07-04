@@ -14,7 +14,12 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
-from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
+from memagent.handoff import (
+    HandoffStore,
+    draft_handoff_from_text,
+    render_handoff_draft,
+    render_promotion_preview,
+)
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
 
@@ -230,6 +235,53 @@ def run_demo(
             title="Catch up from latest handoff",
             command=f"{command_prefix} handoff show",
             output=handoff_store.compose_latest(context=recall_context, max_lines=40, show_source=True),
+        )
+    )
+
+    promotion = handoff_store.promotion_selection(
+        context=recall_context,
+        indices=[1],
+        select_all=False,
+    )
+    promoted = store.remember(
+        text=promotion.selected_candidates[0],
+        topic=f"Handoff candidate 1: {promotion.selected_candidates[0][:48]}",
+        domain="coding",
+        kind="workflow",
+        repo=recall_context.repo_name,
+        module=None,
+        triggers=["handoff", "demo"],
+        exportable=True,
+    )
+    steps.append(
+        DemoStep(
+            title="Promote handoff memory candidate",
+            command=f"{command_prefix} handoff promote --index 1 --kind workflow --trigger handoff --trigger demo --exportable --write",
+            output="\n".join(
+                [
+                    render_promotion_preview(promotion, write=True),
+                    f"- Saved memory: {promoted.path}",
+                    "- Status: promoted",
+                ]
+            ),
+        )
+    )
+
+    promoted_query = "Codex demos benefit from showing handoff before recall"
+    promoted_matches = store.recall(promoted_query, context=recall_context, limit=5)
+    promoted_context = store.compose_context(
+        query=promoted_query,
+        context=recall_context,
+        matches=promoted_matches,
+        max_lines=12,
+        show_sources=True,
+        show_reasons=True,
+    )
+    steps.append(
+        DemoStep(
+            title="Recall promoted handoff memory",
+            command=f"{command_prefix} recall {_quote(promoted_query)} --show-sources --show-reasons --strategy bm25",
+            output=promoted_context,
         )
     )
 

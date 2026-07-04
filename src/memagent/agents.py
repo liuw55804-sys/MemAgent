@@ -163,6 +163,26 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         Use handoff for recent project state. Use `remember` only for durable
         lessons that should be reusable beyond the current continuation.
 
+        ### Promote Handoff Candidates
+
+        When the user says phrases like:
+
+        - `把 handoff 里的候选记忆沉淀一下`
+        - `promote handoff candidate`
+        - `把这条 handoff candidate 变成长期 memory`
+
+        Preview the promotion first:
+
+        ```bash
+        {command_prefix} handoff promote --index 1
+        ```
+
+        Only after the user accepts the preview, write the memory card:
+
+        ```bash
+        {command_prefix} handoff promote --index 1 --write
+        ```
+
         ### Safety
 
         - Treat recalled memories as hints, not source of truth.

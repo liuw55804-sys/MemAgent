@@ -8,6 +8,8 @@ agents-install 安装 + agents-doctor 自检
   -> MemAgent 本地写入和召回 memory
   -> 从 session notes 生成 handoff draft
   -> 保存 handoff 并在新会话 catch up
+  -> promote handoff memory candidate
+  -> recall promoted memory
   -> 短上下文拼给 Codex
 ```
 
@@ -35,7 +37,7 @@ local_memory_demo/demo_run/
   transcript.md
 ```
 
-`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run、handoff draft/save/show 的命令和输出。
+`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run、handoff draft/save/show、handoff promote、promoted recall 的命令和输出。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -257,6 +259,26 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 - handoff 是最近项目状态，解决“上次做到哪”。
 - memory card 是长期经验，解决“类似问题下次怎么做”。
 - `handoff draft` 是写入前的可审阅草稿，避免 agent 自动污染长期或近期状态。
+
+如果 handoff 中的 `Memory Candidates` 确实值得长期复用，可以先预览 promotion：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff promote --index 1
+```
+
+确认后写入长期 memory：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli handoff promote --index 1 --write
+```
+
+然后可以再次 recall，证明它已经进入长期 memory card：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli recall \
+  "Codex demos benefit from showing handoff before recall" \
+  --show-sources --show-reasons --strategy bm25
+```
 
 ## 9. Demo 讲解词
 

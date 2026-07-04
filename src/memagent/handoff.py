@@ -34,6 +34,14 @@ class HandoffDraft:
     memory_candidates: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class HandoffPromotionSelection:
+    source_path: Path
+    candidates: tuple[str, ...]
+    selected_indices: tuple[int, ...]
+    selected_candidates: tuple[str, ...]
+
+
 class HandoffStore:
     def __init__(self, home: Path) -> None:
         self.home = home.expanduser().resolve()
@@ -123,6 +131,32 @@ class HandoffStore:
         lines.extend(_trim_lines(_content_lines(latest.text), remaining))
         return "\n".join(lines)
 
+    def promotion_selection(
+        self,
+        *,
+        context: ProjectContext,
+        indices: list[int],
+        select_all: bool,
+    ) -> HandoffPromotionSelection:
+        latest = self.latest(context=context)
+        if latest is None:
+            raise ValueError("no handoff found for this project")
+        candidates = memory_candidates_from_handoff(latest.text)
+        if not candidates:
+            raise ValueError("latest handoff has no memory candidates to promote")
+        selected_indices = _select_candidate_indices(
+            candidate_count=len(candidates),
+            indices=indices,
+            select_all=select_all,
+        )
+        selected_candidates = tuple(candidates[index - 1] for index in selected_indices)
+        return HandoffPromotionSelection(
+            source_path=latest.path,
+            candidates=tuple(candidates),
+            selected_indices=tuple(selected_indices),
+            selected_candidates=selected_candidates,
+        )
+
 
 def draft_handoff_from_text(
     text: str,
@@ -194,6 +228,39 @@ def render_handoff_draft(draft: HandoffDraft, *, source: Path | None = None) -> 
             *_bullet_lines(list(draft.memory_candidates), fallback="No durable memory candidate detected."),
         ]
     )
+    return "\n".join(lines)
+
+
+def memory_candidates_from_handoff(text: str) -> tuple[str, ...]:
+    draft = draft_handoff_from_text(text)
+    candidates = [
+        candidate
+        for candidate in draft.memory_candidates
+        if candidate and not candidate.startswith("No long-term memory candidate")
+    ]
+    return tuple(candidates)
+
+
+def render_promotion_preview(selection: HandoffPromotionSelection, *, write: bool) -> str:
+    lines = [
+        "[MemAgent handoff promote]",
+        f"- source: {selection.source_path}",
+        f"- mode: {'write' if write else 'dry-run'}",
+        f"- candidates: {len(selection.candidates)}",
+        f"- selected: {', '.join(str(index) for index in selection.selected_indices)}",
+        "",
+        "## Selected Candidates",
+        "",
+    ]
+    for index, candidate in zip(selection.selected_indices, selection.selected_candidates):
+        lines.append(f"- {index}. {candidate}")
+    if not write:
+        lines.extend(
+            [
+                "",
+                "- Status: preview only; rerun with --write to save selected candidates as memory cards.",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -444,6 +511,26 @@ def _dedupe(items: list[str]) -> list[str]:
         seen.add(key)
         result.append(item)
     return result
+
+
+def _select_candidate_indices(
+    *,
+    candidate_count: int,
+    indices: list[int],
+    select_all: bool,
+) -> list[int]:
+    if select_all and indices:
+        raise ValueError("use either --all or --index, not both")
+    if select_all:
+        return list(range(1, candidate_count + 1))
+    selected = indices or [1]
+    deduped: list[int] = []
+    for index in selected:
+        if index < 1 or index > candidate_count:
+            raise ValueError(f"candidate index out of range: {index}")
+        if index not in deduped:
+            deduped.append(index)
+    return deduped
 
 
 def _slugify(value: str) -> str:

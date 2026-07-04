@@ -15,7 +15,12 @@ from memagent.agents import (
 from memagent.context import detect_context
 from memagent.demo import run_demo
 from memagent.eval import run_recall_eval
-from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
+from memagent.handoff import (
+    HandoffStore,
+    draft_handoff_from_text,
+    render_handoff_draft,
+    render_promotion_preview,
+)
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
@@ -317,6 +322,49 @@ def build_parser() -> argparse.ArgumentParser:
         help="Save the draft as the latest handoff after printing it.",
     )
 
+    handoff_promote = handoff_subparsers.add_parser(
+        "promote",
+        help="Promote memory candidates from the latest handoff into durable memory cards.",
+    )
+    handoff_promote.add_argument(
+        "--cwd",
+        help="Project directory. Defaults to the current working directory.",
+    )
+    handoff_promote.add_argument(
+        "--index",
+        action="append",
+        type=int,
+        default=[],
+        help="1-based memory candidate index to promote. Can be repeated. Default: 1.",
+    )
+    handoff_promote.add_argument(
+        "--all",
+        action="store_true",
+        help="Promote all memory candidates from the latest handoff.",
+    )
+    handoff_promote.add_argument(
+        "--kind",
+        default="workflow",
+        help="Memory kind for promoted cards. Default: workflow.",
+    )
+    handoff_promote.add_argument("--module", help="Module or subsystem scope for promoted cards.")
+    handoff_promote.add_argument(
+        "--trigger",
+        action="append",
+        default=[],
+        help="Extra recall trigger keyword for promoted cards. Can be repeated.",
+    )
+    handoff_promote.add_argument(
+        "--exportable",
+        action="store_true",
+        help="Mark promoted memory cards as exportable.",
+    )
+    handoff_promote.add_argument(
+        "--write",
+        action="store_true",
+        help="Write selected candidates as memory cards. Default is dry-run preview.",
+    )
+
     return parser
 
 
@@ -452,6 +500,31 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"- project key: {saved.project_key}")
                 print(f"- latest: {saved.latest_path}")
                 print(f"- history: {saved.history_path}")
+            return 0
+        if args.handoff_command == "promote":
+            try:
+                selection = handoff_store.promotion_selection(
+                    context=context,
+                    indices=args.index,
+                    select_all=args.all,
+                )
+                print(render_promotion_preview(selection, write=args.write))
+                if args.write:
+                    for index, candidate in zip(selection.selected_indices, selection.selected_candidates):
+                        saved = store.remember(
+                            text=candidate,
+                            topic=f"Handoff candidate {index}: {candidate[:48]}",
+                            domain="coding",
+                            kind=args.kind,
+                            repo=context.repo_name,
+                            module=args.module,
+                            triggers=args.trigger,
+                            exportable=args.exportable,
+                        )
+                        print(f"- Saved memory: {saved.path}")
+                    print("- Status: promoted")
+            except ValueError as exc:
+                parser.error(str(exc))
             return 0
 
     if args.command == "recall":
