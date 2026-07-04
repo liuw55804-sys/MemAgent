@@ -30,6 +30,8 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("Promote handoff memory candidate", result.transcript)
             self.assertIn('"schema_version": "memagent.recall.v1"', result.transcript)
             self.assertIn("[MemAgent recall traces]", result.transcript)
+            self.assertIn("[MemAgent recall trace labeled]", result.transcript)
+            self.assertIn("[MemAgent recall trace report]", result.transcript)
             self.assertTrue((result.memory_home / "handoffs").exists())
             self.assertTrue((result.memory_home / "recall_traces").exists())
             self.assertIn("[User task]", result.transcript)

@@ -275,6 +275,35 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the full saved trace JSON.",
     )
+    trace_label = trace_subparsers.add_parser(
+        "label",
+        help="Label one recall trace as useful, not-useful, or neutral.",
+    )
+    trace_label.add_argument(
+        "identifier",
+        nargs="?",
+        help="Trace id, trace JSON path, or omitted for the latest trace.",
+    )
+    trace_label.add_argument(
+        "--rating",
+        required=True,
+        choices=["useful", "not-useful", "not_useful", "neutral"],
+        help="Feedback rating for this trace.",
+    )
+    trace_label.add_argument(
+        "--note",
+        help="Optional short feedback note.",
+    )
+    trace_report = trace_subparsers.add_parser(
+        "report",
+        help="Summarize labeled recall traces.",
+    )
+    trace_report.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum traces to inspect. Default: 50.",
+    )
 
     handoff = subparsers.add_parser(
         "handoff",
@@ -485,6 +514,22 @@ def main(argv: list[str] | None = None) -> int:
                     print(json.dumps(payload, ensure_ascii=False, indent=2))
                 else:
                     print(store.compose_recall_trace(identifier=args.identifier))
+                return 0
+            if args.trace_command == "label":
+                saved = store.label_recall_trace(
+                    args.identifier,
+                    rating=args.rating,
+                    note=args.note,
+                )
+                feedback = saved.payload.get("feedback")
+                rating = feedback.get("rating") if isinstance(feedback, dict) else args.rating
+                print("[MemAgent recall trace labeled]")
+                print(f"- id: {saved.identifier}")
+                print(f"- rating: {rating}")
+                print(f"- path: {saved.path}")
+                return 0
+            if args.trace_command == "report":
+                print(store.compose_recall_trace_report(limit=args.limit))
                 return 0
         except ValueError as exc:
             parser.error(str(exc))

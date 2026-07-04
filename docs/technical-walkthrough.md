@@ -27,6 +27,8 @@ PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-s
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --json
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --trace
 PYTHONPATH=src python -m memagent.cli trace list
+PYTHONPATH=src python -m memagent.cli trace label --rating useful
+PYTHONPATH=src python -m memagent.cli trace report
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
@@ -48,6 +50,8 @@ memagent recall "..." --show-sources --show-reasons --strategy bm25
 memagent recall "..." --json
 memagent recall "..." --trace
 memagent trace list
+memagent trace label --rating useful
+memagent trace report
 memagent codex "..."
 memagent agents-snippet
 memagent agents-install
@@ -202,6 +206,8 @@ JSON 使用 `schema_version: memagent.recall.v1`，包含 `query`、`context`、
 memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --strategy bm25 --trace
 memagent trace list
 memagent trace show --json
+memagent trace label --rating useful
+memagent trace report
 ```
 
 trace 默认不会自动记录，必须显式传 `--trace`。保存位置是 `~/.memagent/recall_traces/*.json`。
@@ -785,6 +791,18 @@ trace list/show
 ```
 
 trace 文件保存的是 `memagent.recall.v1` payload 加一个 `trace` 元信息块。这个设计用于后续从 mock `recall-eval` 走向真实使用评估：用户可以对 trace 标注 useful / not useful，也可以用 trace 回放来比较 retriever 改动。
+
+v0.18 在 trace 上补了 feedback：
+
+```text
+trace label --rating useful
+  -> write payload["feedback"]
+
+trace report
+  -> summarize useful / not_useful / neutral / unlabeled
+```
+
+这让 MemAgent 有了一条从真实 coding-agent 召回到人工反馈，再到召回质量汇总的小闭环。
 
 ### 4.4 `handoff.py`
 

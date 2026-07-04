@@ -196,6 +196,34 @@ def run_demo(
         )
     )
 
+    labeled_trace = store.label_recall_trace(
+        structured_trace.identifier,
+        rating="useful",
+        note="Demo recall found the intended attribution memory.",
+    )
+    steps.append(
+        DemoStep(
+            title="Label recall trace feedback",
+            command=f"{command_prefix} trace label {structured_trace.identifier} --rating useful --note {_quote('Demo recall found the intended attribution memory.')}",
+            output="\n".join(
+                [
+                    "[MemAgent recall trace labeled]",
+                    f"- id: {labeled_trace.identifier}",
+                    "- rating: useful",
+                    f"- path: {labeled_trace.path}",
+                ]
+            ),
+        )
+    )
+
+    steps.append(
+        DemoStep(
+            title="Report recall trace feedback",
+            command=f"{command_prefix} trace report --limit 10",
+            output=store.compose_recall_trace_report(limit=10),
+        )
+    )
+
     codex_matches = store.recall(DEMO_CODEX_PROMPT, context=recall_context, limit=5)
     codex_context = store.compose_context(
         query=DEMO_CODEX_PROMPT,

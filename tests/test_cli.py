@@ -119,6 +119,29 @@ class CliTest(unittest.TestCase):
                 with redirect_stdout(show_stdout):
                     show_code = main(["--home", str(home), "trace", "show", "--json"])
                 self.assertEqual(show_code, 0)
+
+                label_stdout = StringIO()
+                with redirect_stdout(label_stdout):
+                    label_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "trace",
+                            "label",
+                            "--rating",
+                            "useful",
+                            "--note",
+                            "Correct route.",
+                        ]
+                    )
+                self.assertEqual(label_code, 0)
+                self.assertIn("[MemAgent recall trace labeled]", label_stdout.getvalue())
+
+                report_stdout = StringIO()
+                with redirect_stdout(report_stdout):
+                    report_code = main(["--home", str(home), "trace", "report"])
+                self.assertEqual(report_code, 0)
+                self.assertIn("- useful_rate: 1.00", report_stdout.getvalue())
             finally:
                 os.chdir(previous_cwd)
 

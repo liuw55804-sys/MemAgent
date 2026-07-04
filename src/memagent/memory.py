@@ -16,6 +16,11 @@ from memagent.context import ProjectContext
 DEFAULT_DOMAIN = "coding"
 DEFAULT_KIND = "note"
 DEFAULT_RECALL_STRATEGY = "bm25"
+RECALL_FEEDBACK_RATINGS = {
+    "useful",
+    "not_useful",
+    "neutral",
+}
 
 ALLOWED_RECALL_STRATEGIES = {
     "bm25",
@@ -66,6 +71,7 @@ class RecallTraceSummary:
     repo_name: str | None
     total_matches: int
     top_match: str | None
+    feedback_rating: str | None
 
 
 @dataclass(frozen=True)
@@ -305,10 +311,11 @@ class MemoryStore:
         for summary in summaries:
             top = summary.top_match or "none"
             repo = summary.repo_name or "unknown"
+            feedback = summary.feedback_rating or "unlabeled"
             lines.append(
                 "- "
                 f"{summary.identifier} | query={summary.query!r} | repo={repo} | "
-                f"matches={summary.total_matches} | top={top}"
+                f"matches={summary.total_matches} | top={top} | feedback={feedback}"
             )
         return "\n".join(lines)
 
@@ -320,6 +327,12 @@ class MemoryStore:
             lines.append(f"- id: {trace.get('id', 'unknown')}")
             lines.append(f"- created_at: {trace.get('created_at', 'unknown')}")
             lines.append(f"- source: {trace.get('source', 'unknown')}")
+        feedback = payload.get("feedback")
+        if isinstance(feedback, dict):
+            lines.append(f"- feedback: {feedback.get('rating', 'unknown')}")
+            note = feedback.get("note")
+            if note:
+                lines.append(f"- feedback_note: {note}")
         lines.append(f"- query: {payload.get('query', '')}")
         context = payload.get("context")
         if isinstance(context, dict):
@@ -329,6 +342,53 @@ class MemoryStore:
         text = payload.get("text")
         if isinstance(text, str) and text.strip():
             lines.extend(["", text])
+        return "\n".join(lines)
+
+    def label_recall_trace(
+        self,
+        identifier: str | None,
+        *,
+        rating: str,
+        note: str | None,
+    ) -> SavedRecallTrace:
+        normalized_rating = normalize_recall_feedback_rating(rating)
+        path = self._resolve_recall_trace_path(identifier)
+        payload = self.load_recall_trace(str(path))
+        now = datetime.now(timezone.utc)
+        payload["feedback"] = {
+            "rating": normalized_rating,
+            "note": note or "",
+            "labeled_at": now.isoformat(),
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+        return SavedRecallTrace(
+            path=path,
+            identifier=str(trace.get("id") or path.stem),
+            payload=payload,
+        )
+
+    def compose_recall_trace_report(self, *, limit: int = 50) -> str:
+        summaries = self.list_recall_traces(limit=limit)
+        counts = {rating: 0 for rating in sorted(RECALL_FEEDBACK_RATINGS)}
+        unlabeled = 0
+        for summary in summaries:
+            if summary.feedback_rating in counts:
+                counts[summary.feedback_rating] += 1
+            else:
+                unlabeled += 1
+        labeled = sum(counts.values())
+        useful_rate = counts["useful"] / labeled if labeled else 0.0
+        lines = [
+            "[MemAgent recall trace report]",
+            f"- traces inspected: {len(summaries)}",
+            f"- labeled: {labeled}",
+            f"- useful: {counts['useful']}",
+            f"- not_useful: {counts['not_useful']}",
+            f"- neutral: {counts['neutral']}",
+            f"- unlabeled: {unlabeled}",
+            f"- useful_rate: {useful_rate:.2f}",
+        ]
         return "\n".join(lines)
 
     def _resolve_recall_trace_path(self, identifier: str | None) -> Path:
@@ -437,10 +497,12 @@ def _trace_summary(*, path: Path, payload: dict[str, object]) -> RecallTraceSumm
     trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
     matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    feedback = payload.get("feedback") if isinstance(payload.get("feedback"), dict) else {}
     top_match = None
     if matches and isinstance(matches[0], dict):
         raw_top = matches[0].get("title")
         top_match = str(raw_top) if raw_top is not None else None
+    raw_rating = feedback.get("rating")
     return RecallTraceSummary(
         path=path,
         identifier=str(trace.get("id") or path.stem),
@@ -449,6 +511,7 @@ def _trace_summary(*, path: Path, payload: dict[str, object]) -> RecallTraceSumm
         repo_name=str(context.get("repo_name")) if context.get("repo_name") is not None else None,
         total_matches=_safe_int(payload.get("total_matches")),
         top_match=top_match,
+        feedback_rating=str(raw_rating) if raw_rating is not None else None,
     )
 
 
@@ -507,6 +570,14 @@ def normalize_recall_strategy(value: str | None) -> str:
     if normalized not in ALLOWED_RECALL_STRATEGIES:
         allowed_values = ", ".join(sorted(ALLOWED_RECALL_STRATEGIES))
         raise ValueError(f"invalid recall strategy: {value}. Allowed values: {allowed_values}")
+    return normalized
+
+
+def normalize_recall_feedback_rating(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_")
+    if normalized not in RECALL_FEEDBACK_RATINGS:
+        allowed_values = ", ".join(sorted(RECALL_FEEDBACK_RATINGS))
+        raise ValueError(f"invalid feedback rating: {value}. Allowed values: {allowed_values}")
     return normalized
 
 

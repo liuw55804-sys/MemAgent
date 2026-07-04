@@ -105,6 +105,16 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertIn(saved.identifier, store.compose_recall_trace_list(limit=5))
             self.assertIn("[MemAgent recall trace]", store.compose_recall_trace())
 
+            labeled = store.label_recall_trace(saved.identifier, rating="useful", note="Matched expectation.")
+            self.assertEqual(labeled.payload["feedback"]["rating"], "useful")
+            self.assertEqual(labeled.payload["feedback"]["note"], "Matched expectation.")
+            self.assertIn("feedback=useful", store.compose_recall_trace_list(limit=5))
+            self.assertIn("- feedback: useful", store.compose_recall_trace(identifier=saved.identifier))
+            report = store.compose_recall_trace_report(limit=5)
+            self.assertIn("- labeled: 1", report)
+            self.assertIn("- useful: 1", report)
+            self.assertIn("- useful_rate: 1.00", report)
+
     def test_remember_with_explicit_domain_and_kind(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = MemoryStore(Path(tmp))

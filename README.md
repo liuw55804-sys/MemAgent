@@ -13,6 +13,8 @@ python -m memagent.cli recall "continue checking attribution accuracy" --show-so
 python -m memagent.cli recall "continue checking attribution accuracy" --json
 python -m memagent.cli recall "continue checking attribution accuracy" --trace
 python -m memagent.cli trace list
+python -m memagent.cli trace label --rating useful
+python -m memagent.cli trace report
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli handoff show
@@ -33,6 +35,8 @@ memagent recall "continue checking attribution accuracy" --show-sources --show-r
 memagent recall "continue checking attribution accuracy" --json
 memagent recall "continue checking attribution accuracy" --trace
 memagent trace list
+memagent trace label --rating useful
+memagent trace report
 memagent agents-install
 memagent agents-doctor
 memagent handoff show
@@ -264,6 +268,12 @@ payload for other agents, MCP clients, evaluations, or future UI surfaces.
 See [docs/design_v0.17_recall_traces.md](docs/design_v0.17_recall_traces.md)
 for the opt-in recall trace design. `memagent recall --trace` saves a local
 `memagent.recall.v1` payload for later review or evaluation.
+
+## v0.18 Design
+
+See [docs/design_v0.18_trace_feedback.md](docs/design_v0.18_trace_feedback.md)
+for trace feedback. `memagent trace label` and `memagent trace report` turn
+saved recall traces into a small real-use evaluation loop.
 
 ## Codex Natural Language Triggers
 
