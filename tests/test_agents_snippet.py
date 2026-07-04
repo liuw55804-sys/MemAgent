@@ -6,7 +6,14 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from memagent.agents import build_agents_doctor_report, build_agents_snippet
+from memagent.agents import (
+    MEMAGENT_BLOCK_END,
+    MEMAGENT_BLOCK_START,
+    build_agents_doctor_report,
+    build_agents_install_plan,
+    build_agents_snippet,
+    write_agents_install_plan,
+)
 from memagent.cli import main
 from memagent.context import ProjectContext
 
@@ -16,6 +23,8 @@ class AgentsSnippetTest(unittest.TestCase):
         root = Path("/tmp/memagent").resolve()
         snippet = build_agents_snippet(root)
         self.assertIn("## MemAgent Natural Language Triggers", snippet)
+        self.assertIn(MEMAGENT_BLOCK_START, snippet)
+        self.assertIn(MEMAGENT_BLOCK_END, snippet)
         self.assertIn("召回一下相关记忆", snippet)
         self.assertIn("沉淀一下", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli recall", snippet)
@@ -99,6 +108,144 @@ class AgentsSnippetTest(unittest.TestCase):
                 )
             self.assertEqual(exit_code, 0)
             self.assertIn("Status: ready", stdout.getvalue())
+
+    def test_agents_install_plan_create(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            context = ProjectContext(
+                cwd=project,
+                git_root=None,
+                branch=None,
+                repo_name="demo",
+                recent_files=(),
+                agents_files=(),
+            )
+            plan = build_agents_install_plan(
+                context=context,
+                target=None,
+                memagent_root=Path("/tmp/memagent"),
+            )
+            self.assertEqual(plan.action, "create")
+            self.assertTrue(plan.changed)
+            self.assertFalse(plan.blocked)
+            self.assertEqual(plan.target, (project / "AGENTS.md").resolve())
+            self.assertIn(MEMAGENT_BLOCK_START, plan.next_content)
+
+    def test_agents_install_plan_append(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "AGENTS.md"
+            target.write_text("# Project rules\n", encoding="utf-8")
+            context = ProjectContext(
+                cwd=project,
+                git_root=None,
+                branch=None,
+                repo_name="demo",
+                recent_files=(),
+                agents_files=(target,),
+            )
+            plan = build_agents_install_plan(
+                context=context,
+                target=target,
+                memagent_root=Path("/tmp/memagent"),
+            )
+            self.assertEqual(plan.action, "append")
+            self.assertIn("# Project rules", plan.next_content)
+            self.assertIn(MEMAGENT_BLOCK_START, plan.next_content)
+
+    def test_agents_install_plan_replace_marked_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "AGENTS.md"
+            target.write_text(
+                "\n".join(
+                    [
+                        "# Project rules",
+                        MEMAGENT_BLOCK_START,
+                        "old content",
+                        MEMAGENT_BLOCK_END,
+                        "## Other rules",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            context = ProjectContext(
+                cwd=project,
+                git_root=None,
+                branch=None,
+                repo_name="demo",
+                recent_files=(),
+                agents_files=(target,),
+            )
+            plan = build_agents_install_plan(
+                context=context,
+                target=target,
+                memagent_root=Path("/tmp/memagent"),
+            )
+            self.assertEqual(plan.action, "replace-marked")
+            self.assertNotIn("old content", plan.next_content)
+            self.assertIn("## Other rules", plan.next_content)
+
+    def test_agents_install_plan_blocks_unmarked_existing_section(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "AGENTS.md"
+            target.write_text("## MemAgent Natural Language Triggers\nold content\n", encoding="utf-8")
+            context = ProjectContext(
+                cwd=project,
+                git_root=None,
+                branch=None,
+                repo_name="demo",
+                recent_files=(),
+                agents_files=(target,),
+            )
+            plan = build_agents_install_plan(
+                context=context,
+                target=target,
+                memagent_root=Path("/tmp/memagent"),
+            )
+            self.assertEqual(plan.action, "blocked")
+            self.assertTrue(plan.blocked)
+
+    def test_agents_install_write_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "agents-install",
+                        "--cwd",
+                        str(project),
+                        "--memagent-root",
+                        "/tmp/memagent",
+                        "--write",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Status: written", stdout.getvalue())
+            self.assertIn(MEMAGENT_BLOCK_START, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_write_agents_install_plan_skips_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "AGENTS.md"
+            target.write_text("## MemAgent Natural Language Triggers\nold content\n", encoding="utf-8")
+            context = ProjectContext(
+                cwd=project,
+                git_root=None,
+                branch=None,
+                repo_name="demo",
+                recent_files=(),
+                agents_files=(target,),
+            )
+            plan = build_agents_install_plan(
+                context=context,
+                target=target,
+                memagent_root=Path("/tmp/memagent"),
+            )
+            write_agents_install_plan(plan)
+            self.assertEqual(target.read_text(encoding="utf-8"), "## MemAgent Natural Language Triggers\nold content\n")
 
 
 if __name__ == "__main__":

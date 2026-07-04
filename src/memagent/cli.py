@@ -5,7 +5,13 @@ from pathlib import Path
 import subprocess
 import sys
 
-from memagent.agents import build_agents_doctor_report, build_agents_snippet
+from memagent.agents import (
+    build_agents_doctor_report,
+    build_agents_install_plan,
+    build_agents_snippet,
+    render_agents_install_report,
+    write_agents_install_plan,
+)
 from memagent.context import detect_context
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
@@ -143,6 +149,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="MemAgent project root. Defaults to the installed package root.",
     )
 
+    install = subparsers.add_parser(
+        "agents-install",
+        help="Preview or write MemAgent instructions into an AGENTS.md file.",
+    )
+    install.add_argument(
+        "--cwd",
+        help="Project directory to inspect. Defaults to the current working directory.",
+    )
+    install.add_argument(
+        "--target",
+        help="AGENTS.md path to update. Defaults to <cwd>/AGENTS.md.",
+    )
+    install.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+    install.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Replace an existing unmarked MemAgent section.",
+    )
+    install.add_argument(
+        "--write",
+        action="store_true",
+        help="Write the planned AGENTS.md change. Default is dry-run preview.",
+    )
+
     return parser
 
 
@@ -167,6 +200,19 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "agents-install":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        plan = build_agents_install_plan(
+            context=context,
+            target=Path(args.target) if args.target else None,
+            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            replace_existing=args.replace_existing,
+        )
+        if args.write:
+            write_agents_install_plan(plan)
+        print(render_agents_install_report(plan, write=args.write))
+        return 1 if plan.blocked and args.write else 0
 
     if args.command == "remember":
         context = detect_context()

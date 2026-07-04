@@ -165,6 +165,7 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 `agents-snippet` 输出应包含：
 
 ```text
+<!-- memagent:start -->
 ## MemAgent Natural Language Triggers
 
 ### Recall
@@ -175,7 +176,10 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 ### Safety
 ...
+<!-- memagent:end -->
 ```
+
+`memagent:start` / `memagent:end` 是 v0.5 后加入的 managed markers，用于让 `agents-install` 安全替换 MemAgent 自己的区块。
 
 Safety 必须强调：
 

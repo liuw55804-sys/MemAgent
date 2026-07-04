@@ -7,6 +7,11 @@ import textwrap
 from memagent.context import ProjectContext
 
 
+MEMAGENT_BLOCK_START = "<!-- memagent:start -->"
+MEMAGENT_BLOCK_END = "<!-- memagent:end -->"
+MEMAGENT_SECTION_HEADING = "## MemAgent Natural Language Triggers"
+
+
 @dataclass(frozen=True)
 class AgentsFileCheck:
     path: Path
@@ -25,6 +30,17 @@ class AgentsFileCheck:
         )
 
 
+@dataclass(frozen=True)
+class AgentsInstallPlan:
+    target: Path
+    action: str
+    changed: bool
+    blocked: bool
+    reason: str
+    next_content: str
+    snippet: str
+
+
 def default_memagent_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -33,7 +49,7 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
     root = (memagent_root or default_memagent_root()).expanduser().resolve()
     src_path = root / "src"
     command_prefix = f"PYTHONPATH={src_path} python -m memagent.cli"
-    return textwrap.dedent(
+    body = textwrap.dedent(
         f"""
         ## MemAgent Natural Language Triggers
 
@@ -106,6 +122,7 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
           MemAgent.
         """
     ).strip()
+    return f"{MEMAGENT_BLOCK_START}\n{body}\n{MEMAGENT_BLOCK_END}"
 
 
 def build_agents_doctor_report(
@@ -163,6 +180,116 @@ def build_agents_doctor_report(
     return "\n".join(lines)
 
 
+def build_agents_install_plan(
+    *,
+    context: ProjectContext,
+    target: Path | None,
+    memagent_root: Path | None = None,
+    replace_existing: bool = False,
+) -> AgentsInstallPlan:
+    target_path = ((target or (context.cwd / "AGENTS.md")).expanduser().resolve())
+    snippet = build_agents_snippet(memagent_root)
+    if not target_path.exists():
+        return AgentsInstallPlan(
+            target=target_path,
+            action="create",
+            changed=True,
+            blocked=False,
+            reason="target AGENTS.md does not exist",
+            next_content=f"{snippet}\n",
+            snippet=snippet,
+        )
+
+    raw = target_path.read_text(encoding="utf-8", errors="replace")
+    marked = _replace_marked_block(raw, snippet)
+    if marked is not None:
+        changed = marked != raw
+        return AgentsInstallPlan(
+            target=target_path,
+            action="replace-marked" if changed else "noop",
+            changed=changed,
+            blocked=False,
+            reason="managed MemAgent block found",
+            next_content=marked,
+            snippet=snippet,
+        )
+
+    if MEMAGENT_SECTION_HEADING in raw:
+        if not replace_existing:
+            return AgentsInstallPlan(
+                target=target_path,
+                action="blocked",
+                changed=False,
+                blocked=True,
+                reason=(
+                    "existing unmarked MemAgent section found; rerun with "
+                    "--replace-existing to replace that section"
+                ),
+                next_content=raw,
+                snippet=snippet,
+            )
+        replaced = _replace_unmarked_section(raw, snippet)
+        return AgentsInstallPlan(
+            target=target_path,
+            action="replace-existing",
+            changed=replaced != raw,
+            blocked=False,
+            reason="existing unmarked MemAgent section replaced",
+            next_content=replaced,
+            snippet=snippet,
+        )
+
+    separator = "\n\n" if raw.strip() else ""
+    next_content = f"{raw.rstrip()}{separator}{snippet}\n"
+    return AgentsInstallPlan(
+        target=target_path,
+        action="append" if raw.strip() else "create",
+        changed=next_content != raw,
+        blocked=False,
+        reason="no existing MemAgent block found",
+        next_content=next_content,
+        snippet=snippet,
+    )
+
+
+def render_agents_install_report(plan: AgentsInstallPlan, *, write: bool) -> str:
+    mode = "write" if write else "dry-run"
+    lines = [
+        "[MemAgent AGENTS.md install]",
+        f"- target: {plan.target}",
+        f"- mode: {mode}",
+        f"- action: {plan.action}",
+        f"- changed: {_yes_no(plan.changed)}",
+        f"- blocked: {_yes_no(plan.blocked)}",
+        f"- reason: {plan.reason}",
+    ]
+    if plan.blocked:
+        lines.append("- Status: blocked")
+    elif write and plan.changed:
+        lines.append("- Status: written")
+    elif write:
+        lines.append("- Status: already up to date")
+    else:
+        lines.append("- Status: preview only; rerun with --write to apply")
+
+    if not write and not plan.blocked and plan.changed:
+        lines.extend(
+            [
+                "",
+                "[Snippet to install]",
+                plan.snippet,
+            ]
+        )
+    return "\n".join(lines)
+
+
+def write_agents_install_plan(plan: AgentsInstallPlan) -> None:
+    if plan.blocked or not plan.changed:
+        return
+    plan.target.parent.mkdir(parents=True, exist_ok=True)
+    plan.target.write_text(plan.next_content, encoding="utf-8")
+
+
 def _check_agents_file(path: Path) -> AgentsFileCheck:
     raw = path.read_text(encoding="utf-8", errors="replace")
     return AgentsFileCheck(
@@ -172,6 +299,31 @@ def _check_agents_file(path: Path) -> AgentsFileCheck:
         has_remember_command="memagent.cli remember" in raw,
         has_explainable_recall="--show-reasons" in raw,
     )
+
+
+def _replace_marked_block(raw: str, snippet: str) -> str | None:
+    start = raw.find(MEMAGENT_BLOCK_START)
+    end = raw.find(MEMAGENT_BLOCK_END)
+    if start < 0 or end < 0 or end < start:
+        return None
+    end += len(MEMAGENT_BLOCK_END)
+    return f"{raw[:start]}{snippet}{raw[end:]}"
+
+
+def _replace_unmarked_section(raw: str, snippet: str) -> str:
+    start = raw.find(MEMAGENT_SECTION_HEADING)
+    if start < 0:
+        return raw
+    line_start = raw.rfind("\n", 0, start) + 1
+    next_heading = raw.find("\n## ", start + len(MEMAGENT_SECTION_HEADING))
+    if next_heading < 0:
+        prefix = raw[:line_start].rstrip()
+        separator = "\n\n" if prefix else ""
+        return f"{prefix}{separator}{snippet}\n"
+    prefix = raw[:line_start].rstrip()
+    suffix = raw[next_heading:].lstrip("\n")
+    separator = "\n\n" if prefix else ""
+    return f"{prefix}{separator}{snippet}\n\n{suffix}"
 
 
 def _yes_no(value: bool) -> str:

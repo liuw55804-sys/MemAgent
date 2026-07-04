@@ -11,6 +11,7 @@ Added:
 - Recall output now labels matches as `[domain/kind]`.
 - Backward-compatible recall for old cards without `domain` or `kind`.
 - `agents-snippet` command to generate AGENTS.md natural-language trigger rules.
+- `agents-install` command to preview or write the MemAgent AGENTS.md block with managed markers.
 - `recall --show-reasons` and `codex --show-reasons` to display simple recall scores and matched query terms.
 - `agents-doctor` command to inspect whether the current project AGENTS.md has MemAgent recall/remember integration.
 - Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
@@ -22,6 +23,7 @@ Changed:
 - Chinese query tokenization now includes lightweight 2-4 character n-grams for partial phrase matching.
 - v0.3 design now focuses on Codex natural-language integration through AGENTS.md snippets.
 - Generated AGENTS.md recall commands now include `--show-sources --show-reasons` for more transparent demos and debugging.
+- Generated AGENTS.md snippets now include managed Markdown markers for safe replacement by `agents-install`.
 
 ## v0.1.0-mvp - 2026-06-23
 

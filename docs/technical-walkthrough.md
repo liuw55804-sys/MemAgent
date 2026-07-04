@@ -22,6 +22,7 @@ PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "�
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
+PYTHONPATH=src python -m memagent.cli agents-install
 PYTHONPATH=src python -m memagent.cli agents-doctor
 ```
 
@@ -33,6 +34,7 @@ memagent remember --domain coding --kind note "..."
 memagent recall "..." --show-sources --show-reasons
 memagent codex "..."
 memagent agents-snippet
+memagent agents-install
 memagent agents-doctor
 ```
 
@@ -65,7 +67,7 @@ flowchart LR
 
 ## 3. 三条命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-doctor`。
+当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`。
 
 ### 3.1 `remember`
 
@@ -226,7 +228,33 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - recalled memory 只是提示，不是事实来源。
 - 不要保存 token、cookie、密码、私钥或原始敏感样本。
 
-### 3.5 `agents-doctor`
+### 3.5 `agents-install`
+
+用途：把 MemAgent snippet 安全安装进目标 `AGENTS.md`。
+
+命令：
+
+```bash
+memagent agents-install
+```
+
+默认只预览，不写文件。真正写入必须加：
+
+```bash
+memagent agents-install --write
+```
+
+它会做几件事：
+
+- 默认目标是当前目录的 `AGENTS.md`。
+- 文件不存在时，计划创建。
+- 文件存在但没有 MemAgent 区块时，计划追加。
+- 文件已有带 marker 的 MemAgent 区块时，计划替换这个区块。
+- 文件已有旧版无 marker 的 MemAgent section 时，默认阻止，提示用 `--replace-existing`。
+
+这个命令的边界很重要：它只管理 MemAgent 自己的 Markdown 区块，不试图重写用户项目的其它 AGENTS 规则。
+
+### 3.6 `agents-doctor`
 
 用途：检查当前项目的 `AGENTS.md` 是否已经接入 MemAgent 自然语言触发规则。
 
@@ -262,7 +290,7 @@ memagent agents-doctor --cwd /path/to/project
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-doctor`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -274,12 +302,14 @@ build_parser()
   -> 定义 recall 子命令
   -> 定义 codex 子命令
   -> 定义 agents-snippet 子命令
+  -> 定义 agents-install 子命令
   -> 定义 agents-doctor 子命令
 
 main(argv)
   -> parse args
   -> if agents-snippet: build_agents_snippet
   -> MemoryStore.from_home_arg(args.home)
+  -> if agents-install: build_agents_install_plan + optional write
   -> if remember: detect_context + store.remember(domain, kind, ...)
   -> if recall: detect_context + store.recall + compose_context
   -> if codex: recall + build_augmented_prompt + subprocess.run
@@ -571,6 +601,12 @@ tests/test_wrapper.py
 tests/test_agents_snippet.py
   test_build_agents_snippet
   test_agents_snippet_cli
+  test_agents_install_plan_create
+  test_agents_install_plan_append
+  test_agents_install_plan_replace_marked_block
+  test_agents_install_plan_blocks_unmarked_existing_section
+  test_agents_install_write_cli
+  test_write_agents_install_plan_skips_blocked
   test_agents_doctor_report_ready
   test_agents_doctor_report_setup_needed
   test_agents_doctor_cli

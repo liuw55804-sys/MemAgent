@@ -1,9 +1,9 @@
 # Codex AGENTS.md 集成演示
 
-这份 demo 用来证明 v0.3/v0.4 的核心闭环：
+这份 demo 用来证明 v0.3-v0.5 的核心闭环：
 
 ```text
-AGENTS.md 触发规则 + agents-doctor 自检
+agents-install 安装 + agents-doctor 自检
   -> Codex 自然语言识别 recall / remember
   -> MemAgent 本地写入和召回 memory
   -> 短上下文拼给 Codex
@@ -39,6 +39,20 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - 输出里有 remember 触发语，比如 `沉淀一下`。
 - recall 命令带 `--show-sources --show-reasons`，能展示来源和命中原因。
 - 安全规则说明 local private memory 和 public demo 的边界。
+
+也可以用安装器预览写入当前项目 `AGENTS.md` 的效果：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli agents-install
+```
+
+安装器默认只是 dry-run；真的写入时必须显式加 `--write`：
+
+```bash
+MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cli agents-install --write
+```
+
+公开 demo 时，建议用临时目录演示 `--write`，不要直接改真实业务仓库的 `AGENTS.md`。
 
 ## 3. 模拟新线程：第一次 recall 没有记忆
 

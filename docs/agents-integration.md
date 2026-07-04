@@ -16,7 +16,16 @@ Generate the current recommended snippet with:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli agents-snippet
 ```
 
-Copy the output into a project or global `AGENTS.md`.
+Copy the output into a project or global `AGENTS.md`, or use the safe installer:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli agents-install
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli agents-install --write
+```
+
+`agents-install` is dry-run by default. It writes only when `--write` is present.
+It uses Markdown markers around the MemAgent block so future installs can safely
+replace MemAgent's own section without touching unrelated project rules.
 
 After copying the snippet, check the integration with:
 
