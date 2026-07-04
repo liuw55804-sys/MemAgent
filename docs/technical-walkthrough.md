@@ -104,7 +104,7 @@ flowchart LR
 
 ## 3. 主要命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`route`、`draft`、`process`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`ingest`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
+当前主要命令是 `remember`、`recall`、`route`、`draft`、`process`、`llm`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`ingest`、`handoff`、`demo-run`、`demo-bundle`、`mcp-demo`、`mcp-stdio`、`recall-eval`。
 
 ### 3.1 `remember`
 
@@ -286,6 +286,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 
 - 在非平凡 coding/debug/data/tool-heavy 任务开始时，判断是否需要先用 `memagent recall --trace` 查历史经验。
 - 正常路径下可以先调用 `memagent process`，让 MemAgent 自己 route 并执行安全动作。
+- 用户想接 DeepSeek/Qwen/GLM/OpenAI-compatible API 时，可以先调用 `memagent llm doctor` 检查 provider readiness；只有显式要求时才用 `--check-live` 发真实请求。
 - 当 Codex 不确定要不要调用 MemAgent 时，可以先用 `memagent route` 生成只读决策。
 - 用户说“这个入口下次别忘了”“沉淀一下”或线程出现明显可复用经验时，先用 `memagent draft memory` 预览短 memory，再由用户确认后调用 `memagent remember`。
 - 用户说“这个有用”“刚刚那条没帮上忙”时，把普通反馈映射到 `memagent trace label`。

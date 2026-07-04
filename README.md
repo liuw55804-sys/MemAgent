@@ -358,6 +358,14 @@ for the natural interaction processor. `memagent process` routes ordinary Codex
 language and executes safe memory-layer actions while keeping durable memory
 writes behind explicit user confirmation.
 
+## v0.30 Design
+
+See [docs/design_v0.30_llm_provider_readiness.md](docs/design_v0.30_llm_provider_readiness.md)
+for LLM provider readiness. `memagent llm doctor` checks OpenAI-compatible
+provider configuration, and `--check-live` explicitly verifies the API call.
+See [docs/selftest_v0.30_llm_provider.md](docs/selftest_v0.30_llm_provider.md)
+for a short config-only and optional live-check playbook.
+
 ## Codex Natural Language Signals
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

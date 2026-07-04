@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import os
-from pathlib import Path
 import re
 from typing import Any
-from urllib import error, request
 
 from memagent.context import ProjectContext
+from memagent.llm import OpenAICompatibleConfig, chat_completion, loads_json_object
 
 
 ROUTE_SCHEMA_VERSION = "memagent.route.v1"
@@ -271,7 +269,7 @@ def route_with_openai_compatible(
     context: ProjectContext | None,
     has_recent_trace: bool | None,
 ) -> RouteDecision:
-    config = _OpenAICompatibleConfig.from_env()
+    config = OpenAICompatibleConfig.from_env()
     context_payload = (
         {
             "cwd": str(context.cwd),
@@ -290,7 +288,7 @@ def route_with_openai_compatible(
         "allowed_actions": sorted(ROUTE_ACTIONS),
         "allowed_feedback_ratings": sorted(FEEDBACK_RATINGS),
     }
-    completion = _chat_completion(
+    completion = chat_completion(
         config=config,
         messages=[
             {
@@ -303,7 +301,7 @@ def route_with_openai_compatible(
             },
         ],
     )
-    payload = _loads_json_object(completion)
+    payload = loads_json_object(completion)
     return _decision_from_payload(payload, user_message=user_message, provider="openai-compatible")
 
 
@@ -418,78 +416,6 @@ def _route_query(text: str) -> str:
 
 def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
-
-
-@dataclass(frozen=True)
-class _OpenAICompatibleConfig:
-    base_url: str
-    api_key: str
-    model: str
-    timeout_seconds: int = 30
-
-    @classmethod
-    def from_env(cls) -> "_OpenAICompatibleConfig":
-        base_url = os.environ.get("MEMAGENT_LLM_BASE_URL", "").strip()
-        api_key = os.environ.get("MEMAGENT_LLM_API_KEY", "").strip()
-        model = os.environ.get("MEMAGENT_LLM_MODEL", "").strip()
-        if not base_url or not api_key or not model:
-            raise ValueError(
-                "openai-compatible router requires MEMAGENT_LLM_BASE_URL, "
-                "MEMAGENT_LLM_API_KEY, and MEMAGENT_LLM_MODEL"
-            )
-        return cls(base_url=base_url, api_key=api_key, model=model)
-
-    @property
-    def chat_completions_url(self) -> str:
-        base = self.base_url.rstrip("/")
-        if base.endswith("/chat/completions"):
-            return base
-        return f"{base}/chat/completions"
-
-
-def _chat_completion(*, config: _OpenAICompatibleConfig, messages: list[dict[str, str]]) -> str:
-    payload = {
-        "model": config.model,
-        "messages": messages,
-        "temperature": 0,
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = request.Request(
-        config.chat_completions_url,
-        data=data,
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with request.urlopen(req, timeout=config.timeout_seconds) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise ValueError(f"LLM router request failed: HTTP {exc.code}: {body[:500]}") from exc
-    except error.URLError as exc:
-        raise ValueError(f"LLM router request failed: {exc}") from exc
-    choices = response_payload.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise ValueError("LLM router response did not include choices")
-    message = choices[0].get("message") if isinstance(choices[0], dict) else None
-    content = message.get("content") if isinstance(message, dict) else None
-    if not isinstance(content, str) or not content.strip():
-        raise ValueError("LLM router response did not include message content")
-    return content
-
-
-def _loads_json_object(text: str) -> dict[str, Any]:
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-    payload = json.loads(cleaned)
-    if not isinstance(payload, dict):
-        raise ValueError("LLM router response must be a JSON object")
-    return payload
 
 
 _ROUTER_SYSTEM_PROMPT = f"""

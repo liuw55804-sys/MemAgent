@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from io import StringIO
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from memagent.mcp import MCP_PROTOCOL_VERSION, McpServer, run_stdio_server, tool_definitions
 
@@ -40,6 +42,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_route",
                     "memagent_memory_draft",
                     "memagent_process",
+                    "memagent_llm_doctor",
                     "memagent_handoff_save",
                     "memagent_handoff_show",
                     "memagent_handoff_draft",
@@ -72,6 +75,7 @@ class McpServerTest(unittest.TestCase):
             "memagent_agents_doctor",
             "memagent_route",
             "memagent_memory_draft",
+            "memagent_llm_doctor",
             "memagent_handoff_show",
             "memagent_trace_list",
             "memagent_trace_show",
@@ -262,6 +266,37 @@ class McpServerTest(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "memagent.process.v1")
             self.assertEqual(payload["route"]["action"], "draft_memory")
             self.assertEqual(payload["writes"], [])
+
+    def test_llm_doctor_tool(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "MEMAGENT_LLM_BASE_URL": "https://api.example.test/v1",
+                "MEMAGENT_LLM_API_KEY": "test-key",
+                "MEMAGENT_LLM_MODEL": "demo-model",
+            },
+            clear=True,
+        ):
+            server = McpServer.from_home_arg(None, "/tmp/memagent")
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_llm_doctor",
+                        "arguments": {
+                            "format": "json",
+                        },
+                    },
+                }
+            )
+
+        self.assertFalse(response["result"]["isError"])
+        payload = json.loads(response["result"]["content"][0]["text"])
+        self.assertEqual(payload["schema_version"], "memagent.llm_doctor.v1")
+        self.assertEqual(payload["status"], "configured")
+        self.assertNotIn("test-key", response["result"]["content"][0]["text"])
 
     def test_handoff_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

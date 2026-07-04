@@ -7,8 +7,8 @@ import shlex
 from typing import Any
 
 from memagent.context import ProjectContext
+from memagent.llm import OpenAICompatibleConfig, chat_completion, loads_json_object
 from memagent.memory import ALLOWED_KINDS, DEFAULT_DOMAIN, normalize_kind
-from memagent.router import _OpenAICompatibleConfig, _chat_completion, _loads_json_object
 
 
 MEMORY_DRAFT_SCHEMA_VERSION = "memagent.memory_draft.v1"
@@ -117,7 +117,7 @@ def draft_memory_openai_compatible(
     kind: str | None,
     max_chars: int,
 ) -> MemoryDraft:
-    config = _OpenAICompatibleConfig.from_env()
+    config = OpenAICompatibleConfig.from_env()
     context_payload = (
         {
             "cwd": str(context.cwd),
@@ -136,14 +136,14 @@ def draft_memory_openai_compatible(
         "allowed_kinds": sorted(ALLOWED_KINDS),
         "max_memory_chars": max_chars,
     }
-    completion = _chat_completion(
+    completion = chat_completion(
         config=config,
         messages=[
             {"role": "system", "content": _DRAFT_SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(prompt_payload, ensure_ascii=False)},
         ],
     )
-    payload = _loads_json_object(completion)
+    payload = loads_json_object(completion)
     return _draft_from_payload(payload, source_text=source_text, provider="openai-compatible", topic=topic, kind=kind)
 
 

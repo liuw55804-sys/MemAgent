@@ -59,6 +59,8 @@ Added:
 - v0.27 LLM-assisted router design note for classifying natural Codex interactions.
 - v0.28 memory draft design note for reviewable memory rewriting and quality labels.
 - v0.29 natural interaction processor design note for route-and-handle Codex memory UX.
+- v0.30 LLM provider readiness design note for OpenAI-compatible API checks.
+- v0.30 self-test playbook for config-only and optional live LLM provider checks.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
@@ -77,6 +79,7 @@ Changed:
 - `route` command and `memagent_route` MCP tool classify ordinary Codex messages into recall, memory draft, feedback label, handoff, developer eval, or no-op recommendations.
 - `draft memory` command and `memagent_memory_draft` MCP tool produce reviewable memory previews with keep/revise/reject quality labels.
 - `process` command and `memagent_process` MCP tool route and execute safe interaction actions while keeping durable memory writes behind confirmation.
+- `llm doctor` command and `memagent_llm_doctor` MCP tool check OpenAI-compatible provider readiness without printing API keys.
 
 ## v0.1.0-mvp - 2026-06-23
 

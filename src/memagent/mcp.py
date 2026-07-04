@@ -17,6 +17,7 @@ from memagent.handoff import (
     render_promotion_preview,
 )
 from memagent.interaction import process_interaction, process_payload_json, render_process_result
+from memagent.llm import check_llm_provider, render_llm_doctor
 from memagent.memory import MemoryStore
 from memagent.router import render_route_decision, route_interaction
 
@@ -136,6 +137,8 @@ class McpServer:
             return _tool_text(self._tool_memory_draft(arguments))
         if name == "memagent_process":
             return _tool_text(self._tool_process(arguments))
+        if name == "memagent_llm_doctor":
+            return _tool_text(self._tool_llm_doctor(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -238,6 +241,19 @@ class McpServer:
         if response_format == "json":
             return process_payload_json(result, context=context)
         return render_process_result(result, context=context)
+
+    def _tool_llm_doctor(self, arguments: dict[str, Any]) -> str:
+        result = check_llm_provider(
+            provider=_optional_str(arguments, "provider") or "openai-compatible",
+            check_live=_optional_bool(arguments, "check_live", False),
+            timeout_seconds=_optional_int(arguments, "timeout_seconds", 30),
+        )
+        response_format = _optional_str(arguments, "format") or "text"
+        if response_format not in {"text", "json"}:
+            raise ValueError("format must be text or json")
+        if response_format == "json":
+            return json.dumps(result.to_payload(), ensure_ascii=False, indent=2)
+        return render_llm_doctor(result)
 
     def _tool_agents_doctor(self, arguments: dict[str, Any]) -> str:
         context = detect_context(_optional_path(arguments, "cwd"))
@@ -574,6 +590,33 @@ def tool_definitions() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["message"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_llm_doctor",
+            "title": "Check MemAgent LLM Provider",
+            "description": "Check optional OpenAI-compatible LLM provider configuration.",
+            "annotations": _tool_annotations(read_only=True, idempotent=False),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "description": "LLM provider.",
+                        "enum": ["openai-compatible"],
+                    },
+                    "check_live": {
+                        "type": "boolean",
+                        "description": "Send a small chat completion request to verify the API.",
+                    },
+                    "timeout_seconds": {"type": "integer", "description": "Live check timeout in seconds."},
+                    "format": {
+                        "type": "string",
+                        "description": "Return format: text or json.",
+                        "enum": ["text", "json"],
+                    },
+                },
                 "additionalProperties": False,
             },
         },

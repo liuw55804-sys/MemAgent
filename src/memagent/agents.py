@@ -77,6 +77,23 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         it must not write durable long-term memory cards. Durable memory still
         requires an explicit preview and user confirmation.
 
+        ### LLM Provider Readiness
+
+        If the user asks whether DeepSeek, Qwen, GLM, OpenAI, or another
+        OpenAI-compatible endpoint is configured for MemAgent, run:
+
+        ```bash
+        {command_prefix} llm doctor
+        ```
+
+        This checks local environment configuration without making an API call.
+        Only use the live API check when the user explicitly asks to verify the
+        provider call:
+
+        ```bash
+        {command_prefix} llm doctor --check-live
+        ```
+
         When the intent is unclear, ask MemAgent's router for a read-only
         recommendation before choosing a memory action:
 

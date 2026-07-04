@@ -98,6 +98,21 @@ When the intent is unclear, Codex can ask the read-only router first:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli route "latest user message" --json
 ```
 
+When the user asks whether DeepSeek, Qwen, GLM, OpenAI, or another
+OpenAI-compatible endpoint is ready for MemAgent, Codex can check local config
+without spending tokens:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli llm doctor
+```
+
+Only run a live provider request when the user explicitly asks to verify the API
+call:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli llm doctor --check-live
+```
+
 ### Task-Start Memory Check
 
 Before a non-trivial coding, debugging, data, or tool-heavy task, Codex should

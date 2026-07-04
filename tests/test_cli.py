@@ -7,11 +7,33 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from memagent.cli import main
 
 
 class CliTest(unittest.TestCase):
+    def test_llm_doctor_json_cli(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "MEMAGENT_LLM_BASE_URL": "https://api.example.test/v1",
+                "MEMAGENT_LLM_API_KEY": "test-key",
+                "MEMAGENT_LLM_MODEL": "demo-model",
+            },
+            clear=True,
+        ):
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(["llm", "doctor", "--json"])
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["schema_version"], "memagent.llm_doctor.v1")
+        self.assertEqual(payload["status"], "configured")
+        self.assertTrue(payload["configured"])
+        self.assertNotIn("test-key", stdout.getvalue())
+
     def test_process_json_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

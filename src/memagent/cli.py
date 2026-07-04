@@ -29,6 +29,7 @@ from memagent.ingest import (
     run_codex_ingest,
 )
 from memagent.interaction import process_interaction, process_payload_json, render_process_result
+from memagent.llm import check_llm_provider, render_llm_doctor
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.router import render_route_decision, route_interaction
@@ -206,6 +207,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print structured process payload instead of text.",
+    )
+
+    llm = subparsers.add_parser(
+        "llm",
+        help="Inspect optional LLM provider configuration.",
+    )
+    llm_subparsers = llm.add_subparsers(dest="llm_command", required=True)
+    llm_doctor = llm_subparsers.add_parser(
+        "doctor",
+        help="Check OpenAI-compatible provider readiness.",
+    )
+    llm_doctor.add_argument(
+        "--provider",
+        default="openai-compatible",
+        choices=["openai-compatible"],
+        help="LLM provider to check. Default: openai-compatible.",
+    )
+    llm_doctor.add_argument(
+        "--check-live",
+        action="store_true",
+        help="Send a small chat completion request to verify the API. Default only checks env vars.",
+    )
+    llm_doctor.add_argument(
+        "--timeout",
+        type=int,
+        default=30,
+        help="Live check timeout in seconds. Default: 30.",
+    )
+    llm_doctor.add_argument(
+        "--json",
+        action="store_true",
+        help="Print structured LLM doctor payload instead of text.",
     )
 
     draft = subparsers.add_parser(
@@ -785,6 +818,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- report: {result.report_path}")
             print(f"- candidates dir: {result.candidates_dir}")
             print("- mode: review-only; no memory cards were written")
+            return 0
+
+    if args.command == "llm":
+        if args.llm_command == "doctor":
+            result = check_llm_provider(
+                provider=args.provider,
+                check_live=args.check_live,
+                timeout_seconds=args.timeout,
+            )
+            if args.json:
+                print(json.dumps(result.to_payload(), ensure_ascii=False, indent=2))
+            else:
+                print(render_llm_doctor(result))
             return 0
 
     store = MemoryStore.from_home_arg(args.home)
