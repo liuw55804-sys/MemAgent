@@ -372,7 +372,7 @@ local_memory_demo/demo_run/
 memagent mcp-stdio
 ```
 
-当前暴露七个 tools：
+当前暴露十一个 tools：
 
 - `memagent_recall`：召回相关 workflow memory。
 - `memagent_remember`：写入一条短 memory。
@@ -380,12 +380,16 @@ memagent mcp-stdio
 - `memagent_handoff_show`：读取当前项目的 latest handoff。
 - `memagent_handoff_draft`：从 session text 生成 handoff draft，可选保存。
 - `memagent_handoff_promote`：预览或写入 latest handoff 中的 memory candidates。
+- `memagent_trace_list`：列出最近保存的 recall traces。
+- `memagent_trace_show`：读取某条 recall trace，支持 text/json。
+- `memagent_trace_label`：给 recall trace 标注 useful / not-useful / neutral。
+- `memagent_trace_report`：汇总 trace feedback 和 useful rate。
 - `memagent_agents_doctor`：检查 AGENTS.md 集成状态。
 
 每个 tool definition 都带 MCP `annotations`：
 
-- 只读工具：`memagent_recall`、`memagent_handoff_show`、`memagent_agents_doctor`。
-- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`。
+- 只读工具：`memagent_recall`、`memagent_handoff_show`、`memagent_agents_doctor`、`memagent_trace_list`、`memagent_trace_show`、`memagent_trace_report`。
+- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`、`memagent_trace_label`。
 - 当前所有工具都标为 `destructiveHint=false` 和 `openWorldHint=false`，因为它们只操作本地 MemAgent 记忆和当前项目文件，不调用外部系统。
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
@@ -803,6 +807,11 @@ trace report
 ```
 
 这让 MemAgent 有了一条从真实 coding-agent 召回到人工反馈，再到召回质量汇总的小闭环。
+
+v0.19 把这条反馈闭环接到 AGENTS.md 和 MCP：
+
+- AGENTS.md snippet 包含“这次召回有用/没用”等自然语言触发。
+- MCP 暴露 `memagent_trace_list/show/label/report`，让非 Codex client 也能读写 trace feedback。
 
 ### 4.4 `handoff.py`
 

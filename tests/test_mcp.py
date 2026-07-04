@@ -41,6 +41,10 @@ class McpServerTest(unittest.TestCase):
                     "memagent_handoff_show",
                     "memagent_handoff_draft",
                     "memagent_handoff_promote",
+                    "memagent_trace_list",
+                    "memagent_trace_show",
+                    "memagent_trace_label",
+                    "memagent_trace_report",
                 ],
             )
 
@@ -62,6 +66,9 @@ class McpServerTest(unittest.TestCase):
             "memagent_recall",
             "memagent_agents_doctor",
             "memagent_handoff_show",
+            "memagent_trace_list",
+            "memagent_trace_show",
+            "memagent_trace_report",
         }
         write_capable_tools = set(tools) - read_only_tools
 
@@ -263,6 +270,80 @@ class McpServerTest(unittest.TestCase):
             self.assertIn("MCP promotion should create memory", text)
             self.assertIn("Status: promoted", text)
             self.assertEqual(len(list((home / "memories").glob("*.memory.yaml"))), 1)
+
+    def test_trace_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            server = McpServer.from_home_arg(str(home), "/tmp/memagent")
+            saved = server.store.save_recall_trace(
+                {
+                    "schema_version": "memagent.recall.v1",
+                    "query": "MCP trace query",
+                    "context": {"repo_name": "demo", "cwd": str(Path(tmp) / "project")},
+                    "total_matches": 1,
+                    "matches": [{"title": "MCP trace memory"}],
+                    "pack": {"emitted_matches": 1},
+                    "text": "[MemAgent recalled context]\n- Memory: MCP trace memory",
+                },
+                source="test",
+            )
+
+            list_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_trace_list",
+                        "arguments": {"limit": 3},
+                    },
+                }
+            )
+            self.assertIn("MCP trace memory", list_response["result"]["content"][0]["text"])
+
+            show_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_trace_show",
+                        "arguments": {"identifier": saved.identifier, "format": "json"},
+                    },
+                }
+            )
+            payload = json.loads(show_response["result"]["content"][0]["text"])
+            self.assertEqual(payload["trace"]["id"], saved.identifier)
+
+            label_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_trace_label",
+                        "arguments": {
+                            "identifier": saved.identifier,
+                            "rating": "useful",
+                            "note": "MCP label works.",
+                        },
+                    },
+                }
+            )
+            self.assertIn("rating: useful", label_response["result"]["content"][0]["text"])
+
+            report_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_trace_report",
+                        "arguments": {"limit": 5},
+                    },
+                }
+            )
+            self.assertIn("useful_rate: 1.00", report_response["result"]["content"][0]["text"])
 
     def test_stdio_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

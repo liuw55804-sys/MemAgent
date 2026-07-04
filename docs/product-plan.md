@@ -99,6 +99,7 @@ MemAgent 要重点解决的是：
 - **输出可结构化**：`recall --json` 和 MCP `format=json` 输出版本化 payload，避免其它 agent 解析 Markdown。
 - **召回可追踪**：`recall --trace` 把真实召回 payload 保存为本地 trace，后续可做人工标注、回放和质量评估。
 - **反馈可闭环**：`trace label/report` 支持 useful / not_useful / neutral 标注，并汇总真实召回有用率。
+- **反馈可集成**：Codex 可通过 AGENTS.md 自然语言规则标注 trace，MCP client 可通过 trace tools 读写反馈。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
 - **演示可复现**：通过 `demo-run` 在隔离目录里生成 mock 项目和 transcript，稳定展示 install、doctor、recall、prompt patch。

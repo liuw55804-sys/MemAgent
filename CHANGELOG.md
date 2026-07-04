@@ -30,6 +30,8 @@ Added:
 - MCP `memagent_recall` `format=json` output for agent-consumable recall payloads.
 - `recall --trace` and `trace list/show` for opt-in local recall telemetry.
 - `trace label` and `trace report` for real-use recall feedback summaries.
+- AGENTS.md natural-language trigger rules for recall trace feedback.
+- MCP trace tools for list/show/label/report over saved recall traces.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
 - v0.11 handoff design note for separating recent continuation state from durable workflow memory.
@@ -40,6 +42,7 @@ Added:
 - v0.16 structured recall design note for stable agent-consumable output.
 - v0.17 recall traces design note for real-use recall telemetry.
 - v0.18 trace feedback design note for closing the recall evaluation loop.
+- v0.19 trace feedback integration design note for AGENTS.md and MCP surfaces.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:

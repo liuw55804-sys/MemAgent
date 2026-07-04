@@ -34,7 +34,7 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 ```
 
 The doctor report checks whether an `AGENTS.md` file is visible from the current
-directory, whether it contains MemAgent recall/remember/handoff commands, and
+directory, whether it contains MemAgent recall/remember/handoff/trace commands, and
 whether recall uses `--show-reasons --strategy bm25` for explainable BM25-style
 demos.
 
@@ -162,6 +162,28 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 ```
 
 Promotion writes durable memory cards, so do not skip the preview step.
+
+When the user says:
+
+- `这次召回有用`
+- `这次召回没用`
+- `这个 memory 不相关`
+- `标记这次 recall 有用`
+- `给这次召回打个标签`
+
+Codex should label the latest saved recall trace:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace label --rating useful --note "short reason"
+```
+
+Use `useful` when the recalled memory helped, `not-useful` when it was wrong or
+stale, and `neutral` when the result was inconclusive. To summarize recent trace
+feedback, call:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace report
+```
 
 ## Safety
 

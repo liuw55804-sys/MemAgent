@@ -114,6 +114,14 @@ class McpServer:
             return _tool_text(self._tool_handoff_draft(arguments))
         if name == "memagent_handoff_promote":
             return _tool_text(self._tool_handoff_promote(arguments))
+        if name == "memagent_trace_list":
+            return _tool_text(self._tool_trace_list(arguments))
+        if name == "memagent_trace_show":
+            return _tool_text(self._tool_trace_show(arguments))
+        if name == "memagent_trace_label":
+            return _tool_text(self._tool_trace_label(arguments))
+        if name == "memagent_trace_report":
+            return _tool_text(self._tool_trace_report(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -245,6 +253,43 @@ class McpServer:
                 lines.append(f"- Saved memory: {saved.path}")
             lines.append("- Status: promoted")
         return "\n".join(lines)
+
+    def _tool_trace_list(self, arguments: dict[str, Any]) -> str:
+        return self.store.compose_recall_trace_list(
+            limit=_optional_int(arguments, "limit", 5),
+        )
+
+    def _tool_trace_show(self, arguments: dict[str, Any]) -> str:
+        identifier = _optional_str(arguments, "identifier")
+        response_format = _optional_str(arguments, "format") or "text"
+        if response_format not in {"text", "json"}:
+            raise ValueError("format must be text or json")
+        if response_format == "json":
+            payload = self.store.load_recall_trace(identifier)
+            return json.dumps(payload, ensure_ascii=False, indent=2)
+        return self.store.compose_recall_trace(identifier=identifier)
+
+    def _tool_trace_label(self, arguments: dict[str, Any]) -> str:
+        saved = self.store.label_recall_trace(
+            _optional_str(arguments, "identifier"),
+            rating=_required_str(arguments, "rating"),
+            note=_optional_str(arguments, "note"),
+        )
+        feedback = saved.payload.get("feedback")
+        rating = feedback.get("rating") if isinstance(feedback, dict) else "unknown"
+        return "\n".join(
+            [
+                "[MemAgent recall trace labeled]",
+                f"- id: {saved.identifier}",
+                f"- rating: {rating}",
+                f"- path: {saved.path}",
+            ]
+        )
+
+    def _tool_trace_report(self, arguments: dict[str, Any]) -> str:
+        return self.store.compose_recall_trace_report(
+            limit=_optional_int(arguments, "limit", 50),
+        )
 
 
 def tool_definitions() -> list[dict[str, Any]]:
@@ -410,6 +455,70 @@ def tool_definitions() -> list[dict[str, Any]]:
                     },
                     "exportable": {"type": "boolean", "description": "Whether promoted cards are exportable."},
                     "write": {"type": "boolean", "description": "Actually save memory cards. Default is preview."},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_trace_list",
+            "title": "List MemAgent Recall Traces",
+            "description": "List recent saved recall traces.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Maximum traces to list."},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_trace_show",
+            "title": "Show MemAgent Recall Trace",
+            "description": "Show the latest or selected saved recall trace.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Trace id or JSON path. Defaults to latest."},
+                    "format": {
+                        "type": "string",
+                        "description": "Return format: text or json.",
+                        "enum": ["text", "json"],
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_trace_label",
+            "title": "Label MemAgent Recall Trace",
+            "description": "Label the latest or selected recall trace as useful, not-useful, or neutral.",
+            "annotations": _tool_annotations(read_only=False, idempotent=False),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Trace id or JSON path. Defaults to latest."},
+                    "rating": {
+                        "type": "string",
+                        "description": "Feedback rating.",
+                        "enum": ["useful", "not-useful", "not_useful", "neutral"],
+                    },
+                    "note": {"type": "string", "description": "Optional short feedback note."},
+                },
+                "required": ["rating"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_trace_report",
+            "title": "Report MemAgent Recall Trace Feedback",
+            "description": "Summarize labeled recall traces and useful rate.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Maximum traces to inspect."},
                 },
                 "additionalProperties": False,
             },

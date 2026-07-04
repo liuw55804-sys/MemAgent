@@ -275,6 +275,11 @@ See [docs/design_v0.18_trace_feedback.md](docs/design_v0.18_trace_feedback.md)
 for trace feedback. `memagent trace label` and `memagent trace report` turn
 saved recall traces into a small real-use evaluation loop.
 
+## v0.19 Design
+
+See [docs/design_v0.19_trace_feedback_integration.md](docs/design_v0.19_trace_feedback_integration.md)
+for AGENTS.md and MCP integration of trace feedback.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

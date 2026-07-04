@@ -19,6 +19,7 @@ class AgentsFileCheck:
     has_recall_command: bool
     has_remember_command: bool
     has_handoff_command: bool
+    has_trace_command: bool
     has_explainable_recall: bool
     has_bm25_strategy: bool
 
@@ -29,6 +30,7 @@ class AgentsFileCheck:
             and self.has_recall_command
             and self.has_remember_command
             and self.has_handoff_command
+            and self.has_trace_command
             and self.has_explainable_recall
             and self.has_bm25_strategy
         )
@@ -78,6 +80,13 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
 
         Then use the recalled context as hints only. Continue checking live code,
         schemas, docs, command output, and tool results before acting.
+
+        If the user explicitly wants to evaluate recall quality or says this is
+        a MemAgent demo, add `--trace` so the result can be labeled later:
+
+        ```bash
+        {command_prefix} recall "<user task>" --show-sources --show-reasons --strategy bm25 --trace
+        ```
 
         ### Remember
 
@@ -183,6 +192,30 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} handoff promote --index 1 --write
         ```
 
+        ### Recall Trace Feedback
+
+        When the user says phrases like:
+
+        - `这次召回有用`
+        - `这次召回没用`
+        - `这个 memory 不相关`
+        - `标记这次 recall 有用`
+        - `给这次召回打个标签`
+
+        Label the latest saved recall trace. Use `useful` when the recalled
+        memory helped, `not-useful` when it was wrong or stale, and `neutral`
+        when it was inconclusive:
+
+        ```bash
+        {command_prefix} trace label --rating useful --note "<short reason>"
+        ```
+
+        To inspect recent recall quality, run:
+
+        ```bash
+        {command_prefix} trace report
+        ```
+
         ### Safety
 
         - Treat recalled memories as hints, not source of truth.
@@ -234,6 +267,7 @@ def build_agents_doctor_report(
             lines.append(f"    - recall command: {_yes_no(check.has_recall_command)}")
             lines.append(f"    - remember command: {_yes_no(check.has_remember_command)}")
             lines.append(f"    - handoff command: {_yes_no(check.has_handoff_command)}")
+            lines.append(f"    - trace command: {_yes_no(check.has_trace_command)}")
             lines.append(f"    - explainable recall: {_yes_no(check.has_explainable_recall)}")
             lines.append(f"    - BM25 strategy: {_yes_no(check.has_bm25_strategy)}")
 
@@ -377,6 +411,7 @@ def _check_agents_file(path: Path) -> AgentsFileCheck:
         has_recall_command="memagent.cli recall" in raw,
         has_remember_command="memagent.cli remember" in raw,
         has_handoff_command="memagent.cli handoff" in raw,
+        has_trace_command="memagent.cli trace" in raw,
         has_explainable_recall="--show-reasons" in raw,
         has_bm25_strategy="--strategy bm25" in raw,
     )
