@@ -25,6 +25,8 @@ src/memagent/
 PYTHONPATH=src python -m memagent.cli remember --domain coding --kind pitfall "这次 RDS 大表统计不要直接 JSON group，先按 id 分段。"
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --show-sources --show-reasons --strategy bm25
 PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --json
+PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --trace
+PYTHONPATH=src python -m memagent.cli trace list
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
@@ -44,6 +46,8 @@ python -m pip install -e .
 memagent remember --domain coding --kind note "..."
 memagent recall "..." --show-sources --show-reasons --strategy bm25
 memagent recall "..." --json
+memagent recall "..." --trace
+memagent trace list
 memagent codex "..."
 memagent agents-snippet
 memagent agents-install
@@ -83,9 +87,9 @@ flowchart LR
   WRAP --> CODEX["Codex CLI"]
 ```
 
-## 3. 三条命令分别做什么
+## 3. 主要命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`mcp-stdio`、`recall-eval`。
+当前主要命令是 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`mcp-stdio`、`recall-eval`。
 
 ### 3.1 `remember`
 
@@ -191,6 +195,16 @@ memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --
 ```
 
 JSON 使用 `schema_version: memagent.recall.v1`，包含 `query`、`context`、`matches`、`pack` 和 `text`。其中 `text` 是普通 recall 的 prompt patch，`matches/pack` 是机器可稳定读取的结构化字段。
+
+如果想保存一次真实召回，供之后复盘或评估，可以加：
+
+```bash
+memagent recall "how to avoid RDS JSON timeout" --show-sources --show-reasons --strategy bm25 --trace
+memagent trace list
+memagent trace show --json
+```
+
+trace 默认不会自动记录，必须显式传 `--trace`。保存位置是 `~/.memagent/recall_traces/*.json`。
 
 ### 3.3 `codex`
 
@@ -758,6 +772,20 @@ MemoryMatch list
 
 `payload["text"]` 是给 Codex prompt 用的短上下文；`payload["matches"]` 和 `payload["pack"]` 是给 agent/MCP/评估脚本用的结构化字段。CLI 的 `recall --json` 和 MCP 的 `memagent_recall format=json` 都复用这份 payload。
 
+#### Recall Traces
+
+v0.17 增加 opt-in traces：
+
+```text
+save_recall_trace(...)
+  -> ~/.memagent/recall_traces/trace_*.json
+
+trace list/show
+  -> read saved recall payload
+```
+
+trace 文件保存的是 `memagent.recall.v1` payload 加一个 `trace` 元信息块。这个设计用于后续从 mock `recall-eval` 走向真实使用评估：用户可以对 trace 标注 useful / not useful，也可以用 trace 回放来比较 retriever 改动。
+
 ### 4.4 `handoff.py`
 
 `handoff.py` 负责每个项目最近一次交接状态。
@@ -836,6 +864,7 @@ tests/test_memory_store.py
 
 tests/test_cli.py
   test_recall_json_cli
+  test_recall_trace_cli
 
 tests/test_wrapper.py
   test_build_augmented_prompt

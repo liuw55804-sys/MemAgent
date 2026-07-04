@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import Counter
+import json
 import math
 import os
 import re
@@ -50,6 +51,24 @@ class SavedMemory:
 
 
 @dataclass(frozen=True)
+class SavedRecallTrace:
+    path: Path
+    identifier: str
+    payload: dict[str, object]
+
+
+@dataclass(frozen=True)
+class RecallTraceSummary:
+    path: Path
+    identifier: str
+    created_at: str
+    query: str
+    repo_name: str | None
+    total_matches: int
+    top_match: str | None
+
+
+@dataclass(frozen=True)
 class MemoryMatch:
     path: Path
     score: float
@@ -75,6 +94,7 @@ class MemoryStore:
     def __init__(self, home: Path) -> None:
         self.home = home.expanduser().resolve()
         self.memories_dir = self.home / "memories"
+        self.traces_dir = self.home / "recall_traces"
         self.memories_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
@@ -237,6 +257,97 @@ class MemoryStore:
         payload["text"] = "\n".join(lines)
         return payload
 
+    def save_recall_trace(self, payload: dict[str, object], *, source: str) -> SavedRecallTrace:
+        self.traces_dir.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc)
+        identifier = f"trace_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+        path = self.traces_dir / f"{identifier}.json"
+        trace_payload = dict(payload)
+        trace_payload["trace"] = {
+            "id": identifier,
+            "created_at": now.isoformat(),
+            "source": source,
+            "path": str(path),
+        }
+        path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return SavedRecallTrace(path=path, identifier=identifier, payload=trace_payload)
+
+    def list_recall_traces(self, *, limit: int = 5) -> list[RecallTraceSummary]:
+        summaries: list[RecallTraceSummary] = []
+        if not self.traces_dir.exists():
+            return summaries
+        for path in sorted(self.traces_dir.glob("trace_*.json"), reverse=True):
+            if len(summaries) >= max(limit, 0):
+                break
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            summaries.append(_trace_summary(path=path, payload=payload))
+        return summaries
+
+    def load_recall_trace(self, identifier: str | None = None) -> dict[str, object]:
+        path = self._resolve_recall_trace_path(identifier)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid recall trace JSON: {path}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"invalid recall trace payload: {path}")
+        return payload
+
+    def compose_recall_trace_list(self, *, limit: int = 5) -> str:
+        summaries = self.list_recall_traces(limit=limit)
+        lines = ["[MemAgent recall traces]"]
+        if not summaries:
+            lines.append("- No recall traces found.")
+            return "\n".join(lines)
+        for summary in summaries:
+            top = summary.top_match or "none"
+            repo = summary.repo_name or "unknown"
+            lines.append(
+                "- "
+                f"{summary.identifier} | query={summary.query!r} | repo={repo} | "
+                f"matches={summary.total_matches} | top={top}"
+            )
+        return "\n".join(lines)
+
+    def compose_recall_trace(self, *, identifier: str | None = None) -> str:
+        payload = self.load_recall_trace(identifier)
+        trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+        lines = ["[MemAgent recall trace]"]
+        if trace:
+            lines.append(f"- id: {trace.get('id', 'unknown')}")
+            lines.append(f"- created_at: {trace.get('created_at', 'unknown')}")
+            lines.append(f"- source: {trace.get('source', 'unknown')}")
+        lines.append(f"- query: {payload.get('query', '')}")
+        context = payload.get("context")
+        if isinstance(context, dict):
+            lines.append(f"- repo: {context.get('repo_name') or 'unknown'}")
+            lines.append(f"- cwd: {context.get('cwd') or 'unknown'}")
+        lines.append(f"- total_matches: {payload.get('total_matches', 0)}")
+        text = payload.get("text")
+        if isinstance(text, str) and text.strip():
+            lines.extend(["", text])
+        return "\n".join(lines)
+
+    def _resolve_recall_trace_path(self, identifier: str | None) -> Path:
+        if not self.traces_dir.exists():
+            raise ValueError("no recall traces found")
+        if not identifier:
+            paths = sorted(self.traces_dir.glob("trace_*.json"), reverse=True)
+            if not paths:
+                raise ValueError("no recall traces found")
+            return paths[0]
+        raw = Path(identifier).expanduser()
+        if raw.exists():
+            return raw.resolve()
+        stem = raw.stem if raw.suffix else str(raw)
+        path = self.traces_dir / f"{stem}.json"
+        if path.exists():
+            return path
+        raise ValueError(f"recall trace not found: {identifier}")
+
 
 def _render_memory_card(
     *,
@@ -320,6 +431,29 @@ def _pack_payload(packed: PackedMemoryContext) -> dict[str, object]:
         "truncated": packed.truncated,
         "lines": list(packed.lines),
     }
+
+
+def _trace_summary(*, path: Path, payload: dict[str, object]) -> RecallTraceSummary:
+    trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    top_match = None
+    if matches and isinstance(matches[0], dict):
+        raw_top = matches[0].get("title")
+        top_match = str(raw_top) if raw_top is not None else None
+    return RecallTraceSummary(
+        path=path,
+        identifier=str(trace.get("id") or path.stem),
+        created_at=str(trace.get("created_at") or ""),
+        query=str(payload.get("query") or ""),
+        repo_name=str(context.get("repo_name")) if context.get("repo_name") is not None else None,
+        total_matches=_safe_int(payload.get("total_matches")),
+        top_match=top_match,
+    )
+
+
+def _safe_int(value: object) -> int:
+    return value if isinstance(value, int) else 0
 
 
 def _derive_topic(text: str) -> str:

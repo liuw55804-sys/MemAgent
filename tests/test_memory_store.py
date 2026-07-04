@@ -74,6 +74,37 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertEqual(payload["pack"]["emitted_matches"], 1)
             self.assertFalse(payload["pack"]["truncated"])
 
+    def test_save_and_load_recall_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MemoryStore(Path(tmp))
+            context = project_context()
+            payload = store.build_recall_payload(
+                query="no matching memory",
+                context=context,
+                matches=[],
+                max_lines=8,
+                show_sources=True,
+                show_reasons=True,
+            )
+            saved = store.save_recall_trace(payload, source="test")
+            self.assertTrue(saved.path.exists())
+            self.assertEqual(saved.payload["trace"]["id"], saved.identifier)
+            self.assertEqual(saved.payload["trace"]["source"], "test")
+
+            summaries = store.list_recall_traces(limit=3)
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0].identifier, saved.identifier)
+            self.assertEqual(summaries[0].query, "no matching memory")
+            self.assertEqual(summaries[0].repo_name, "walle")
+            self.assertEqual(summaries[0].total_matches, 0)
+
+            loaded_latest = store.load_recall_trace()
+            loaded_by_id = store.load_recall_trace(saved.identifier)
+            self.assertEqual(loaded_latest["trace"]["id"], saved.identifier)
+            self.assertEqual(loaded_by_id["trace"]["id"], saved.identifier)
+            self.assertIn(saved.identifier, store.compose_recall_trace_list(limit=5))
+            self.assertIn("[MemAgent recall trace]", store.compose_recall_trace())
+
     def test_remember_with_explicit_domain_and_kind(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = MemoryStore(Path(tmp))

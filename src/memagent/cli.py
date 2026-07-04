@@ -99,6 +99,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print structured JSON recall payload instead of text.",
     )
+    recall.add_argument(
+        "--trace",
+        action="store_true",
+        help="Save this recall payload under the local recall_traces directory.",
+    )
 
     codex = subparsers.add_parser(
         "codex",
@@ -239,6 +244,36 @@ def build_parser() -> argparse.ArgumentParser:
         "--workspace",
         default="local_memory_demo/recall_eval",
         help="Evaluation workspace directory. Default: local_memory_demo/recall_eval.",
+    )
+
+    trace = subparsers.add_parser(
+        "trace",
+        help="Inspect saved recall traces.",
+    )
+    trace_subparsers = trace.add_subparsers(dest="trace_command", required=True)
+    trace_list = trace_subparsers.add_parser(
+        "list",
+        help="List recent recall traces.",
+    )
+    trace_list.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum traces to list. Default: 5.",
+    )
+    trace_show = trace_subparsers.add_parser(
+        "show",
+        help="Show one recall trace. Defaults to the latest trace.",
+    )
+    trace_show.add_argument(
+        "identifier",
+        nargs="?",
+        help="Trace id, trace JSON path, or omitted for the latest trace.",
+    )
+    trace_show.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the full saved trace JSON.",
     )
 
     handoff = subparsers.add_parser(
@@ -439,6 +474,21 @@ def main(argv: list[str] | None = None) -> int:
         print(render_agents_install_report(plan, write=args.write))
         return 1 if plan.blocked and args.write else 0
 
+    if args.command == "trace":
+        try:
+            if args.trace_command == "list":
+                print(store.compose_recall_trace_list(limit=args.limit))
+                return 0
+            if args.trace_command == "show":
+                if args.json:
+                    payload = store.load_recall_trace(args.identifier)
+                    print(json.dumps(payload, ensure_ascii=False, indent=2))
+                else:
+                    print(store.compose_recall_trace(identifier=args.identifier))
+                return 0
+        except ValueError as exc:
+            parser.error(str(exc))
+
     if args.command == "remember":
         context = detect_context()
         try:
@@ -544,10 +594,17 @@ def main(argv: list[str] | None = None) -> int:
             show_sources=args.show_sources,
             show_reasons=args.show_reasons,
         )
+        saved_trace = store.save_recall_trace(payload, source="cli") if args.trace else None
+        output_payload = saved_trace.payload if saved_trace else payload
         if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(json.dumps(output_payload, ensure_ascii=False, indent=2))
         else:
-            print(payload["text"])
+            print(output_payload["text"])
+            if saved_trace:
+                print("")
+                print("[MemAgent recall trace saved]")
+                print(f"- id: {saved_trace.identifier}")
+                print(f"- path: {saved_trace.path}")
         return 0
 
     if args.command == "codex":

@@ -179,11 +179,20 @@ def run_demo(
         show_sources=True,
         show_reasons=True,
     )
+    structured_trace = store.save_recall_trace(structured_recall, source="demo")
     steps.append(
         DemoStep(
             title="Recall as structured JSON",
-            command=f"{command_prefix} recall {_quote(DEMO_QUERY)} --show-sources --show-reasons --strategy bm25 --json",
-            output=json.dumps(structured_recall, ensure_ascii=False, indent=2),
+            command=f"{command_prefix} recall {_quote(DEMO_QUERY)} --show-sources --show-reasons --strategy bm25 --json --trace",
+            output=json.dumps(structured_trace.payload, ensure_ascii=False, indent=2),
+        )
+    )
+
+    steps.append(
+        DemoStep(
+            title="List saved recall traces",
+            command=f"{command_prefix} trace list --limit 3",
+            output=store.compose_recall_trace_list(limit=3),
         )
     )
 

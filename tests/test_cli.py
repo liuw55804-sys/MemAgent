@@ -67,6 +67,66 @@ class CliTest(unittest.TestCase):
             self.assertIn("Pack:", payload["text"])
             self.assertFalse(payload["pack"]["truncated"])
 
+    def test_recall_trace_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(project)
+                with redirect_stdout(StringIO()):
+                    self.assertEqual(
+                        main(
+                            [
+                                "--home",
+                                str(home),
+                                "remember",
+                                "--topic",
+                                "Owner skill route",
+                                "--kind",
+                                "skill_route",
+                                "Use task-owner-diagnose before manual owner tracing.",
+                            ]
+                        ),
+                        0,
+                    )
+
+                recall_stdout = StringIO()
+                with redirect_stdout(recall_stdout):
+                    recall_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "recall",
+                            "owner tracing",
+                            "--trace",
+                        ]
+                    )
+                self.assertEqual(recall_code, 0)
+                self.assertIn("[MemAgent recall trace saved]", recall_stdout.getvalue())
+
+                list_stdout = StringIO()
+                with redirect_stdout(list_stdout):
+                    list_code = main(["--home", str(home), "trace", "list"])
+                self.assertEqual(list_code, 0)
+                self.assertIn("Owner skill route", list_stdout.getvalue())
+
+                show_stdout = StringIO()
+                with redirect_stdout(show_stdout):
+                    show_code = main(["--home", str(home), "trace", "show", "--json"])
+                self.assertEqual(show_code, 0)
+            finally:
+                os.chdir(previous_cwd)
+
+            payload = json.loads(show_stdout.getvalue())
+            self.assertEqual(payload["schema_version"], "memagent.recall.v1")
+            self.assertEqual(payload["trace"]["source"], "cli")
+            self.assertEqual(payload["matches"][0]["title"], "Owner skill route")
+
 
 if __name__ == "__main__":
     unittest.main()

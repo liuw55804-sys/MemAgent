@@ -11,6 +11,8 @@ session can quickly recall proven commands, failed paths, and next-step hints.
 python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
 python -m memagent.cli recall "continue checking attribution accuracy" --json
+python -m memagent.cli recall "continue checking attribution accuracy" --trace
+python -m memagent.cli trace list
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli handoff show
@@ -29,6 +31,8 @@ python -m pip install -e .
 memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
 memagent recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
 memagent recall "continue checking attribution accuracy" --json
+memagent recall "continue checking attribution accuracy" --trace
+memagent trace list
 memagent agents-install
 memagent agents-doctor
 memagent handoff show
@@ -254,6 +258,12 @@ showing memory budget, dedupe count, and truncation status.
 See [docs/design_v0.16_structured_recall.md](docs/design_v0.16_structured_recall.md)
 for the structured recall contract. `memagent recall --json` emits a versioned
 payload for other agents, MCP clients, evaluations, or future UI surfaces.
+
+## v0.17 Design
+
+See [docs/design_v0.17_recall_traces.md](docs/design_v0.17_recall_traces.md)
+for the opt-in recall trace design. `memagent recall --trace` saves a local
+`memagent.recall.v1` payload for later review or evaluation.
 
 ## Codex Natural Language Triggers
 
