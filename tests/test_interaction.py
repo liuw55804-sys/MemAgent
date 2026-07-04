@@ -92,6 +92,65 @@ class InteractionProcessTest(unittest.TestCase):
             payload = store.load_recall_trace(saved.identifier)
             self.assertEqual(payload["feedback"]["rating"], "useful")
 
+    def test_process_handoff_save_writes_latest_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+
+            result = process_interaction(
+                message="先到这，下次继续时接上。",
+                recent_text="\n".join(
+                    [
+                        "## Summary",
+                        "MemAgent wrapper now runs process-first preflight.",
+                        "## Done",
+                        "- Added LLM profile support.",
+                        "## Next Steps",
+                        "- Run completion audit.",
+                    ]
+                ),
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+            )
+
+            self.assertEqual(result.route.action, "handoff_save")
+            self.assertTrue(result.executed)
+            self.assertIn("handoff", result.writes)
+            self.assertIn("latest_path", result.artifacts)
+            self.assertTrue(Path(result.artifacts["latest_path"]).exists())
+
+    def test_process_handoff_show_reads_latest_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoff_store = HandoffStore(store.home)
+            handoff_store.save(
+                context=context,
+                topic="Process handoff",
+                summary="MemAgent natural interaction processor is ready.",
+                done=["Added recall, draft memory, and feedback process actions."],
+                next_steps=["Verify handoff process actions."],
+                open_questions=[],
+                memory_candidates=[],
+            )
+
+            result = process_interaction(
+                message="继续上次做到哪了？",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoff_store,
+            )
+
+            self.assertEqual(result.route.action, "handoff_show")
+            self.assertTrue(result.executed)
+            self.assertEqual(result.writes, ())
+            self.assertIn("Process handoff", result.result_text)
+            self.assertIn("Verify handoff process actions.", result.result_text)
+
 
 def _context(project: Path) -> ProjectContext:
     project.mkdir(parents=True, exist_ok=True)
@@ -107,4 +166,3 @@ def _context(project: Path) -> ProjectContext:
 
 if __name__ == "__main__":
     unittest.main()
-
