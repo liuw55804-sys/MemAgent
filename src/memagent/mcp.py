@@ -16,6 +16,7 @@ from memagent.handoff import (
     render_handoff_draft,
     render_promotion_preview,
 )
+from memagent.interaction import process_interaction, process_payload_json, render_process_result
 from memagent.memory import MemoryStore
 from memagent.router import render_route_decision, route_interaction
 
@@ -133,6 +134,8 @@ class McpServer:
             return _tool_text(self._tool_route(arguments))
         if name == "memagent_memory_draft":
             return _tool_text(self._tool_memory_draft(arguments))
+        if name == "memagent_process":
+            return _tool_text(self._tool_process(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -211,6 +214,30 @@ class McpServer:
         if response_format == "json":
             return json.dumps(memory_draft.to_payload(context=context), ensure_ascii=False, indent=2)
         return render_memory_draft(memory_draft, context=context)
+
+    def _tool_process(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        result = process_interaction(
+            message=_required_str(arguments, "message"),
+            recent_text=_optional_str(arguments, "recent_text") or "",
+            context=context,
+            store=self.store,
+            handoff_store=self.handoff_store,
+            provider=_optional_str(arguments, "provider") or "heuristic",
+            allow_writes=_optional_bool(arguments, "allow_writes", True),
+            trace_recall=_optional_bool(arguments, "trace_recall", True),
+            limit=_optional_int(arguments, "limit", 5),
+            max_lines=_optional_int(arguments, "max_lines", 12),
+            strategy=_optional_str(arguments, "strategy") or "bm25",
+            eval_workspace=_optional_path(arguments, "eval_workspace"),
+            replay_workspace=_optional_path(arguments, "replay_workspace"),
+        )
+        response_format = _optional_str(arguments, "format") or "text"
+        if response_format not in {"text", "json"}:
+            raise ValueError("format must be text or json")
+        if response_format == "json":
+            return process_payload_json(result, context=context)
+        return render_process_result(result, context=context)
 
     def _tool_agents_doctor(self, arguments: dict[str, Any]) -> str:
         context = detect_context(_optional_path(arguments, "cwd"))
@@ -507,6 +534,46 @@ def tool_definitions() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_process",
+            "title": "Process MemAgent Interaction",
+            "description": "Route and handle ordinary Codex user language with MemAgent.",
+            "annotations": _tool_annotations(read_only=False, idempotent=False),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Latest user message or task."},
+                    "recent_text": {"type": "string", "description": "Optional recent conversation excerpt."},
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                    "provider": {
+                        "type": "string",
+                        "description": "Routing/drafting provider.",
+                        "enum": ["heuristic", "openai-compatible"],
+                    },
+                    "allow_writes": {
+                        "type": "boolean",
+                        "description": "Allow local trace, feedback, handoff, or eval writes.",
+                    },
+                    "trace_recall": {"type": "boolean", "description": "Save recall traces for recall actions."},
+                    "limit": {"type": "integer", "description": "Maximum memory cards to inspect for recall."},
+                    "max_lines": {"type": "integer", "description": "Maximum lines in recalled context."},
+                    "strategy": {
+                        "type": "string",
+                        "description": "Recall scoring strategy.",
+                        "enum": ["bm25", "keyword"],
+                    },
+                    "eval_workspace": {"type": "string", "description": "Explicit workspace for trace eval."},
+                    "replay_workspace": {"type": "string", "description": "Explicit workspace for trace replay."},
+                    "format": {
+                        "type": "string",
+                        "description": "Return format: text or json.",
+                        "enum": ["text", "json"],
+                    },
+                },
+                "required": ["message"],
                 "additionalProperties": False,
             },
         },

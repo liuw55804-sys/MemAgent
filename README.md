@@ -351,12 +351,21 @@ reviewable memory drafting. `memagent draft memory` rewrites a conversation
 snippet into topic/kind/triggers/memory plus a quality label, but never writes a
 durable memory card without user confirmation.
 
-## Codex Natural Language Triggers
+## v0.29 Design
+
+See [docs/design_v0.29_process_interaction.md](docs/design_v0.29_process_interaction.md)
+for the natural interaction processor. `memagent process` routes ordinary Codex
+language and executes safe memory-layer actions while keeping durable memory
+writes behind explicit user confirmation.
+
+## Codex Natural Language Signals
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
 integration that lets Codex call MemAgent from ordinary task language such as
 `继续排查 audit_rule_lib`, `这个入口下次别忘了`, `刚刚那条提醒有用`, or
 `上次做到哪`.
+These examples are semantic signals for Codex or an LLM-assisted router, not a
+hard trigger-word list for the user.
 
 ## Demo
 

@@ -196,7 +196,7 @@ memagent codex "继续查机审归因准确率"
 先到这，下次继续
 ```
 
-这些句子不是硬编码触发词，而是给 Codex / LLM router 读的语义示例：
+这些句子不是硬编码触发词，而是给 Codex / LLM router 读的语义示例。理想路径由 AI API 判断当前是不是“召回、沉淀、反馈、handoff、普通对话”等自然交互节点；本地 heuristic 只作为离线兜底和可测试 baseline：
 
 ```text
 用户自然语言
@@ -206,7 +206,7 @@ memagent codex "继续查机审归因准确率"
   -> memagent 写入、召回或标注本地记忆
 ```
 
-这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 将判断逻辑抽成 `memagent route` / `memagent_route`；v0.28 用 `draft memory` / `memagent_memory_draft` 做候选改写和质量判断。两者都用同一类 schema 支持本地 heuristic 和 OpenAI-compatible LLM provider。
+这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 将判断逻辑抽成 `memagent route` / `memagent_route`；v0.28 用 `draft memory` / `memagent_memory_draft` 做候选改写和质量判断；v0.29 用 `process` / `memagent_process` 把 route 和安全动作串成一个 Codex-native 入口。这些能力都用同一类 schema 支持本地 heuristic 和 OpenAI-compatible LLM provider。
 
 ### 8.3 第三阶段：半自动提示
 

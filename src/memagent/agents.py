@@ -9,7 +9,8 @@ from memagent.context import ProjectContext
 
 MEMAGENT_BLOCK_START = "<!-- memagent:start -->"
 MEMAGENT_BLOCK_END = "<!-- memagent:end -->"
-MEMAGENT_SECTION_HEADING = "## MemAgent Natural Language Triggers"
+MEMAGENT_SECTION_HEADING = "## MemAgent Natural Language Signals"
+LEGACY_MEMAGENT_SECTION_HEADINGS = ("## MemAgent Natural Language Triggers",)
 
 
 @dataclass(frozen=True)
@@ -57,11 +58,24 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
     command_prefix = f"PYTHONPATH={src_path} python -m memagent.cli"
     body = textwrap.dedent(
         f"""
-        ## MemAgent Natural Language Triggers
+        ## MemAgent Natural Language Signals
 
         MemAgent is a local workflow memory layer for Codex/coding-agent sessions.
         Use it as a small background memory helper. The user does not need to
         know words like recall, trace, eval, replay, candidate, or handoff.
+        The examples below are semantic guidance for Codex/LLM routing, not a
+        hard trigger-word list that the user must follow.
+
+        For the normal Codex-native path, let MemAgent route and handle the
+        interaction through one entrypoint:
+
+        ```bash
+        {command_prefix} process "<latest user message>"
+        ```
+
+        `process` may save local recall traces, trace feedback, or handoffs, but
+        it must not write durable long-term memory cards. Durable memory still
+        requires an explicit preview and user confirmation.
 
         When the intent is unclear, ask MemAgent's router for a read-only
         recommendation before choosing a memory action:
@@ -84,7 +98,9 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         - `类似上次那个问题`
         - `先按你觉得最省时间的方式来`
 
-        Run:
+        In the normal path, use `process` first so MemAgent can decide whether
+        recall is actually useful. If you already know this is a task-start
+        memory check and want tighter control, run:
 
         ```bash
         {command_prefix} recall "<short user task>" --show-sources --show-reasons --strategy bm25 --trace
@@ -393,7 +409,7 @@ def build_agents_install_plan(
             snippet=snippet,
         )
 
-    if MEMAGENT_SECTION_HEADING in raw:
+    if _find_memagent_section_heading(raw) is not None:
         if not replace_existing:
             return AgentsInstallPlan(
                 target=target_path,
@@ -473,7 +489,11 @@ def _check_agents_file(path: Path) -> AgentsFileCheck:
     raw = path.read_text(encoding="utf-8", errors="replace")
     return AgentsFileCheck(
         path=path.resolve(),
-        has_memagent_section="MemAgent" in raw and "Natural Language Triggers" in raw,
+        has_memagent_section="MemAgent" in raw
+        and (
+            "Natural Language Signals" in raw
+            or "Natural Language Triggers" in raw
+        ),
         has_recall_command="memagent.cli recall" in raw,
         has_remember_command="memagent.cli remember" in raw,
         has_handoff_command="memagent.cli handoff" in raw,
@@ -493,11 +513,12 @@ def _replace_marked_block(raw: str, snippet: str) -> str | None:
 
 
 def _replace_unmarked_section(raw: str, snippet: str) -> str:
-    start = raw.find(MEMAGENT_SECTION_HEADING)
-    if start < 0:
+    heading = _find_memagent_section_heading(raw)
+    if heading is None:
         return raw
+    start = raw.find(heading)
     line_start = raw.rfind("\n", 0, start) + 1
-    next_heading = raw.find("\n## ", start + len(MEMAGENT_SECTION_HEADING))
+    next_heading = raw.find("\n## ", start + len(heading))
     if next_heading < 0:
         prefix = raw[:line_start].rstrip()
         separator = "\n\n" if prefix else ""
@@ -506,6 +527,13 @@ def _replace_unmarked_section(raw: str, snippet: str) -> str:
     suffix = raw[next_heading:].lstrip("\n")
     separator = "\n\n" if prefix else ""
     return f"{prefix}{separator}{snippet}\n\n{suffix}"
+
+
+def _find_memagent_section_heading(raw: str) -> str | None:
+    for heading in (MEMAGENT_SECTION_HEADING, *LEGACY_MEMAGENT_SECTION_HEADINGS):
+        if heading in raw:
+            return heading
+    return None
 
 
 def _yes_no(value: bool) -> str:

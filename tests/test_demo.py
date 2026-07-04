@@ -84,7 +84,7 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("Codex ingest candidates", result.report)
             self.assertIn("Trace replay eval", result.report)
             self.assertIn("JSON-RPC exchanges captured", result.report)
-            self.assertEqual(result.mcp_tool_count, 15)
+            self.assertEqual(result.mcp_tool_count, 16)
             self.assertGreaterEqual(len(result.mcp_demo.exchanges), 13)
 
     def test_demo_bundle_cli(self) -> None:
@@ -107,7 +107,7 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("mcp transcript:", stdout.getvalue())
             self.assertIn("ingest candidates:", stdout.getvalue())
             self.assertIn("trace replay:", stdout.getvalue())
-            self.assertIn("mcp tools: 15", stdout.getvalue())
+            self.assertIn("mcp tools: 16", stdout.getvalue())
             self.assertTrue((workspace / "interview_demo.md").exists())
 
     def test_run_mcp_demo_writes_jsonrpc_transcript(self) -> None:

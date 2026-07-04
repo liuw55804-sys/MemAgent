@@ -28,6 +28,7 @@ from memagent.ingest import (
     DEFAULT_CODEX_SESSIONS_ROOT,
     run_codex_ingest,
 )
+from memagent.interaction import process_interaction, process_payload_json, render_process_result
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.router import render_route_decision, route_interaction
@@ -147,6 +148,66 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print structured route payload instead of text.",
     )
 
+    process = subparsers.add_parser(
+        "process",
+        help="Route and handle a natural Codex interaction with MemAgent.",
+    )
+    process.add_argument("message", help="Latest user message or task.")
+    process.add_argument(
+        "--cwd",
+        help="Project directory for interaction context. Defaults to the current working directory.",
+    )
+    process.add_argument(
+        "--recent-text",
+        default="",
+        help="Optional recent conversation excerpt for drafting or handoff.",
+    )
+    process.add_argument(
+        "--from-file",
+        help='Read recent conversation text from a file, or "-" for stdin.',
+    )
+    process.add_argument(
+        "--provider",
+        default="heuristic",
+        choices=["heuristic", "openai-compatible"],
+        help="Routing/drafting provider. Default: heuristic.",
+    )
+    process.add_argument(
+        "--no-write",
+        action="store_true",
+        help="Do not write trace feedback, handoff, trace, or evaluation artifacts.",
+    )
+    process.add_argument(
+        "--no-trace",
+        action="store_true",
+        help="Do not save recall traces when processing recall actions.",
+    )
+    process.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum memory cards to inspect for recall actions. Default: 5.",
+    )
+    process.add_argument(
+        "--max-lines",
+        type=int,
+        default=12,
+        help="Maximum lines in recalled context. Default: 12.",
+    )
+    process.add_argument(
+        "--strategy",
+        default=DEFAULT_RECALL_STRATEGY,
+        choices=["bm25", "keyword"],
+        help="Recall scoring strategy for recall actions. Default: bm25.",
+    )
+    process.add_argument("--eval-workspace", help="Explicit workspace for trace eval reports.")
+    process.add_argument("--replay-workspace", help="Explicit workspace for trace replay reports.")
+    process.add_argument(
+        "--json",
+        action="store_true",
+        help="Print structured process payload instead of text.",
+    )
+
     draft = subparsers.add_parser(
         "draft",
         help="Draft reviewable MemAgent artifacts without writing durable memory.",
@@ -245,7 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     snippet = subparsers.add_parser(
         "agents-snippet",
-        help="Print AGENTS.md instructions for natural-language MemAgent triggers.",
+        help="Print AGENTS.md instructions for natural-language MemAgent signals.",
     )
     snippet.add_argument(
         "--memagent-root",
@@ -773,6 +834,38 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(decision.to_payload(context=context), ensure_ascii=False, indent=2))
         else:
             print(render_route_decision(decision, context=context))
+        return 0
+
+    if args.command == "process":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        if args.from_file:
+            source_text = sys.stdin.read() if args.from_file == "-" else Path(args.from_file).expanduser().read_text(encoding="utf-8")
+            recent_text = "\n".join(part for part in (args.recent_text, source_text) if part)
+        else:
+            recent_text = args.recent_text
+        handoff_store = HandoffStore(store.home)
+        try:
+            result = process_interaction(
+                message=args.message,
+                recent_text=recent_text,
+                context=context,
+                store=store,
+                handoff_store=handoff_store,
+                provider=args.provider,
+                allow_writes=not args.no_write,
+                trace_recall=not args.no_trace,
+                limit=args.limit,
+                max_lines=args.max_lines,
+                strategy=args.strategy,
+                eval_workspace=Path(args.eval_workspace) if args.eval_workspace else None,
+                replay_workspace=Path(args.replay_workspace) if args.replay_workspace else None,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.json:
+            print(process_payload_json(result, context=context))
+        else:
+            print(render_process_result(result, context=context))
         return 0
 
     if args.command == "draft":

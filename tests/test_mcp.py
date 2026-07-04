@@ -39,6 +39,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_agents_doctor",
                     "memagent_route",
                     "memagent_memory_draft",
+                    "memagent_process",
                     "memagent_handoff_save",
                     "memagent_handoff_show",
                     "memagent_handoff_draft",
@@ -231,6 +232,36 @@ class McpServerTest(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "memagent.memory_draft.v1")
             self.assertEqual(payload["quality_label"], "keep")
             self.assertTrue(payload["requires_confirmation"])
+
+    def test_process_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+            server = McpServer.from_home_arg(str(Path(tmp) / "home"), "/tmp/memagent")
+
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_process",
+                        "arguments": {
+                            "message": "这个入口下次别忘了",
+                            "recent_text": "bytedcli rds db table schema demo_db demo_table --region cn",
+                            "cwd": str(project),
+                            "format": "json",
+                        },
+                    },
+                }
+            )
+
+            self.assertFalse(response["result"]["isError"])
+            payload = json.loads(response["result"]["content"][0]["text"])
+            self.assertEqual(payload["schema_version"], "memagent.process.v1")
+            self.assertEqual(payload["route"]["action"], "draft_memory")
+            self.assertEqual(payload["writes"], [])
 
     def test_handoff_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

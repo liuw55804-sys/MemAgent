@@ -8,7 +8,11 @@ The MVP integration uses the Python module path directly, so the `memagent` comm
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli <command>
 ```
 
-## Natural Language Triggers
+## Natural Language Signals
+
+The examples in this document are semantic guidance for Codex or an
+LLM-assisted router. They are not a hard trigger-word list, and users should not
+need to phrase requests in a special way.
 
 Generate the current recommended snippet with:
 
@@ -80,6 +84,14 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 The user should not need to know `recall`, `trace`, `eval`, `replay`, or
 `candidate`. Codex should map ordinary task language to MemAgent operations.
+In the best path, an LLM provider judges these interaction nodes; the local
+heuristic router is the offline fallback and test baseline.
+For the normal path, Codex can call one route-and-handle entrypoint:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli process "latest user message"
+```
+
 When the intent is unclear, Codex can ask the read-only router first:
 
 ```bash
@@ -100,7 +112,9 @@ failure signals:
 - `类似上次那个问题`
 - `先按你觉得最省时间的方式来`
 
-Codex should call:
+In the normal path, Codex should call `process` first so MemAgent can decide
+whether recall is actually useful. If Codex already knows this is a task-start
+memory check and wants tighter control, it can call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short user task" --show-sources --show-reasons --strategy bm25 --trace

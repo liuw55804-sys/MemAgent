@@ -22,10 +22,13 @@ class AgentsSnippetTest(unittest.TestCase):
     def test_build_agents_snippet(self) -> None:
         root = Path("/tmp/memagent").resolve()
         snippet = build_agents_snippet(root)
-        self.assertIn("## MemAgent Natural Language Triggers", snippet)
+        self.assertIn("## MemAgent Natural Language Signals", snippet)
+        self.assertIn("not a", snippet)
+        self.assertIn("hard trigger-word list", snippet)
         self.assertIn(MEMAGENT_BLOCK_START, snippet)
         self.assertIn(MEMAGENT_BLOCK_END, snippet)
         self.assertIn("The user does not need to", snippet)
+        self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli process", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli route", snippet)
         self.assertIn("Task-Start Memory Check", snippet)
         self.assertIn("继续排查 audit_rule_lib", snippet)
@@ -223,7 +226,7 @@ class AgentsSnippetTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             target = project / "AGENTS.md"
-            target.write_text("## MemAgent Natural Language Triggers\nold content\n", encoding="utf-8")
+            target.write_text("## MemAgent Natural Language Signals\nold content\n", encoding="utf-8")
             context = ProjectContext(
                 cwd=project,
                 git_root=None,
@@ -263,7 +266,7 @@ class AgentsSnippetTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             target = project / "AGENTS.md"
-            target.write_text("## MemAgent Natural Language Triggers\nold content\n", encoding="utf-8")
+            target.write_text("## MemAgent Natural Language Signals\nold content\n", encoding="utf-8")
             context = ProjectContext(
                 cwd=project,
                 git_root=None,
@@ -278,7 +281,28 @@ class AgentsSnippetTest(unittest.TestCase):
                 memagent_root=Path("/tmp/memagent"),
             )
             write_agents_install_plan(plan)
-            self.assertEqual(target.read_text(encoding="utf-8"), "## MemAgent Natural Language Triggers\nold content\n")
+            self.assertEqual(target.read_text(encoding="utf-8"), "## MemAgent Natural Language Signals\nold content\n")
+
+    def test_agents_install_plan_recognizes_legacy_trigger_heading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "AGENTS.md"
+            target.write_text("## MemAgent Natural Language Triggers\nold content\n", encoding="utf-8")
+            context = ProjectContext(
+                cwd=project,
+                git_root=None,
+                branch=None,
+                repo_name="demo",
+                recent_files=(),
+                agents_files=(target,),
+            )
+            plan = build_agents_install_plan(
+                context=context,
+                target=target,
+                memagent_root=Path("/tmp/memagent"),
+            )
+            self.assertEqual(plan.action, "blocked")
+            self.assertTrue(plan.blocked)
 
 
 if __name__ == "__main__":
