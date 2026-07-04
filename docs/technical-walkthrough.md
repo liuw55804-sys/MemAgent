@@ -10,6 +10,7 @@ src/memagent/
   cli.py       命令行入口，负责把用户命令转成函数调用
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
   demo.py      运行隔离 demo，并生成可分享的 Markdown transcript
+  eval.py      运行 mock recall benchmark，并生成 hit@1 / MRR report
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
   mcp.py       最小 MCP stdio server，把 recall/remember/doctor 暴露为 tools
   wrapper.py   把召回上下文拼到 Codex prompt 前
@@ -28,6 +29,7 @@ PYTHONPATH=src python -m memagent.cli agents-install
 PYTHONPATH=src python -m memagent.cli agents-doctor
 PYTHONPATH=src python -m memagent.cli demo-run --reset
 PYTHONPATH=src python -m memagent.cli mcp-stdio
+PYTHONPATH=src python -m memagent.cli recall-eval
 ```
 
 安装成 editable package 后，才可以直接用：
@@ -42,6 +44,7 @@ memagent agents-install
 memagent agents-doctor
 memagent demo-run --reset
 memagent mcp-stdio
+memagent recall-eval
 ```
 
 默认记忆文件写到：
@@ -73,7 +76,7 @@ flowchart LR
 
 ## 3. 三条命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`、`mcp-stdio`。
+当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`、`mcp-stdio`、`recall-eval`。
 
 ### 3.1 `remember`
 
@@ -334,6 +337,30 @@ memagent mcp-stdio
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
 
+### 3.9 `recall-eval`
+
+用途：运行 mock recall benchmark，比较 `bm25` 和 `keyword` 两种策略。
+
+命令：
+
+```bash
+memagent recall-eval
+```
+
+默认写到：
+
+```text
+local_memory_demo/recall_eval/report.md
+```
+
+报告包含：
+
+- Hit@1。
+- MRR。
+- 每个 query 的 expected memory、top memory、rank、score、matched terms。
+
+这个命令用于验证和展示 retriever，不读取真实 `~/.memagent`。
+
 ## 4. 文件级讲解
 
 ### 4.1 `cli.py`
@@ -343,7 +370,7 @@ memagent mcp-stdio
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`、`mcp-stdio`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`、`mcp-stdio`、`recall-eval`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -359,12 +386,14 @@ build_parser()
   -> 定义 agents-doctor 子命令
   -> 定义 demo-run 子命令
   -> 定义 mcp-stdio 子命令
+  -> 定义 recall-eval 子命令
 
 main(argv)
   -> parse args
   -> if agents-snippet: build_agents_snippet
   -> if demo-run: run_demo
   -> if mcp-stdio: run_stdio_server
+  -> if recall-eval: run_recall_eval
   -> MemoryStore.from_home_arg(args.home)
   -> if agents-install: build_agents_install_plan + optional write
   -> if remember: detect_context + store.remember(domain, kind, ...)
@@ -680,6 +709,10 @@ tests/test_mcp.py
   test_remember_and_recall_tools
   test_stdio_server
   test_invalid_tool_call_returns_tool_error
+
+tests/test_eval.py
+  test_run_recall_eval_writes_report
+  test_recall_eval_cli
 ```
 
 `test_memory_store.py` 做的是：
@@ -698,6 +731,8 @@ tests/test_mcp.py
 
 `test_mcp.py` 保护的是 MCP adapter：initialize、tools/list、tools/call 和 stdio JSON-RPC 基本链路。
 
+`test_eval.py` 保护的是 RAG evaluation artifact：能生成 mock benchmark report，并且 BM25 指标不弱于 keyword baseline。
+
 运行测试：
 
 ```bash
@@ -715,6 +750,7 @@ PYTHONPATH=src python -m unittest discover -s tests
 - `recall` 预览短上下文。
 - `codex --dry-run` 查看最终 prompt。
 - `agents-install` / `agents-doctor` / `demo-run` 展示 AGENTS.md 集成闭环。
+- `recall-eval` 展示 RAG retriever 的离线评估闭环。
 
 ### 阶段二：下一步最自然的增强
 

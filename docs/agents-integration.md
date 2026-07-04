@@ -43,6 +43,12 @@ For a full mock demo transcript, run:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli demo-run --reset
 ```
 
+For a mock retriever evaluation report, run:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall-eval
+```
+
 For MCP clients, MemAgent also exposes the same memory operations through a
 local stdio server:
 

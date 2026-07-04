@@ -17,6 +17,7 @@ Added:
 - `demo-run` command to create an isolated mock project and write a shareable AGENTS.md integration transcript.
 - `mcp-stdio` command exposing MemAgent recall, remember, and AGENTS.md doctor as MCP tools over stdio.
 - BM25-style recall scoring as the default strategy, with `--strategy keyword` retained as a baseline.
+- `recall-eval` command to run a mock retrieval benchmark and write a Markdown report.
 - Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 

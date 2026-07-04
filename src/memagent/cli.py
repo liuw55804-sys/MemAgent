@@ -14,6 +14,7 @@ from memagent.agents import (
 )
 from memagent.context import detect_context
 from memagent.demo import run_demo
+from memagent.eval import run_recall_eval
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.wrapper import build_augmented_prompt
@@ -218,6 +219,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="MemAgent project root. Defaults to the installed package root.",
     )
 
+    eval_parser = subparsers.add_parser(
+        "recall-eval",
+        help="Run a mock recall benchmark and write a Markdown evaluation report.",
+    )
+    eval_parser.add_argument(
+        "--workspace",
+        default="local_memory_demo/recall_eval",
+        help="Evaluation workspace directory. Default: local_memory_demo/recall_eval.",
+    )
+
     return parser
 
 
@@ -245,6 +256,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "mcp-stdio":
         return run_stdio_server(McpServer.from_home_arg(args.home, args.memagent_root))
+
+    if args.command == "recall-eval":
+        result = run_recall_eval(workspace=Path(args.workspace))
+        print("[MemAgent recall-eval]")
+        print(f"- workspace: {result.workspace}")
+        print(f"- project: {result.project_dir}")
+        print(f"- memory home: {result.memory_home}")
+        print(f"- report: {result.report_path}")
+        for strategy_result in result.strategy_results:
+            print(
+                f"- {strategy_result.strategy}: "
+                f"hit@1={strategy_result.hit_at_1:.2f}; mrr={strategy_result.mrr:.2f}"
+            )
+        return 0
 
     store = MemoryStore.from_home_arg(args.home)
 

@@ -14,6 +14,7 @@ python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli demo-run --reset
 python -m memagent.cli mcp-stdio
+python -m memagent.cli recall-eval
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
 ```
 
@@ -27,6 +28,7 @@ memagent agents-install
 memagent agents-doctor
 memagent demo-run --reset
 memagent mcp-stdio
+memagent recall-eval
 memagent codex "continue checking attribution accuracy"
 ```
 
@@ -153,6 +155,23 @@ minimal MCP stdio adapter design.
 
 See [docs/design_v0.8_rag_recall.md](docs/design_v0.8_rag_recall.md) for the
 BM25-style RAG recall design.
+
+## v0.9 Design
+
+See [docs/design_v0.9_recall_eval.md](docs/design_v0.9_recall_eval.md) for the
+mock recall evaluation design.
+
+Generate a mock recall evaluation report:
+
+```bash
+memagent recall-eval
+```
+
+The report is written to:
+
+```text
+local_memory_demo/recall_eval/report.md
+```
 
 ## Codex Natural Language Triggers
 
