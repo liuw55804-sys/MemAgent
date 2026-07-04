@@ -46,6 +46,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_trace_label",
                     "memagent_trace_report",
                     "memagent_trace_eval",
+                    "memagent_trace_replay",
                 ],
             )
 
@@ -79,6 +80,7 @@ class McpServerTest(unittest.TestCase):
             "memagent_trace_show",
             "memagent_trace_report",
             "memagent_trace_eval",
+            "memagent_trace_replay",
         }
         write_capable_tools = set(tools) - read_only_tools
 
@@ -375,6 +377,21 @@ class McpServerTest(unittest.TestCase):
             )
             self.assertIn("[MemAgent trace-eval]", eval_response["result"]["content"][0]["text"])
             self.assertTrue((eval_workspace / "report.md").exists())
+
+            replay_workspace = Path(tmp) / "trace_replay"
+            replay_response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 6,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_trace_replay",
+                        "arguments": {"workspace": str(replay_workspace), "limit": 5},
+                    },
+                }
+            )
+            self.assertIn("[MemAgent trace-replay]", replay_response["result"]["content"][0]["text"])
+            self.assertTrue((replay_workspace / "report.md").exists())
 
     def test_stdio_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

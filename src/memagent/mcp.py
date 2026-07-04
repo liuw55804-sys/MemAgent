@@ -8,7 +8,7 @@ from typing import Any, TextIO
 
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
-from memagent.eval import run_trace_eval
+from memagent.eval import run_trace_eval, run_trace_replay
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -125,6 +125,8 @@ class McpServer:
             return _tool_text(self._tool_trace_report(arguments))
         if name == "memagent_trace_eval":
             return _tool_text(self._tool_trace_eval(arguments))
+        if name == "memagent_trace_replay":
+            return _tool_text(self._tool_trace_replay(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -312,6 +314,28 @@ class McpServer:
                 f"- useful_rate: {result.useful_rate:.2f}",
             ]
         )
+
+    def _tool_trace_replay(self, arguments: dict[str, Any]) -> str:
+        workspace = _optional_path(arguments, "workspace") or Path("local_memory_demo/trace_replay").resolve()
+        result = run_trace_replay(
+            store=self.store,
+            workspace=workspace,
+            limit=_optional_int(arguments, "limit", 50),
+        )
+        lines = [
+            "[MemAgent trace-replay]",
+            f"- workspace: {result.workspace}",
+            f"- memory home: {result.memory_home}",
+            f"- report: {result.report_path}",
+            f"- traces inspected: {result.traces_inspected}",
+        ]
+        for strategy_result in result.strategy_results:
+            lines.append(
+                f"- {strategy_result.strategy}: "
+                f"top_stability={strategy_result.top_stability:.2f}; "
+                f"useful_top_stability={strategy_result.useful_top_stability:.2f}"
+            )
+        return "\n".join(lines)
 
 
 def tool_definitions() -> list[dict[str, Any]]:
@@ -549,6 +573,20 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_trace_eval",
             "title": "Evaluate MemAgent Recall Trace Feedback",
             "description": "Write a Markdown evaluation report from saved recall trace feedback.",
+            "annotations": _tool_annotations(read_only=False, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspace": {"type": "string", "description": "Directory where report.md should be written."},
+                    "limit": {"type": "integer", "description": "Maximum traces to inspect."},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_trace_replay",
+            "title": "Replay MemAgent Recall Traces",
+            "description": "Replay saved recall trace queries against current retrievers and write a report.",
             "annotations": _tool_annotations(read_only=False, idempotent=True),
             "inputSchema": {
                 "type": "object",

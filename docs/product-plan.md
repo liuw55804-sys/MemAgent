@@ -100,12 +100,13 @@ MemAgent 要重点解决的是：
 - **召回可追踪**：`recall --trace` 把真实召回 payload 保存为本地 trace，后续可做人工标注、回放和质量评估。
 - **反馈可闭环**：`trace label/report` 支持 useful / not_useful / neutral 标注，并汇总真实召回有用率。
 - **反馈可成稿**：`trace eval` 从真实 labeled traces 生成 Markdown 报告，作为可复盘、可分享的真实使用评估 artifact。
+- **反馈可回放**：`trace replay` 回放保存过的 trace query，比较当前 retriever top match 和原 trace top match，作为轻量 regression signal。
 - **反馈可集成**：Codex 可通过 AGENTS.md 自然语言规则标注 trace，MCP client 可通过 trace tools 读写反馈并生成报告。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
 - **演示可复现**：通过 `demo-run` 在隔离目录里生成 mock 项目和 transcript，稳定展示 install、doctor、recall、prompt patch；通过 `demo-bundle` 生成面试入口报告。
 - **协议可扩展**：通过 `mcp-stdio` 把 recall、remember、doctor、handoff、trace 暴露成 MCP tools，服务未来 Cursor、Claude Code 等 MCP client；通过 `mcp-demo` 生成 JSON-RPC transcript 作为协议级证据。
-- **召回可评估**：通过 `recall-eval` 用 mock benchmark 对比 BM25 和 keyword baseline，输出 hit@1 / MRR 报告；通过 `trace eval` 输出真实反馈报告。
+- **召回可评估**：通过 `recall-eval` 用 mock benchmark 对比 BM25 和 keyword baseline，输出 hit@1 / MRR 报告；通过 `trace eval` 输出真实反馈报告；通过 `trace replay` 检查 retriever 改动后的 top-stability。
 - **交接可延续**：通过 `handoff save/show` 保存每个项目最近一次交接状态，让新会话可以先 catch up，再决定是否召回长期 memory。
 - **交接可草稿化**：通过 `handoff draft --from-file` 从线程笔记或 transcript 生成可审阅 handoff draft，用户确认后再 `--save`。
 - **候选可升格**：通过 `handoff promote` 把 handoff 里的 `Memory Candidates` 预览并显式写入长期 memory card。
@@ -409,6 +410,7 @@ timeline
 - **Recall Observability**：通过 opt-in traces 记录真实 query、匹配结果和 context pack，为后续 precision、stale/conflict 检测和回归测试提供数据。
 - **Feedback Loop**：在 trace 上记录人工 useful / not_useful / neutral 标签，让 retriever 迭代可以从真实使用数据出发。
 - **Real-use Evaluation Artifact**：用 `trace eval` 把 labeled traces 变成 Markdown 报告，区分 mock benchmark 和真实 Codex 线程反馈。
+- **Trace Replay Regression**：用 `trace replay` 将真实 trace query 变成轻量回归集，观察 useful trace 的 top match 是否稳定。
 - **Lifecycle Management**：区分动态 memory 和稳定规则，未来支持过期、冲突检测、召回效果评估、AGENTS.md 升格建议。
 - **MCP Protocol Surface**：通过 MCP tools 暴露 recall/remember/handoff/trace，并用 tool annotations 区分只读、写入、幂等和外部访问风险。
 - **Local-first Safety**：私有本地记忆可保留精确工程入口；公开导出时再脱敏。

@@ -223,6 +223,13 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} trace eval
         ```
 
+        When the user asks to replay saved traces, compare retrievers, or check
+        whether recall behavior changed after an iteration, run:
+
+        ```bash
+        {command_prefix} trace replay
+        ```
+
         ### Safety
 
         - Treat recalled memories as hints, not source of truth.

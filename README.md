@@ -16,6 +16,7 @@ python -m memagent.cli trace list
 python -m memagent.cli trace label --rating useful
 python -m memagent.cli trace report
 python -m memagent.cli trace eval
+python -m memagent.cli trace replay
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
 python -m memagent.cli handoff show
@@ -41,6 +42,7 @@ memagent trace list
 memagent trace label --rating useful
 memagent trace report
 memagent trace eval
+memagent trace replay
 memagent agents-install
 memagent agents-doctor
 memagent handoff show
@@ -305,6 +307,12 @@ benchmark, real trace-feedback report, and MCP tool surface.
 See [docs/design_v0.22_mcp_demo.md](docs/design_v0.22_mcp_demo.md) for the MCP
 JSON-RPC transcript design. `memagent mcp-demo --reset` generates a concrete
 protocol transcript covering initialize, tools/list, and tools/call flows.
+
+## v0.23 Design
+
+See [docs/design_v0.23_trace_replay.md](docs/design_v0.23_trace_replay.md) for
+trace replay evaluation. `memagent trace replay` reruns saved trace queries
+against current retrievers and writes a top-stability report.
 
 ## Codex Natural Language Triggers
 

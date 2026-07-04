@@ -33,7 +33,9 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("[MemAgent recall trace labeled]", result.transcript)
             self.assertIn("[MemAgent recall trace report]", result.transcript)
             self.assertIn("[MemAgent trace-eval]", result.transcript)
+            self.assertIn("[MemAgent trace-replay]", result.transcript)
             self.assertTrue((workspace / "trace_eval" / "report.md").exists())
+            self.assertTrue((workspace / "trace_replay" / "report.md").exists())
             self.assertTrue((result.memory_home / "handoffs").exists())
             self.assertTrue((result.memory_home / "recall_traces").exists())
             self.assertIn("[User task]", result.transcript)
@@ -67,6 +69,7 @@ class DemoRunTest(unittest.TestCase):
             self.assertTrue(result.report_path.exists())
             self.assertTrue((workspace / "agents_flow" / "transcript.md").exists())
             self.assertTrue((workspace / "agents_flow" / "trace_eval" / "report.md").exists())
+            self.assertTrue((workspace / "agents_flow" / "trace_replay" / "report.md").exists())
             self.assertTrue((workspace / "recall_eval" / "report.md").exists())
             self.assertTrue((workspace / "mcp_flow" / "mcp_transcript.md").exists())
             self.assertIn("# MemAgent Interview Demo Bundle", result.report)
@@ -75,9 +78,10 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("memagent_recall", result.report)
             self.assertIn("bm25", result.report)
             self.assertIn("Trace feedback eval", result.report)
+            self.assertIn("Trace replay eval", result.report)
             self.assertIn("JSON-RPC exchanges captured", result.report)
-            self.assertEqual(result.mcp_tool_count, 12)
-            self.assertGreaterEqual(len(result.mcp_demo.exchanges), 10)
+            self.assertEqual(result.mcp_tool_count, 13)
+            self.assertGreaterEqual(len(result.mcp_demo.exchanges), 13)
 
     def test_demo_bundle_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -97,7 +101,8 @@ class DemoRunTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("[MemAgent demo-bundle]", stdout.getvalue())
             self.assertIn("mcp transcript:", stdout.getvalue())
-            self.assertIn("mcp tools: 12", stdout.getvalue())
+            self.assertIn("trace replay:", stdout.getvalue())
+            self.assertIn("mcp tools: 13", stdout.getvalue())
             self.assertTrue((workspace / "interview_demo.md").exists())
 
     def test_run_mcp_demo_writes_jsonrpc_transcript(self) -> None:
@@ -110,12 +115,14 @@ class DemoRunTest(unittest.TestCase):
             )
             self.assertTrue(result.transcript_path.exists())
             self.assertTrue(result.trace_eval_report_path.exists())
+            self.assertTrue(result.trace_replay_report_path.exists())
             self.assertIn("# MemAgent MCP JSON-RPC Transcript", result.transcript)
             self.assertIn('"method": "initialize"', result.transcript)
             self.assertIn('"method": "tools/list"', result.transcript)
             self.assertIn('"name": "memagent_recall"', result.transcript)
+            self.assertIn('"name": "memagent_trace_replay"', result.transcript)
             self.assertIn("MCP transcript recall found the intended memory", result.transcript)
-            self.assertGreaterEqual(len(result.exchanges), 10)
+            self.assertGreaterEqual(len(result.exchanges), 13)
 
     def test_mcp_demo_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -135,6 +142,7 @@ class DemoRunTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("[MemAgent mcp-demo]", stdout.getvalue())
             self.assertIn("exchanges:", stdout.getvalue())
+            self.assertIn("trace replay:", stdout.getvalue())
             self.assertTrue((workspace / "mcp_transcript.md").exists())
 
 

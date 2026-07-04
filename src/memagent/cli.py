@@ -15,7 +15,7 @@ from memagent.agents import (
 )
 from memagent.context import detect_context
 from memagent.demo import run_demo, run_demo_bundle, run_mcp_demo
-from memagent.eval import run_recall_eval, run_trace_eval
+from memagent.eval import run_recall_eval, run_trace_eval, run_trace_replay
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -357,6 +357,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Maximum traces to inspect. Default: 50.",
     )
+    trace_replay = trace_subparsers.add_parser(
+        "replay",
+        help="Replay saved recall trace queries against current retrievers.",
+    )
+    trace_replay.add_argument(
+        "--workspace",
+        default="local_memory_demo/trace_replay",
+        help="Trace replay workspace directory. Default: local_memory_demo/trace_replay.",
+    )
+    trace_replay.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum traces to inspect. Default: 50.",
+    )
 
     handoff = subparsers.add_parser(
         "handoff",
@@ -525,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- transcript: {result.demo.transcript_path}")
         print(f"- recall eval: {result.recall_eval.report_path}")
         print(f"- trace eval: {result.demo.workspace / 'trace_eval' / 'report.md'}")
+        print(f"- trace replay: {result.demo.workspace / 'trace_replay' / 'report.md'}")
         print(f"- mcp transcript: {result.mcp_demo.transcript_path}")
         print(f"- mcp tools: {result.mcp_tool_count}")
         return 0
@@ -542,6 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- transcript: {result.transcript_path}")
         print(f"- exchanges: {len(result.exchanges)}")
         print(f"- trace eval: {result.trace_eval_report_path}")
+        print(f"- trace replay: {result.trace_replay_report_path}")
         return 0
 
     if args.command == "mcp-stdio":
@@ -628,6 +645,24 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"- traces inspected: {result.traces_inspected}")
                 print(f"- labeled: {result.labeled}")
                 print(f"- useful_rate: {result.useful_rate:.2f}")
+                return 0
+            if args.trace_command == "replay":
+                result = run_trace_replay(
+                    store=store,
+                    workspace=Path(args.workspace),
+                    limit=args.limit,
+                )
+                print("[MemAgent trace-replay]")
+                print(f"- workspace: {result.workspace}")
+                print(f"- memory home: {result.memory_home}")
+                print(f"- report: {result.report_path}")
+                print(f"- traces inspected: {result.traces_inspected}")
+                for strategy_result in result.strategy_results:
+                    print(
+                        f"- {strategy_result.strategy}: "
+                        f"top_stability={strategy_result.top_stability:.2f}; "
+                        f"useful_top_stability={strategy_result.useful_top_stability:.2f}"
+                    )
                 return 0
         except ValueError as exc:
             parser.error(str(exc))

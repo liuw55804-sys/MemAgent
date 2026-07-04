@@ -27,6 +27,7 @@ MemAgent already has the individual proof points:
 - MCP tool surface
 - mock `recall-eval`
 - real-use `trace eval`
+- trace replay regression report
 
 But in an interview, jumping between many commands and files is noisy. The demo
 bundle creates one Markdown entrypoint that links the generated artifacts and
@@ -42,6 +43,7 @@ local_memory_demo/demo_bundle/
   agents_flow/
     transcript.md
     trace_eval/report.md
+    trace_replay/report.md
     project/AGENTS.md
   recall_eval/
     report.md
@@ -57,6 +59,7 @@ local_memory_demo/demo_bundle/
 - capability evidence table
 - MCP tool surface table with read-only/idempotent annotations
 - MCP JSON-RPC transcript link
+- trace replay report link
 - five-minute demo script
 - positioning summary
 
@@ -81,6 +84,7 @@ commands and reports:
 - `recall-eval` for mock retriever metrics
 - `mcp-demo` for JSON-RPC protocol evidence
 - `trace eval` from the demo trace for real-use feedback evidence
+- `trace replay` from the demo trace for retriever top-stability evidence
 - MCP `tool_definitions()` for protocol surface evidence
 
 This keeps the demo honest: the report is a view over runnable behavior, not a

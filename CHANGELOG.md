@@ -33,8 +33,9 @@ Added:
 - `recall --trace` and `trace list/show` for opt-in local recall telemetry.
 - `trace label` and `trace report` for real-use recall feedback summaries.
 - `trace eval` command to write a Markdown evaluation report from real labeled recall traces.
+- `trace replay` command to replay saved trace queries against current retrievers.
 - AGENTS.md natural-language trigger rules for recall trace feedback.
-- MCP trace tools for list/show/label/report/eval over saved recall traces.
+- MCP trace tools for list/show/label/report/eval/replay over saved recall traces.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
 - v0.11 handoff design note for separating recent continuation state from durable workflow memory.
@@ -48,6 +49,8 @@ Added:
 - v0.19 trace feedback integration design note for AGENTS.md and MCP surfaces.
 - v0.20 trace feedback eval design note for generating reviewable real-use eval artifacts.
 - v0.21 demo bundle design note for tying AGENTS.md, RAG, MCP, and trace feedback evidence together.
+- v0.22 MCP demo transcript design note for protocol-level MCP evidence.
+- v0.23 trace replay design note for lightweight retriever regression evaluation.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:

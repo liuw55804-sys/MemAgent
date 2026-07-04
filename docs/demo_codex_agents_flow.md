@@ -56,11 +56,12 @@ local_memory_demo/demo_bundle/
   interview_demo.md
   agents_flow/transcript.md
   agents_flow/trace_eval/report.md
+  agents_flow/trace_replay/report.md
   recall_eval/report.md
   mcp_flow/mcp_transcript.md
 ```
 
-`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、RAG、MCP、handoff、trace feedback 和 eval 证据串成一个可讲的系统故事。`mcp_flow/mcp_transcript.md` 可以用来证明 MCP 是真实 JSON-RPC 交互，不只是工具清单。
+`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、RAG、MCP、handoff、trace feedback、trace replay 和 eval 证据串成一个可讲的系统故事。`mcp_flow/mcp_transcript.md` 可以用来证明 MCP 是真实 JSON-RPC 交互，不只是工具清单。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -93,6 +94,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - trace list 输出包含 `[MemAgent recall traces]`。
 - trace report 输出包含 `[MemAgent recall trace report]` 和 `useful_rate`。
 - trace eval 输出包含 `[MemAgent trace-eval]`，并写入 `trace_eval/report.md`。
+- trace replay 输出包含 `[MemAgent trace-replay]`，并写入 `trace_replay/report.md`。
 - 安全规则说明 local private memory 和 public demo 的边界。
 
 也可以用安装器预览写入当前项目 `AGENTS.md` 的效果：
@@ -316,7 +318,7 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 
 如果要突出评估闭环，可以补一句：
 
-> 每次重要 recall 都可以用 `--trace` 留痕，用户再用 `trace label` 标注是否有用，最后 `trace eval` 生成 Markdown 报告。这样我能用真实会话反馈来迭代 retriever、context packing 和 stale memory 策略，而不是只做一个静态 RAG demo。
+> 每次重要 recall 都可以用 `--trace` 留痕，用户再用 `trace label` 标注是否有用，`trace eval` 生成反馈报告，`trace replay` 回放历史 query 看 retriever 改动后 top memory 是否稳定。这样我能用真实会话反馈来迭代 retriever、context packing 和 stale memory 策略，而不是只做一个静态 RAG demo。
 
 ## 10. 清理 demo 数据
 

@@ -159,6 +159,23 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(trace_eval_code, 0)
                 self.assertIn("[MemAgent trace-eval]", trace_eval_stdout.getvalue())
                 self.assertTrue((trace_eval_workspace / "report.md").exists())
+
+                trace_replay_workspace = root / "trace_replay"
+                trace_replay_stdout = StringIO()
+                with redirect_stdout(trace_replay_stdout):
+                    trace_replay_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "trace",
+                            "replay",
+                            "--workspace",
+                            str(trace_replay_workspace),
+                        ]
+                    )
+                self.assertEqual(trace_replay_code, 0)
+                self.assertIn("[MemAgent trace-replay]", trace_replay_stdout.getvalue())
+                self.assertTrue((trace_replay_workspace / "report.md").exists())
             finally:
                 os.chdir(previous_cwd)
 

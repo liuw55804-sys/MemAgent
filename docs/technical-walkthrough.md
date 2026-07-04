@@ -30,6 +30,7 @@ PYTHONPATH=src python -m memagent.cli trace list
 PYTHONPATH=src python -m memagent.cli trace label --rating useful
 PYTHONPATH=src python -m memagent.cli trace report
 PYTHONPATH=src python -m memagent.cli trace eval
+PYTHONPATH=src python -m memagent.cli trace replay
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
@@ -56,6 +57,7 @@ memagent trace list
 memagent trace label --rating useful
 memagent trace report
 memagent trace eval
+memagent trace replay
 memagent codex "..."
 memagent agents-snippet
 memagent agents-install
@@ -215,10 +217,11 @@ memagent trace show --json
 memagent trace label --rating useful
 memagent trace report
 memagent trace eval
+memagent trace replay
 ```
 
 trace 默认不会自动记录，必须显式传 `--trace`。保存位置是 `~/.memagent/recall_traces/*.json`。
-`trace report` 是控制台 quick summary；`trace eval` 会写 Markdown 报告，适合复盘真实 recall feedback。
+`trace report` 是控制台 quick summary；`trace eval` 会写 Markdown 报告，适合复盘真实 recall feedback；`trace replay` 会回放历史 trace query，比较当前 retriever top match 和原 trace top match 是否稳定。
 
 ### 3.3 `codex`
 
@@ -360,7 +363,7 @@ local_memory_demo/demo_run/
 - 用 `agents-doctor` 检查 ready。
 - 写入一条 mock workflow memory。
 - 运行 explainable recall。
-- 保存、标注 recall trace，并生成 trace feedback eval report。
+- 保存、标注 recall trace，并生成 trace feedback eval report 和 trace replay report。
 - 生成 `codex --dry-run` prompt patch。
 - 从 session notes 生成 handoff draft。
 - 保存一次 drafted session handoff。
@@ -434,7 +437,7 @@ local_memory_demo/mcp_demo/mcp_transcript.md
 memagent mcp-stdio
 ```
 
-当前暴露十二个 tools：
+当前暴露十三个 tools：
 
 - `memagent_recall`：召回相关 workflow memory。
 - `memagent_remember`：写入一条短 memory。
@@ -447,14 +450,15 @@ memagent mcp-stdio
 - `memagent_trace_label`：给 recall trace 标注 useful / not-useful / neutral。
 - `memagent_trace_report`：汇总 trace feedback 和 useful rate。
 - `memagent_trace_eval`：从 labeled traces 写 Markdown evaluation report。
+- `memagent_trace_replay`：回放 saved trace queries，生成 retriever top-stability report。
 - `memagent_agents_doctor`：检查 AGENTS.md 集成状态。
 
 每个 tool definition 都带 MCP `annotations`：
 
 - 只读工具：`memagent_recall`、`memagent_handoff_show`、`memagent_agents_doctor`、`memagent_trace_list`、`memagent_trace_show`、`memagent_trace_report`。
-- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`、`memagent_trace_label`、`memagent_trace_eval`。
+- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`、`memagent_trace_label`、`memagent_trace_eval`、`memagent_trace_replay`。
 - 当前所有工具都标为 `destructiveHint=false` 和 `openWorldHint=false`，因为它们只操作本地 MemAgent 记忆和当前项目文件，不调用外部系统。
-  `memagent_trace_eval` 虽然会写 `report.md`，但属于非破坏、可重复的本地 artifact 生成。
+  `memagent_trace_eval` 和 `memagent_trace_replay` 虽然会写 `report.md`，但属于非破坏、可重复的本地 artifact 生成。
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
 
@@ -569,7 +573,7 @@ build_parser()
   -> 定义 mcp-demo 子命令
   -> 定义 mcp-stdio 子命令
   -> 定义 recall-eval 子命令
-  -> 定义 trace 子命令和 trace eval
+  -> 定义 trace 子命令和 trace eval/replay
 
 main(argv)
   -> parse args
@@ -581,6 +585,7 @@ main(argv)
   -> if recall-eval: run_recall_eval
   -> MemoryStore.from_home_arg(args.home)
   -> if trace eval: run_trace_eval
+  -> if trace replay: run_trace_replay
   -> HandoffStore(store.home)
   -> if agents-install: build_agents_install_plan + optional write
   -> if remember: detect_context + store.remember(domain, kind, ...)

@@ -211,6 +211,13 @@ evidence, Codex can write a Markdown report from labeled traces:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval
 ```
 
+When the user asks to replay saved traces or compare recall behavior after an
+iteration, Codex can write a trace replay report:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace replay
+```
+
 ## Safety
 
 - Treat recalled memories as hints, not source of truth.

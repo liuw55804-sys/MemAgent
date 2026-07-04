@@ -108,6 +108,54 @@ class TraceEvalResult:
         return self.useful / self.labeled
 
 
+@dataclass(frozen=True)
+class TraceReplayCase:
+    identifier: str
+    query: str
+    repo_name: str | None
+    feedback_rating: str | None
+    original_top: str | None
+    strategy: str
+    replay_top: str | None
+    replay_score: float
+    matched_terms: tuple[str, ...]
+    same_top: bool
+
+
+@dataclass(frozen=True)
+class TraceReplayStrategyResult:
+    strategy: str
+    cases: tuple[TraceReplayCase, ...]
+
+    @property
+    def top_stability(self) -> float:
+        if not self.cases:
+            return 0.0
+        return sum(1 for case in self.cases if case.same_top) / len(self.cases)
+
+    @property
+    def useful_top_stability(self) -> float:
+        useful_cases = [case for case in self.cases if case.feedback_rating == "useful"]
+        if not useful_cases:
+            return 0.0
+        return sum(1 for case in useful_cases if case.same_top) / len(useful_cases)
+
+
+@dataclass(frozen=True)
+class TraceReplayResult:
+    workspace: Path
+    memory_home: Path
+    report_path: Path
+    report: str
+    strategy_results: tuple[TraceReplayStrategyResult, ...]
+
+    @property
+    def traces_inspected(self) -> int:
+        if not self.strategy_results:
+            return 0
+        return len(self.strategy_results[0].cases)
+
+
 def run_recall_eval(*, workspace: Path) -> RecallEvalResult:
     workspace = workspace.expanduser().resolve()
     if workspace.exists():
@@ -188,6 +236,34 @@ def run_trace_eval(*, store: MemoryStore, workspace: Path, limit: int = 50) -> T
         not_useful=not_useful,
         neutral=neutral,
         unlabeled=unlabeled,
+    )
+
+
+def run_trace_replay(
+    *,
+    store: MemoryStore,
+    workspace: Path,
+    limit: int = 50,
+    strategies: tuple[str, ...] = STRATEGIES,
+) -> TraceReplayResult:
+    workspace = workspace.expanduser().resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+    summaries = store.list_recall_traces(limit=limit)
+    payloads = tuple(store.load_recall_trace(summary.identifier) for summary in summaries)
+    strategy_results = tuple(_replay_strategy(store, payloads, strategy) for strategy in strategies)
+    report = render_trace_replay_report(
+        workspace=workspace,
+        memory_home=store.home,
+        strategy_results=strategy_results,
+    )
+    report_path = workspace / "report.md"
+    report_path.write_text(report, encoding="utf-8")
+    return TraceReplayResult(
+        workspace=workspace,
+        memory_home=store.home,
+        report_path=report_path,
+        report=report,
+        strategy_results=strategy_results,
     )
 
 
@@ -310,6 +386,77 @@ def render_recall_eval_report(
     return "\n".join(lines)
 
 
+def render_trace_replay_report(
+    *,
+    workspace: Path,
+    memory_home: Path,
+    strategy_results: tuple[TraceReplayStrategyResult, ...],
+) -> str:
+    traces_inspected = len(strategy_results[0].cases) if strategy_results else 0
+    lines = [
+        "# MemAgent Trace Replay Evaluation",
+        "",
+        "This report replays saved recall trace queries against the current memory store.",
+        "It compares each replayed top match with the top match saved in the original trace.",
+        "",
+        f"- Workspace: `{workspace}`",
+        f"- Memory home: `{memory_home}`",
+        f"- Traces inspected: `{traces_inspected}`",
+        "",
+        "## Summary",
+        "",
+        "| Strategy | Top Stability | Useful Top Stability | Cases |",
+        "|---|---:|---:|---:|",
+    ]
+    for result in strategy_results:
+        lines.append(
+            "| "
+            f"{result.strategy} | {result.top_stability:.2f} | "
+            f"{result.useful_top_stability:.2f} | {len(result.cases)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Cases",
+            "",
+            "| Strategy | Trace | Query | Repo | Rating | Original Top | Replay Top | Same Top | Score | Matched |",
+            "|---|---|---|---|---|---|---|---|---:|---|",
+        ]
+    )
+    if not strategy_results or not strategy_results[0].cases:
+        lines.append("| - | - | - | - | - | - | - | - | 0.00 | - |")
+    for result in strategy_results:
+        for case in result.cases:
+            matched = ", ".join(case.matched_terms) if case.matched_terms else "-"
+            lines.append(
+                "| "
+                f"{result.strategy} | "
+                f"{_md_cell(case.identifier)} | "
+                f"{_md_cell(_clip(case.query, 80))} | "
+                f"{_md_cell(case.repo_name or 'unknown')} | "
+                f"{_md_cell(case.feedback_rating or 'unlabeled')} | "
+                f"{_md_cell(case.original_top or '-')} | "
+                f"{_md_cell(case.replay_top or '-')} | "
+                f"{'yes' if case.same_top else 'no'} | "
+                f"{case.replay_score:.2f} | "
+                f"{_md_cell(matched)} |"
+            )
+
+    lines.extend(
+        [
+            "",
+            "## Reading This Report",
+            "",
+            "- `top_stability` measures whether the replayed top memory matches the original trace top memory.",
+            "- `useful_top_stability` applies the same check only to traces labeled `useful`.",
+            "- This is a regression signal for retriever and context-packing changes; it is not a human relevance label by itself.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def render_trace_eval_report(
     *,
     workspace: Path,
@@ -407,6 +554,37 @@ def _evaluate_strategy(store: MemoryStore, context: ProjectContext, strategy: st
     return EvalStrategyResult(strategy=strategy, cases=tuple(case_results))
 
 
+def _replay_strategy(
+    store: MemoryStore,
+    payloads: tuple[dict[str, object], ...],
+    strategy: str,
+) -> TraceReplayStrategyResult:
+    cases = tuple(_trace_replay_case(store, payload, strategy) for payload in payloads)
+    return TraceReplayStrategyResult(strategy=strategy, cases=cases)
+
+
+def _trace_replay_case(store: MemoryStore, payload: dict[str, object], strategy: str) -> TraceReplayCase:
+    query = str(payload.get("query") or "")
+    context = _trace_project_context(payload)
+    matches = store.recall(query, context=context, limit=5, strategy=strategy) if query else []
+    top = matches[0] if matches else None
+    original_top = _trace_original_top(payload)
+    feedback = payload.get("feedback") if isinstance(payload.get("feedback"), dict) else {}
+    trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+    return TraceReplayCase(
+        identifier=str(trace.get("id") or ""),
+        query=query,
+        repo_name=context.repo_name,
+        feedback_rating=str(feedback.get("rating")) if feedback.get("rating") is not None else None,
+        original_top=original_top,
+        strategy=strategy,
+        replay_top=top.title if top else None,
+        replay_score=top.score if top else 0.0,
+        matched_terms=top.matched_terms if top else (),
+        same_top=bool(original_top and top and original_top == top.title),
+    )
+
+
 def _trace_eval_case(payload: dict[str, object]) -> TraceEvalCase:
     trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
@@ -425,6 +603,29 @@ def _trace_eval_case(payload: dict[str, object]) -> TraceEvalCase:
         feedback_note=str(feedback.get("note") or ""),
         total_matches=payload.get("total_matches") if isinstance(payload.get("total_matches"), int) else 0,
         matched_terms=tuple(str(term) for term in matched_terms if isinstance(term, str)),
+    )
+
+
+def _trace_original_top(payload: dict[str, object]) -> str | None:
+    matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    top_match = matches[0] if matches and isinstance(matches[0], dict) else {}
+    return str(top_match.get("title")) if isinstance(top_match.get("title"), str) else None
+
+
+def _trace_project_context(payload: dict[str, object]) -> ProjectContext:
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    cwd = Path(str(context.get("cwd") or ".")).expanduser().resolve()
+    raw_git_root = context.get("git_root")
+    git_root = Path(str(raw_git_root)).expanduser().resolve() if raw_git_root else None
+    recent_files = context.get("recent_files") if isinstance(context.get("recent_files"), list) else []
+    agents_files = context.get("agents_files") if isinstance(context.get("agents_files"), list) else []
+    return ProjectContext(
+        cwd=cwd,
+        git_root=git_root,
+        branch=str(context.get("branch")) if context.get("branch") is not None else None,
+        repo_name=str(context.get("repo_name")) if context.get("repo_name") is not None else None,
+        recent_files=tuple(str(path) for path in recent_files),
+        agents_files=tuple(Path(str(path)).expanduser().resolve() for path in agents_files),
     )
 
 

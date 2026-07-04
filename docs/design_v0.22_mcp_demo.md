@@ -39,6 +39,7 @@ server.
 - `tools/call memagent_trace_label`
 - `tools/call memagent_trace_report`
 - `tools/call memagent_trace_eval`
+- `tools/call memagent_trace_replay`
 
 This makes the MCP story inspectable instead of only conceptual.
 
@@ -57,7 +58,7 @@ MCP recall is read-only, so it does not create traces by itself. The demo seeds
 one recall trace from the same local memory store before calling trace tools.
 
 That keeps `memagent_recall` correctly annotated as read-only while still letting
-the transcript demonstrate trace labeling, reporting, and eval.
+the transcript demonstrate trace labeling, reporting, eval, and replay.
 
 ## 5. Interview Angle
 

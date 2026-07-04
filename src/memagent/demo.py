@@ -15,7 +15,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
-from memagent.eval import RecallEvalResult, run_recall_eval, run_trace_eval
+from memagent.eval import RecallEvalResult, run_recall_eval, run_trace_eval, run_trace_replay
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -107,6 +107,7 @@ class McpDemoResult:
     exchanges: tuple[McpDemoExchange, ...]
     seeded_trace_id: str
     trace_eval_report_path: Path
+    trace_replay_report_path: Path
 
 
 def run_demo(
@@ -276,6 +277,31 @@ def run_demo(
                     f"- useful_rate: {trace_eval.useful_rate:.2f}",
                 ]
             ),
+        )
+    )
+    trace_replay = run_trace_replay(
+        store=store,
+        workspace=workspace / "trace_replay",
+        limit=10,
+    )
+    replay_lines = [
+        "[MemAgent trace-replay]",
+        f"- workspace: {trace_replay.workspace}",
+        f"- memory home: {trace_replay.memory_home}",
+        f"- report: {trace_replay.report_path}",
+        f"- traces inspected: {trace_replay.traces_inspected}",
+    ]
+    for strategy_result in trace_replay.strategy_results:
+        replay_lines.append(
+            f"- {strategy_result.strategy}: "
+            f"top_stability={strategy_result.top_stability:.2f}; "
+            f"useful_top_stability={strategy_result.useful_top_stability:.2f}"
+        )
+    steps.append(
+        DemoStep(
+            title="Replay recall traces against retrievers",
+            command=f"{command_prefix} trace replay --workspace {_quote(workspace / 'trace_replay')} --limit 10",
+            output="\n".join(replay_lines),
         )
     )
 
@@ -603,6 +629,7 @@ def run_mcp_demo(
         },
     )
     trace_eval_report_path = workspace / "trace_eval" / "report.md"
+    trace_replay_report_path = workspace / "trace_replay" / "report.md"
     send(
         "Write trace feedback eval",
         {
@@ -615,6 +642,18 @@ def run_mcp_demo(
             },
         },
     )
+    send(
+        "Replay recall traces",
+        {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "memagent_trace_replay",
+                "arguments": {"workspace": str(trace_replay_report_path.parent), "limit": 10},
+            },
+        },
+    )
 
     transcript = render_mcp_demo_transcript(
         workspace=workspace,
@@ -623,6 +662,7 @@ def run_mcp_demo(
         exchanges=tuple(exchanges),
         seeded_trace_id=seeded_trace.identifier,
         trace_eval_report_path=trace_eval_report_path,
+        trace_replay_report_path=trace_replay_report_path,
     )
     transcript_path = workspace / "mcp_transcript.md"
     transcript_path.write_text(transcript, encoding="utf-8")
@@ -635,6 +675,7 @@ def run_mcp_demo(
         exchanges=tuple(exchanges),
         seeded_trace_id=seeded_trace.identifier,
         trace_eval_report_path=trace_eval_report_path,
+        trace_replay_report_path=trace_replay_report_path,
     )
 
 
@@ -732,6 +773,7 @@ def render_demo_bundle_report(
     tools: list[dict[str, object]],
 ) -> str:
     trace_eval_report = demo.workspace / "trace_eval" / "report.md"
+    trace_replay_report = demo.workspace / "trace_replay" / "report.md"
     bm25 = _strategy_summary(recall_eval, "bm25")
     keyword = _strategy_summary(recall_eval, "keyword")
     regenerate_workspace = _display_path(workspace, root=memagent_root)
@@ -746,6 +788,7 @@ def render_demo_bundle_report(
         "|---|---|---|",
         f"| AGENTS.md flow transcript | `{_display_path(demo.transcript_path, root=workspace)}` | Codex natural-language triggers, recall, handoff, prompt patch |",
         f"| Trace feedback eval | `{_display_path(trace_eval_report, root=workspace)}` | Real-use recall feedback can be labeled and reported |",
+        f"| Trace replay eval | `{_display_path(trace_replay_report, root=workspace)}` | Saved trace queries can be replayed against current retrievers |",
         f"| Recall benchmark | `{_display_path(recall_eval.report_path, root=workspace)}` | BM25 recall can be compared against a keyword baseline |",
         f"| MCP JSON-RPC transcript | `{_display_path(mcp_demo.transcript_path, root=workspace)}` | MCP initialize, tools/list, and tools/call are exercised end-to-end |",
         f"| Demo project AGENTS.md | `{_display_path(demo.project_dir / 'AGENTS.md', root=workspace)}` | The integration can be installed and checked in a project |",
@@ -770,7 +813,7 @@ def render_demo_bundle_report(
         f"| RAG evaluation | `bm25` {bm25}; `keyword` {keyword} |",
         f"| MCP protocol surface | `{len(tools)}` tools exposed with annotations; `{len(mcp_demo.exchanges)}` JSON-RPC exchanges captured |",
         "| Agent memory lifecycle | remember -> recall -> handoff -> promote -> recall promoted memory |",
-        "| Feedback loop | recall trace -> label useful -> report -> trace eval Markdown artifact |",
+        "| Feedback loop | recall trace -> label useful -> report -> trace eval -> trace replay |",
         "",
         "## MCP Tool Surface",
         "",
@@ -797,7 +840,7 @@ def render_demo_bundle_report(
             "3. Show the Codex dry-run prompt patch to prove MemAgent augments Codex instead of replacing it.",
             "4. Show the MCP JSON-RPC transcript to prove the protocol surface is executable.",
             "5. Show handoff and promotion to explain memory lifecycle beyond plain RAG.",
-            "6. Show recall-eval and trace-eval reports to explain offline and real-use evaluation.",
+            "6. Show recall-eval, trace-eval, and trace-replay reports to explain offline, real-use, and regression evaluation.",
             "",
             "## Positioning",
             "",
@@ -807,7 +850,7 @@ def render_demo_bundle_report(
             "- Memory cards store reusable workflow lessons, not whole chat history.",
             "- Recall output is short, source-backed, explainable, and pack-budgeted.",
             "- MCP exposes the same capabilities to other coding-agent clients.",
-            "- Evaluation combines controlled mock retrieval and real trace feedback.",
+            "- Evaluation combines controlled mock retrieval, real trace feedback, and trace replay.",
             "",
             "## Regenerate",
             "",
@@ -828,6 +871,7 @@ def render_mcp_demo_transcript(
     exchanges: tuple[McpDemoExchange, ...],
     seeded_trace_id: str,
     trace_eval_report_path: Path,
+    trace_replay_report_path: Path,
 ) -> str:
     lines = [
         "# MemAgent MCP JSON-RPC Transcript",
@@ -841,6 +885,7 @@ def render_mcp_demo_transcript(
         f"- Exchanges: `{len(exchanges)}`",
         f"- Seeded trace: `{seeded_trace_id}`",
         f"- Trace eval report: `{trace_eval_report_path}`",
+        f"- Trace replay report: `{trace_replay_report_path}`",
         "",
         "## Flow",
         "",
@@ -853,6 +898,7 @@ def render_mcp_demo_transcript(
         "  C->>S: tools/call remember",
         "  C->>S: tools/call recall",
         "  C->>S: tools/call handoff / trace",
+        "  C->>S: tools/call trace replay",
         "  S-->>C: JSON-RPC results",
         "```",
         "",
