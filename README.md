@@ -173,6 +173,11 @@ The report is written to:
 local_memory_demo/recall_eval/report.md
 ```
 
+## v0.10 Design
+
+See [docs/design_v0.10_competitive_positioning.md](docs/design_v0.10_competitive_positioning.md)
+for the competitive-scan driven positioning update.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

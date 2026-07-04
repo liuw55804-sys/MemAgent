@@ -103,7 +103,7 @@ MemAgent 要重点解决的是：
 - **经验生命周期**：区分一次性上下文、可复用 workflow、可升格 `AGENTS.md` 的稳定规则。
 - **跨 coding agent**：当前主攻 Codex，但 memory card 设计不绑定 Codex，未来可以服务 Cursor、Claude Code 等 coding agent。
 
-对标调研见 [competitive-scan.md](competitive-scan.md)。当前差异化重点不是“也做长期记忆”，而是 Codex-first 的 workflow memory lifecycle。
+对标调研见 [competitive-scan.md](competitive-scan.md)，v0.10 定位校准见 [design_v0.10_competitive_positioning.md](design_v0.10_competitive_positioning.md)。当前差异化重点不是“也做长期记忆”，而是 Codex-first 的 workflow memory lifecycle：围绕真实工程线程里的工具 recipe、失败路径、数据入口和验证方式做记录、召回、注入、评估和升格。
 
 ## 6. 可面试的系统内核
 
