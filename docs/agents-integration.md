@@ -50,6 +50,13 @@ For a mock retriever evaluation report, run:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall-eval
 ```
 
+For a real trace-feedback evaluation report, run after saving and labeling
+recall traces:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval
+```
+
 For MCP clients, MemAgent also exposes the same memory operations through a
 local stdio server:
 
@@ -183,6 +190,13 @@ feedback, call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace report
+```
+
+When the user asks for a shareable evaluation artifact or interview demo
+evidence, Codex can write a Markdown report from labeled traces:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval
 ```
 
 ## Safety

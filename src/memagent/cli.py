@@ -15,7 +15,7 @@ from memagent.agents import (
 )
 from memagent.context import detect_context
 from memagent.demo import run_demo
-from memagent.eval import run_recall_eval
+from memagent.eval import run_recall_eval, run_trace_eval
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -304,6 +304,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Maximum traces to inspect. Default: 50.",
     )
+    trace_eval = trace_subparsers.add_parser(
+        "eval",
+        help="Write a Markdown evaluation report from saved recall trace feedback.",
+    )
+    trace_eval.add_argument(
+        "--workspace",
+        default="local_memory_demo/trace_eval",
+        help="Trace evaluation workspace directory. Default: local_memory_demo/trace_eval.",
+    )
+    trace_eval.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum traces to inspect. Default: 50.",
+    )
 
     handoff = subparsers.add_parser(
         "handoff",
@@ -530,6 +545,20 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.trace_command == "report":
                 print(store.compose_recall_trace_report(limit=args.limit))
+                return 0
+            if args.trace_command == "eval":
+                result = run_trace_eval(
+                    store=store,
+                    workspace=Path(args.workspace),
+                    limit=args.limit,
+                )
+                print("[MemAgent trace-eval]")
+                print(f"- workspace: {result.workspace}")
+                print(f"- memory home: {result.memory_home}")
+                print(f"- report: {result.report_path}")
+                print(f"- traces inspected: {result.traces_inspected}")
+                print(f"- labeled: {result.labeled}")
+                print(f"- useful_rate: {result.useful_rate:.2f}")
                 return 0
         except ValueError as exc:
             parser.error(str(exc))

@@ -33,12 +33,15 @@ local_memory_demo/demo_run/
   memagent_home/
     memories/
     handoffs/
+    recall_traces/
+  trace_eval/
+    report.md
   session_notes.md
   transcript.md
 ```
 
 `transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、structured JSON recall、trace list、trace label/report、codex dry-run、handoff draft/save/show、handoff promote、promoted recall 的命令和输出。
-v0.16 起 transcript 包含 `recall --json`，用于展示同一套召回结果可以作为结构化 agent contract 使用。v0.17 起 transcript 也包含 `trace list`，用于展示真实召回可留痕、可复盘。v0.18 起 transcript 还包含 `trace label/report`，用于展示真实反馈闭环。
+v0.16 起 transcript 包含 `recall --json`，用于展示同一套召回结果可以作为结构化 agent contract 使用。v0.17 起 transcript 也包含 `trace list`，用于展示真实召回可留痕、可复盘。v0.18 起 transcript 还包含 `trace label/report`，用于展示真实反馈闭环。v0.20 起还会生成 `trace_eval/report.md`，用于展示真实反馈评估 artifact。
 
 如果想手动分步演示，可以继续按下面步骤运行。
 
@@ -70,6 +73,7 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 - structured recall 输出包含 `"schema_version": "memagent.recall.v1"`。
 - trace list 输出包含 `[MemAgent recall traces]`。
 - trace report 输出包含 `[MemAgent recall trace report]` 和 `useful_rate`。
+- trace eval 输出包含 `[MemAgent trace-eval]`，并写入 `trace_eval/report.md`。
 - 安全规则说明 local private memory 和 public demo 的边界。
 
 也可以用安装器预览写入当前项目 `AGENTS.md` 的效果：
@@ -290,6 +294,10 @@ MEMAGENT_HOME=local_memory_demo/agents_flow PYTHONPATH=src python -m memagent.cl
 可以这样讲：
 
 > 我做的不是一个通用 agent，而是 coding agent 的 workflow memory layer。用户在 Codex 里说“上次做到哪”，Codex 根据 AGENTS.md 调用 handoff show 恢复最近项目状态；用户说“召回一下相关记忆”时，MemAgent 再从长期 memory card 里检索相关工具入口、失败路径和验证方式，并把短上下文拼到 Codex prompt 前。handoff 和 memory 分层后，不会把每次临时状态都污染进长期 RAG 语料。
+
+如果要突出评估闭环，可以补一句：
+
+> 每次重要 recall 都可以用 `--trace` 留痕，用户再用 `trace label` 标注是否有用，最后 `trace eval` 生成 Markdown 报告。这样我能用真实会话反馈来迭代 retriever、context packing 和 stale memory 策略，而不是只做一个静态 RAG demo。
 
 ## 10. 清理 demo 数据
 

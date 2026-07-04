@@ -142,6 +142,23 @@ class CliTest(unittest.TestCase):
                     report_code = main(["--home", str(home), "trace", "report"])
                 self.assertEqual(report_code, 0)
                 self.assertIn("- useful_rate: 1.00", report_stdout.getvalue())
+
+                trace_eval_workspace = root / "trace_eval"
+                trace_eval_stdout = StringIO()
+                with redirect_stdout(trace_eval_stdout):
+                    trace_eval_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "trace",
+                            "eval",
+                            "--workspace",
+                            str(trace_eval_workspace),
+                        ]
+                    )
+                self.assertEqual(trace_eval_code, 0)
+                self.assertIn("[MemAgent trace-eval]", trace_eval_stdout.getvalue())
+                self.assertTrue((trace_eval_workspace / "report.md").exists())
             finally:
                 os.chdir(previous_cwd)
 

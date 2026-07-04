@@ -216,6 +216,13 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} trace report
         ```
 
+        When the user asks for a shareable evaluation artifact or interview demo
+        evidence, write a Markdown report from labeled traces:
+
+        ```bash
+        {command_prefix} trace eval
+        ```
+
         ### Safety
 
         - Treat recalled memories as hints, not source of truth.

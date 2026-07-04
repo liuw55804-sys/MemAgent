@@ -10,10 +10,10 @@ src/memagent/
   cli.py       命令行入口，负责把用户命令转成函数调用
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
   demo.py      运行隔离 demo，并生成可分享的 Markdown transcript
-  eval.py      运行 mock recall benchmark，并生成 hit@1 / MRR report
+  eval.py      运行 mock recall benchmark；也从真实 trace feedback 生成 eval report
   handoff.py   生成 handoff draft，并保存/读取每个项目最近一次 catch-up 状态
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
-  mcp.py       最小 MCP stdio server，把 recall/remember/handoff/doctor 暴露为 tools
+  mcp.py       最小 MCP stdio server，把 recall/remember/handoff/trace/doctor 暴露为 tools
   wrapper.py   把召回上下文拼到 Codex prompt 前
 ```
 
@@ -29,6 +29,7 @@ PYTHONPATH=src python -m memagent.cli recall "继续查归因准确率" --trace
 PYTHONPATH=src python -m memagent.cli trace list
 PYTHONPATH=src python -m memagent.cli trace label --rating useful
 PYTHONPATH=src python -m memagent.cli trace report
+PYTHONPATH=src python -m memagent.cli trace eval
 PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
@@ -52,6 +53,7 @@ memagent recall "..." --trace
 memagent trace list
 memagent trace label --rating useful
 memagent trace report
+memagent trace eval
 memagent codex "..."
 memagent agents-snippet
 memagent agents-install
@@ -208,9 +210,11 @@ memagent trace list
 memagent trace show --json
 memagent trace label --rating useful
 memagent trace report
+memagent trace eval
 ```
 
 trace 默认不会自动记录，必须显式传 `--trace`。保存位置是 `~/.memagent/recall_traces/*.json`。
+`trace report` 是控制台 quick summary；`trace eval` 会写 Markdown 报告，适合复盘真实 recall feedback。
 
 ### 3.3 `codex`
 
@@ -352,6 +356,7 @@ local_memory_demo/demo_run/
 - 用 `agents-doctor` 检查 ready。
 - 写入一条 mock workflow memory。
 - 运行 explainable recall。
+- 保存、标注 recall trace，并生成 trace feedback eval report。
 - 生成 `codex --dry-run` prompt patch。
 - 从 session notes 生成 handoff draft。
 - 保存一次 drafted session handoff。
@@ -372,7 +377,7 @@ local_memory_demo/demo_run/
 memagent mcp-stdio
 ```
 
-当前暴露十一个 tools：
+当前暴露十二个 tools：
 
 - `memagent_recall`：召回相关 workflow memory。
 - `memagent_remember`：写入一条短 memory。
@@ -384,13 +389,15 @@ memagent mcp-stdio
 - `memagent_trace_show`：读取某条 recall trace，支持 text/json。
 - `memagent_trace_label`：给 recall trace 标注 useful / not-useful / neutral。
 - `memagent_trace_report`：汇总 trace feedback 和 useful rate。
+- `memagent_trace_eval`：从 labeled traces 写 Markdown evaluation report。
 - `memagent_agents_doctor`：检查 AGENTS.md 集成状态。
 
 每个 tool definition 都带 MCP `annotations`：
 
 - 只读工具：`memagent_recall`、`memagent_handoff_show`、`memagent_agents_doctor`、`memagent_trace_list`、`memagent_trace_show`、`memagent_trace_report`。
-- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`、`memagent_trace_label`。
+- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`、`memagent_trace_label`、`memagent_trace_eval`。
 - 当前所有工具都标为 `destructiveHint=false` 和 `openWorldHint=false`，因为它们只操作本地 MemAgent 记忆和当前项目文件，不调用外部系统。
+  `memagent_trace_eval` 虽然会写 `report.md`，但属于非破坏、可重复的本地 artifact 生成。
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
 
@@ -485,7 +492,7 @@ memagent handoff promote --index 1 --write
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`mcp-stdio`、`recall-eval`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`trace`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`handoff`、`demo-run`、`mcp-stdio`、`recall-eval`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -503,6 +510,7 @@ build_parser()
   -> 定义 demo-run 子命令
   -> 定义 mcp-stdio 子命令
   -> 定义 recall-eval 子命令
+  -> 定义 trace 子命令和 trace eval
 
 main(argv)
   -> parse args
@@ -511,6 +519,7 @@ main(argv)
   -> if mcp-stdio: run_stdio_server
   -> if recall-eval: run_recall_eval
   -> MemoryStore.from_home_arg(args.home)
+  -> if trace eval: run_trace_eval
   -> HandoffStore(store.home)
   -> if agents-install: build_agents_install_plan + optional write
   -> if remember: detect_context + store.remember(domain, kind, ...)

@@ -34,6 +34,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn("这次召回有用", snippet)
         self.assertIn("trace label", snippet)
         self.assertIn("trace report", snippet)
+        self.assertIn("trace eval", snippet)
         self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli recall", snippet)
         self.assertIn("--show-sources --show-reasons", snippet)
         self.assertIn("--strategy bm25", snippet)

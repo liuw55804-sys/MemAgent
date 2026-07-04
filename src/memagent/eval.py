@@ -68,6 +68,46 @@ class RecallEvalResult:
     strategy_results: tuple[EvalStrategyResult, ...]
 
 
+@dataclass(frozen=True)
+class TraceEvalCase:
+    identifier: str
+    created_at: str
+    query: str
+    repo_name: str | None
+    top_match: str | None
+    feedback_rating: str | None
+    feedback_note: str
+    total_matches: int
+    matched_terms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TraceEvalResult:
+    workspace: Path
+    memory_home: Path
+    report_path: Path
+    report: str
+    cases: tuple[TraceEvalCase, ...]
+    useful: int
+    not_useful: int
+    neutral: int
+    unlabeled: int
+
+    @property
+    def traces_inspected(self) -> int:
+        return len(self.cases)
+
+    @property
+    def labeled(self) -> int:
+        return self.useful + self.not_useful + self.neutral
+
+    @property
+    def useful_rate(self) -> float:
+        if not self.labeled:
+            return 0.0
+        return self.useful / self.labeled
+
+
 def run_recall_eval(*, workspace: Path) -> RecallEvalResult:
     workspace = workspace.expanduser().resolve()
     if workspace.exists():
@@ -115,6 +155,39 @@ def run_recall_eval(*, workspace: Path) -> RecallEvalResult:
         report_path=report_path,
         report=report,
         strategy_results=results,
+    )
+
+
+def run_trace_eval(*, store: MemoryStore, workspace: Path, limit: int = 50) -> TraceEvalResult:
+    workspace = workspace.expanduser().resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+    summaries = store.list_recall_traces(limit=limit)
+    cases = tuple(_trace_eval_case(store.load_recall_trace(summary.identifier)) for summary in summaries)
+    useful = sum(1 for case in cases if case.feedback_rating == "useful")
+    not_useful = sum(1 for case in cases if case.feedback_rating == "not_useful")
+    neutral = sum(1 for case in cases if case.feedback_rating == "neutral")
+    unlabeled = len(cases) - useful - not_useful - neutral
+    report = render_trace_eval_report(
+        workspace=workspace,
+        memory_home=store.home,
+        cases=cases,
+        useful=useful,
+        not_useful=not_useful,
+        neutral=neutral,
+        unlabeled=unlabeled,
+    )
+    report_path = workspace / "report.md"
+    report_path.write_text(report, encoding="utf-8")
+    return TraceEvalResult(
+        workspace=workspace,
+        memory_home=store.home,
+        report_path=report_path,
+        report=report,
+        cases=cases,
+        useful=useful,
+        not_useful=not_useful,
+        neutral=neutral,
+        unlabeled=unlabeled,
     )
 
 
@@ -237,6 +310,79 @@ def render_recall_eval_report(
     return "\n".join(lines)
 
 
+def render_trace_eval_report(
+    *,
+    workspace: Path,
+    memory_home: Path,
+    cases: tuple[TraceEvalCase, ...],
+    useful: int,
+    not_useful: int,
+    neutral: int,
+    unlabeled: int,
+) -> str:
+    labeled = useful + not_useful + neutral
+    useful_rate = useful / labeled if labeled else 0.0
+    lines = [
+        "# MemAgent Trace Feedback Evaluation",
+        "",
+        "This report is generated from local recall trace metadata.",
+        "It does not copy full recalled context, memory card bodies, or raw trace JSON.",
+        "",
+        f"- Workspace: `{workspace}`",
+        f"- Memory home: `{memory_home}`",
+        f"- Traces inspected: `{len(cases)}`",
+        f"- Labeled: `{labeled}`",
+        f"- Useful: `{useful}`",
+        f"- Not useful: `{not_useful}`",
+        f"- Neutral: `{neutral}`",
+        f"- Unlabeled: `{unlabeled}`",
+        f"- Useful rate: `{useful_rate:.2f}`",
+        "",
+        "## Summary",
+        "",
+        "| Rating | Count |",
+        "|---|---:|",
+        f"| useful | {useful} |",
+        f"| not_useful | {not_useful} |",
+        f"| neutral | {neutral} |",
+        f"| unlabeled | {unlabeled} |",
+        "",
+        "## Cases",
+        "",
+        "| Trace | Query | Repo | Top Match | Matches | Rating | Note | Matched Terms |",
+        "|---|---|---|---|---:|---|---|---|",
+    ]
+    if not cases:
+        lines.append("| - | - | - | - | 0 | unlabeled | - | - |")
+    for case in cases:
+        rating = case.feedback_rating or "unlabeled"
+        matched_terms = ", ".join(case.matched_terms) if case.matched_terms else "-"
+        lines.append(
+            "| "
+            f"{_md_cell(case.identifier)} | "
+            f"{_md_cell(_clip(case.query, 80))} | "
+            f"{_md_cell(case.repo_name or 'unknown')} | "
+            f"{_md_cell(case.top_match or '-')} | "
+            f"{case.total_matches} | "
+            f"{_md_cell(rating)} | "
+            f"{_md_cell(_clip(case.feedback_note, 80) or '-')} | "
+            f"{_md_cell(matched_terms)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Reading This Report",
+            "",
+            "- `useful_rate` is based only on labeled traces.",
+            "- Unlabeled traces are the review backlog for future feedback.",
+            "- This complements `recall-eval`: mock eval checks known-answer retrieval, while trace eval checks real session feedback.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _evaluate_strategy(store: MemoryStore, context: ProjectContext, strategy: str) -> EvalStrategyResult:
     case_results = []
     for case in eval_cases():
@@ -259,3 +405,35 @@ def _evaluate_strategy(store: MemoryStore, context: ProjectContext, strategy: st
             )
         )
     return EvalStrategyResult(strategy=strategy, cases=tuple(case_results))
+
+
+def _trace_eval_case(payload: dict[str, object]) -> TraceEvalCase:
+    trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    feedback = payload.get("feedback") if isinstance(payload.get("feedback"), dict) else {}
+    matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    top_match = matches[0] if matches and isinstance(matches[0], dict) else {}
+    raw_matched_terms = top_match.get("matched_terms") if isinstance(top_match, dict) else []
+    matched_terms = raw_matched_terms if isinstance(raw_matched_terms, list) else []
+    return TraceEvalCase(
+        identifier=str(trace.get("id") or ""),
+        created_at=str(trace.get("created_at") or ""),
+        query=str(payload.get("query") or ""),
+        repo_name=str(context.get("repo_name")) if context.get("repo_name") is not None else None,
+        top_match=str(top_match.get("title")) if isinstance(top_match.get("title"), str) else None,
+        feedback_rating=str(feedback.get("rating")) if feedback.get("rating") is not None else None,
+        feedback_note=str(feedback.get("note") or ""),
+        total_matches=payload.get("total_matches") if isinstance(payload.get("total_matches"), int) else 0,
+        matched_terms=tuple(str(term) for term in matched_terms if isinstance(term, str)),
+    )
+
+
+def _md_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _clip(value: str, max_chars: int) -> str:
+    clean = " ".join(value.split())
+    if len(clean) <= max_chars:
+        return clean
+    return clean[: max_chars - 3].rstrip() + "..."

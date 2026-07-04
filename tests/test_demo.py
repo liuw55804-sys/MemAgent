@@ -32,6 +32,8 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn("[MemAgent recall traces]", result.transcript)
             self.assertIn("[MemAgent recall trace labeled]", result.transcript)
             self.assertIn("[MemAgent recall trace report]", result.transcript)
+            self.assertIn("[MemAgent trace-eval]", result.transcript)
+            self.assertTrue((workspace / "trace_eval" / "report.md").exists())
             self.assertTrue((result.memory_home / "handoffs").exists())
             self.assertTrue((result.memory_home / "recall_traces").exists())
             self.assertIn("[User task]", result.transcript)

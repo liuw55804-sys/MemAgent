@@ -29,9 +29,9 @@ flowchart LR
 
 | 类型 | 代表项目 | 核心能力 | 对 MemAgent 的启发 |
 |---|---|---|---|
-| 直接竞品：coding-agent memory backend | [agentmemory](https://github.com/rohitg00/agentmemory)、[ai-memory](https://github.com/akitaonrails/ai-memory) | hooks 捕获 session/tool use，跨 Codex/Claude Code/Cursor 复用记忆，MCP/REST/search/handoff | 必须做出更清晰的 Codex-first workflow 定位，不能只做通用 memory backend |
+| 直接竞品：coding-agent memory backend | [agentmemory](https://github.com/rohitg00/agentmemory)、[ai-memory](https://github.com/akitaonrails/ai-memory)、[claude-mem](https://github.com/thedotmack/claude-mem)、[memsearch](https://github.com/zilliztech/memsearch) | hooks 捕获 session/tool use，跨 Codex/Claude Code/Cursor 复用记忆，MCP/REST/search/handoff，多层 progressive disclosure | 必须做出更清晰的 Codex-first workflow 定位，不能只做通用 memory backend |
 | coding-agent memory 服务/平台 | [Hindsight](https://github.com/vectorize-io/hindsight)、[Redis Agent Memory Server](https://github.com/redis/agent-memory-server) | LLM wrapper、REST/MCP、working/long-term memory、hybrid search、多 provider | 可以借鉴抽取/检索/评估，但 MemAgent 不应变成重服务或强依赖外部 provider |
-| Claude/Codex 记忆桥 | [mcp-memory-keeper](https://github.com/mkreyman/mcp-memory-keeper)、[memory-mcp](https://github.com/yuvalsuede/memory-mcp)、[claude-memory-compiler](https://github.com/coleam00/claude-memory-compiler) | Claude Code hooks、PreCompact/SessionEnd、CLAUDE.md brief、MCP search | 证明 handoff/catch-up 是强需求；MemAgent 要把这层做成 Codex-first 且可审阅 |
+| Claude/Codex 记忆桥 | [mcp-memory-keeper](https://github.com/mkreyman/mcp-memory-keeper)、[memory-mcp](https://github.com/yuvalsuede/memory-mcp)、[claude-memory-compiler](https://github.com/coleam00/claude-memory-compiler)、[mind](https://github.com/Da7-Tech/mind) | Claude Code hooks、PreCompact/SessionEnd、CLAUDE.md/AGENTS.md brief、MCP search | 证明 handoff/catch-up 是强需求；MemAgent 要把这层做成 Codex-first 且可审阅 |
 | 大而全上下文平台 | [ByteRover CLI](https://github.com/campfirein/byterover-cli) | context tree、云同步、review workflow、多 LLM provider、多 coding agent | 可借鉴 review/approve memory change，但 MemAgent 不应一开始平台化 |
 | 本地 Markdown 知识层 | [Basic Memory](https://github.com/basicmachines-co/basic-memory) | local-first Markdown、SQLite index、MCP tools、tool annotations、schema validate | 可借鉴 Markdown source of truth、doctor/schema check、MCP 行为标注 |
 | 上下文压缩层 | [Headroom](https://github.com/headroomlabs-ai/headroom) | 压缩 tool outputs/logs/RAG chunks/files/conversation，CCR 可逆取回，wrap Codex/MCP | 可用于后续“memory prompt patch 压缩”，解决召回越多越吵 |
@@ -79,7 +79,23 @@ MemAgent 可以借鉴：
 
 但 MemAgent 不需要一开始做常驻 server 或多用户部署。当前更适合先把本地 Codex AGENTS.md 集成、MCP stdio、demo-run、recall-eval 做扎实。
 
-### 3.3 Hindsight / Redis Agent Memory Server
+### 3.3 claude-mem / memsearch
+
+claude-mem 和 memsearch 都强调跨 agent 的持久上下文，并且都在解决 token 成本问题。claude-mem 的三层查询思路很值得学：先拿 compact search 结果，再看 timeline，最后只取少量 full observations。memsearch 也把 Claude Code、Codex CLI、OpenClaw 等 agent 作为直接集成对象，并强调 Markdown source 和 hybrid retrieval。
+
+MemAgent 可以借鉴：
+
+- progressive disclosure：先给短索引和 top match，不一上来塞完整历史。
+- local source of truth：memory 文件可读可审计，index 可以重建。
+- multi-agent compatibility：MCP/AGENTS.md 只是入口，底层 memory 不绑定某个宿主。
+
+MemAgent 仍要避免：
+
+- 变成另一个通用 memory daemon。
+- 把“存得更多”当成主要价值。
+- 忽略真实工程 recipe、失败路径和验证方式这些 workflow 语义。
+
+### 3.4 Hindsight / Redis Agent Memory Server
 
 这类项目更像 memory service 或 application memory substrate：有 HTTP API、MCP、provider 配置、working memory / long-term memory、semantic/keyword/hybrid search、自动抽取和总结。
 
@@ -92,9 +108,9 @@ MemAgent 可以借鉴：
 
 但短期不要复制它们的服务端架构。MemAgent 目前最有价值的是把个人 Codex 工程流打透，而不是做一个需要 Docker/数据库/后台服务的通用平台。
 
-### 3.4 mcp-memory-keeper / memory-mcp / claude-memory-compiler
+### 3.5 mcp-memory-keeper / memory-mcp / claude-memory-compiler / mind
 
-这些项目集中在 Claude Code 的上下文丢失和压缩边界：session end、PreCompact、CLAUDE.md brief、MCP search、LLM extraction。它们说明一个点：长线程变卡、换会话丢上下文，是 coding agent 用户的共同痛点。
+这些项目集中在 Claude Code / Codex 的上下文丢失和压缩边界：session end、PreCompact、CLAUDE.md/AGENTS.md brief、MCP search、LLM extraction。它们说明一个点：长线程变卡、换会话丢上下文，是 coding agent 用户的共同痛点。
 
 MemAgent 已经有 `handoff save/show/draft/promote`，后续可以继续往这些方向靠：
 
@@ -148,14 +164,14 @@ MemAgent 可以学这些机制，但场景必须保持 coding workflow：工具 
 
 面试中可以这样讲：
 
-> 市面上已经有通用 memory backend，例如 agentmemory 和 ai-memory；也有通用 memory SDK，例如 Mem0、LangMem。MemAgent 的切入点更窄：我不是要替代 coding agent，而是做 Codex-first 的工程工作流记忆层。它把真实线程中的工具 recipe、失败路径和验证方式沉淀为本地可编辑 memory card，通过 AGENTS.md/MCP 让 Codex 自然召回，并用 explainable recall 和 recall-eval 验证检索质量。
+> 市面上已经有通用 memory backend，例如 agentmemory、ai-memory、claude-mem、memsearch；也有通用 memory SDK，例如 Mem0、LangMem。MemAgent 的切入点更窄：我不是要替代 coding agent，而是做 Codex-first 的工程工作流记忆层。它把真实线程中的工具 recipe、失败路径和验证方式沉淀为本地可编辑 memory card，通过 AGENTS.md/MCP 让 Codex 自然召回，并用 explainable recall、recall-eval 和 trace-eval 验证检索质量。
 
 再展开为四个差异点：
 
 - **Workflow-first**：记的是“下次怎么做”，不是泛泛知识片段。
 - **Codex-first integration**：AGENTS.md 自然语言触发、prompt patch、doctor/install/demo-run 都围绕 Codex。
 - **Local-private exactness**：本地私有 memory 可以保留必要工程入口，公开 demo 再泛化。
-- **Explainable and evaluable**：召回显示来源、分数、命中词，并能用 `recall-eval` 跑 mock Hit@1/MRR。
+- **Explainable and evaluable**：召回显示来源、分数、命中词；`recall-eval` 跑 mock Hit@1/MRR，`trace eval` 从真实 labeled traces 生成报告。
 
 ## 6. 不做什么
 
@@ -183,7 +199,7 @@ AGENTS.md natural-language trigger
   + local workflow memory cards
   + explainable recall
   + Codex prompt patch
-  + recall-eval
+  + recall-eval / trace-eval
 ```
 
 中期补齐 memory lifecycle：

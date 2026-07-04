@@ -15,6 +15,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
+from memagent.eval import run_trace_eval
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -221,6 +222,29 @@ def run_demo(
             title="Report recall trace feedback",
             command=f"{command_prefix} trace report --limit 10",
             output=store.compose_recall_trace_report(limit=10),
+        )
+    )
+
+    trace_eval = run_trace_eval(
+        store=store,
+        workspace=workspace / "trace_eval",
+        limit=10,
+    )
+    steps.append(
+        DemoStep(
+            title="Write trace feedback evaluation report",
+            command=f"{command_prefix} trace eval --workspace {_quote(workspace / 'trace_eval')} --limit 10",
+            output="\n".join(
+                [
+                    "[MemAgent trace-eval]",
+                    f"- workspace: {trace_eval.workspace}",
+                    f"- memory home: {trace_eval.memory_home}",
+                    f"- report: {trace_eval.report_path}",
+                    f"- traces inspected: {trace_eval.traces_inspected}",
+                    f"- labeled: {trace_eval.labeled}",
+                    f"- useful_rate: {trace_eval.useful_rate:.2f}",
+                ]
+            ),
         )
     )
 

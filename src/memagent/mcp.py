@@ -8,6 +8,7 @@ from typing import Any, TextIO
 
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
+from memagent.eval import run_trace_eval
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -122,6 +123,8 @@ class McpServer:
             return _tool_text(self._tool_trace_label(arguments))
         if name == "memagent_trace_report":
             return _tool_text(self._tool_trace_report(arguments))
+        if name == "memagent_trace_eval":
+            return _tool_text(self._tool_trace_eval(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -289,6 +292,25 @@ class McpServer:
     def _tool_trace_report(self, arguments: dict[str, Any]) -> str:
         return self.store.compose_recall_trace_report(
             limit=_optional_int(arguments, "limit", 50),
+        )
+
+    def _tool_trace_eval(self, arguments: dict[str, Any]) -> str:
+        workspace = _optional_path(arguments, "workspace") or Path("local_memory_demo/trace_eval").resolve()
+        result = run_trace_eval(
+            store=self.store,
+            workspace=workspace,
+            limit=_optional_int(arguments, "limit", 50),
+        )
+        return "\n".join(
+            [
+                "[MemAgent trace-eval]",
+                f"- workspace: {result.workspace}",
+                f"- memory home: {result.memory_home}",
+                f"- report: {result.report_path}",
+                f"- traces inspected: {result.traces_inspected}",
+                f"- labeled: {result.labeled}",
+                f"- useful_rate: {result.useful_rate:.2f}",
+            ]
         )
 
 
@@ -518,6 +540,20 @@ def tool_definitions() -> list[dict[str, Any]]:
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "limit": {"type": "integer", "description": "Maximum traces to inspect."},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_trace_eval",
+            "title": "Evaluate MemAgent Recall Trace Feedback",
+            "description": "Write a Markdown evaluation report from saved recall trace feedback.",
+            "annotations": _tool_annotations(read_only=False, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspace": {"type": "string", "description": "Directory where report.md should be written."},
                     "limit": {"type": "integer", "description": "Maximum traces to inspect."},
                 },
                 "additionalProperties": False,
