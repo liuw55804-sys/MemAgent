@@ -247,6 +247,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_recall",
             "title": "Recall MemAgent Memory",
             "description": "Recall relevant local workflow memories for a coding task.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -270,6 +271,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_remember",
             "title": "Save MemAgent Memory",
             "description": "Save a short, reusable local workflow memory.",
+            "annotations": _tool_annotations(read_only=False, idempotent=False),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -295,6 +297,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_agents_doctor",
             "title": "Check MemAgent AGENTS.md Integration",
             "description": "Check whether the current project AGENTS.md can trigger MemAgent.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -307,6 +310,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_handoff_save",
             "title": "Save MemAgent Handoff",
             "description": "Save a short project handoff for cross-session catch-up.",
+            "annotations": _tool_annotations(read_only=False, idempotent=False),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -342,6 +346,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_handoff_show",
             "title": "Show MemAgent Handoff",
             "description": "Show the latest project handoff for cross-session catch-up.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -356,6 +361,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_handoff_draft",
             "title": "Draft MemAgent Handoff",
             "description": "Draft a project handoff from session notes, optionally saving it.",
+            "annotations": _tool_annotations(read_only=False, idempotent=False),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -373,6 +379,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "name": "memagent_handoff_promote",
             "title": "Promote MemAgent Handoff Candidate",
             "description": "Promote memory candidates from the latest handoff into durable memory cards.",
+            "annotations": _tool_annotations(read_only=False, idempotent=False),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -397,6 +404,15 @@ def tool_definitions() -> list[dict[str, Any]]:
             },
         },
     ]
+
+
+def _tool_annotations(*, read_only: bool, idempotent: bool) -> dict[str, bool]:
+    return {
+        "readOnlyHint": read_only,
+        "destructiveHint": False,
+        "idempotentHint": idempotent,
+        "openWorldHint": False,
+    }
 
 
 def run_stdio_server(server: McpServer, *, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:

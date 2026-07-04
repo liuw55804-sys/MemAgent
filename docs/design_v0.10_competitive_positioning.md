@@ -24,11 +24,13 @@ Codex-first workflow memory lifecycle
 |---|---|---|
 | [agentmemory](https://github.com/rohitg00/agentmemory) | 直接竞品 | hooks capture、BM25/vector/graph fusion、SessionStart 注入、memory evolution、observability |
 | [ai-memory](https://github.com/akitaonrails/ai-memory) | 直接竞品 | handoff、catch-me-up、per-cwd routing、session boundary capture、read-only memory view |
+| [Hindsight](https://github.com/vectorize-io/hindsight) / [Redis Agent Memory Server](https://github.com/redis/agent-memory-server) | memory service | LLM/provider 抽象、working/long-term memory、HTTP/MCP、hybrid search |
+| [mcp-memory-keeper](https://github.com/mkreyman/mcp-memory-keeper) / [memory-mcp](https://github.com/yuvalsuede/memory-mcp) | Claude 记忆桥 | PreCompact/SessionEnd、CLAUDE.md brief、MCP recall、上下文丢失恢复 |
 | [Headroom](https://github.com/headroomlabs-ai/headroom) | 相邻能力 | token-aware context compression、CCR retrieve-on-demand、wrap Codex、learn 写 AGENTS.md |
 | [ByteRover CLI](https://github.com/campfirein/byterover-cli) | 大而全平台 | context tree、review workflow、cloud sync、多 agent support |
 | [Basic Memory](https://github.com/basicmachines-co/basic-memory) | 本地知识层 | Markdown source of truth、SQLite index、MCP behavior hints、schema validate |
 | [Mem0](https://github.com/mem0ai/mem0) / [LangMem](https://github.com/langchain-ai/langmem) | 通用 memory SDK | LLM extraction、background consolidation、semantic/BM25/entity retrieval、benchmark |
-| [Serena](https://github.com/oraios/serena) | coding-agent IDE 工具 | symbol-level code retrieval、MCP 工具体系、long-lived workflow memory |
+| [Serena](https://github.com/oraios/serena) / [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) / [NeuralMind](https://github.com/dfrostar/neuralmind) | coding-agent IDE 工具 | symbol-level code retrieval、code knowledge graph、token-aware codebase context |
 
 ## 3. 关键判断
 

@@ -49,6 +49,31 @@ class McpServerTest(unittest.TestCase):
             self.assertIn("name", tool)
             self.assertEqual(tool["inputSchema"]["type"], "object")
             self.assertIn("properties", tool["inputSchema"])
+            self.assertEqual(
+                set(tool["annotations"]),
+                {"readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"},
+            )
+            self.assertFalse(tool["annotations"]["destructiveHint"])
+            self.assertFalse(tool["annotations"]["openWorldHint"])
+
+    def test_tool_annotations_classify_read_and_write_tools(self) -> None:
+        tools = {tool["name"]: tool for tool in tool_definitions()}
+        read_only_tools = {
+            "memagent_recall",
+            "memagent_agents_doctor",
+            "memagent_handoff_show",
+        }
+        write_capable_tools = set(tools) - read_only_tools
+
+        for name in read_only_tools:
+            annotations = tools[name]["annotations"]
+            self.assertTrue(annotations["readOnlyHint"])
+            self.assertTrue(annotations["idempotentHint"])
+
+        for name in write_capable_tools:
+            annotations = tools[name]["annotations"]
+            self.assertFalse(annotations["readOnlyHint"])
+            self.assertFalse(annotations["idempotentHint"])
 
     def test_remember_and_recall_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

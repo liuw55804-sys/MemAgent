@@ -235,6 +235,12 @@ Save the selected candidate as a durable memory card:
 memagent handoff promote --index 1 --write
 ```
 
+## v0.14 Design
+
+See [docs/design_v0.14_mcp_annotations.md](docs/design_v0.14_mcp_annotations.md)
+for the MCP tool annotation design. Every MCP tool now declares whether it is
+read-only, write-capable, destructive, idempotent, and closed-world.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`

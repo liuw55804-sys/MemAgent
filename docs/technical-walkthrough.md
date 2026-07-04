@@ -341,7 +341,7 @@ local_memory_demo/demo_run/
 memagent mcp-stdio
 ```
 
-当前暴露六个 tools：
+当前暴露七个 tools：
 
 - `memagent_recall`：召回相关 workflow memory。
 - `memagent_remember`：写入一条短 memory。
@@ -350,6 +350,12 @@ memagent mcp-stdio
 - `memagent_handoff_draft`：从 session text 生成 handoff draft，可选保存。
 - `memagent_handoff_promote`：预览或写入 latest handoff 中的 memory candidates。
 - `memagent_agents_doctor`：检查 AGENTS.md 集成状态。
+
+每个 tool definition 都带 MCP `annotations`：
+
+- 只读工具：`memagent_recall`、`memagent_handoff_show`、`memagent_agents_doctor`。
+- 写入工具：`memagent_remember`、`memagent_handoff_save`、`memagent_handoff_draft`、`memagent_handoff_promote`。
+- 当前所有工具都标为 `destructiveHint=false` 和 `openWorldHint=false`，因为它们只操作本地 MemAgent 记忆和当前项目文件，不调用外部系统。
 
 它实现的是 stdio JSON-RPC 入口，不启动 HTTP 服务，也不监听端口。`mcp.py` 中的 MCP adapter 复用 `memory.py`、`agents.py` 和 `context.py`，所以 MCP 入口和 CLI/AGENTS.md 入口不会分叉出两套业务逻辑。
 

@@ -24,11 +24,13 @@ Added:
 - MCP tools for saving and showing project handoffs.
 - MCP tool for drafting and optionally saving handoffs from session text.
 - MCP tool for promoting handoff memory candidates.
+- MCP tool annotations for read-only/write-capable, destructive, idempotent, and open-world behavior hints.
 - Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
 - v0.11 handoff design note for separating recent continuation state from durable workflow memory.
 - v0.12 handoff draft design note for draft-review-save capture.
 - v0.13 handoff promotion design note for memory lifecycle promotion.
+- v0.14 MCP annotations design note for protocol-aware tool safety hints.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:

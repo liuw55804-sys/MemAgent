@@ -400,6 +400,7 @@ timeline
 - **Context-aware Recall**：结合 cwd、git root、branch、prompt、最近修改文件、AGENTS.md 摘要做召回。
 - **Context Composition**：把多条记忆融合成短提示，控制注入上下文长度，避免污染主任务。
 - **Lifecycle Management**：区分动态 memory 和稳定规则，未来支持过期、冲突检测、召回效果评估、AGENTS.md 升格建议。
+- **MCP Protocol Surface**：通过 MCP tools 暴露 recall/remember/handoff，并用 tool annotations 区分只读、写入、幂等和外部访问风险。
 - **Local-first Safety**：私有本地记忆可保留精确工程入口；公开导出时再脱敏。
 
 面试中可以主动讲三个边界问题：
