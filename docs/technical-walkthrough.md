@@ -9,6 +9,7 @@ src/memagent/
   agents.py    生成 AGENTS.md 触发规则，并检查 AGENTS.md 集成状态
   cli.py       命令行入口，负责把用户命令转成函数调用
   context.py   探测当前工程上下文，比如 cwd、git root、branch、AGENTS.md
+  demo.py      运行隔离 demo，并生成可分享的 Markdown transcript
   memory.py    记忆存储与召回，负责写 memory card、检索、生成短上下文
   wrapper.py   把召回上下文拼到 Codex prompt 前
 ```
@@ -24,6 +25,7 @@ PYTHONPATH=src python -m memagent.cli codex --dry-run "继续查归因准确率"
 PYTHONPATH=src python -m memagent.cli agents-snippet
 PYTHONPATH=src python -m memagent.cli agents-install
 PYTHONPATH=src python -m memagent.cli agents-doctor
+PYTHONPATH=src python -m memagent.cli demo-run --reset
 ```
 
 安装成 editable package 后，才可以直接用：
@@ -36,6 +38,7 @@ memagent codex "..."
 memagent agents-snippet
 memagent agents-install
 memagent agents-doctor
+memagent demo-run --reset
 ```
 
 默认记忆文件写到：
@@ -67,7 +70,7 @@ flowchart LR
 
 ## 3. 三条命令分别做什么
 
-当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`。
+当前主要命令是 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`。
 
 ### 3.1 `remember`
 
@@ -281,6 +284,34 @@ memagent agents-doctor --cwd /path/to/project
 
 输出中的 `Status: ready` 表示 AGENTS.md 触发层已经可用；`Status: setup needed` 表示需要先运行 `agents-snippet` 并把结果复制到目标 `AGENTS.md`。
 
+### 3.7 `demo-run`
+
+用途：在隔离目录里跑一遍完整演示，并生成 Markdown transcript。
+
+命令：
+
+```bash
+memagent demo-run --reset
+```
+
+默认写到：
+
+```text
+local_memory_demo/demo_run/
+```
+
+它会自动完成：
+
+- 创建 mock project。
+- 安装 MemAgent AGENTS.md block。
+- 用 `agents-doctor` 检查 ready。
+- 写入一条 mock workflow memory。
+- 运行 explainable recall。
+- 生成 `codex --dry-run` prompt patch。
+- 把所有命令和输出写到 `transcript.md`。
+
+这个命令服务于演示和面试，不是核心 memory 逻辑。它把已有能力串起来，保证每次展示的路径可复现。
+
 ## 4. 文件级讲解
 
 ### 4.1 `cli.py`
@@ -290,7 +321,7 @@ memagent agents-doctor --cwd /path/to/project
 它主要做三件事：
 
 - 定义命令和参数：`build_parser()`。
-- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`。
+- 根据 `args.command` 分发到 `remember`、`recall`、`codex`、`agents-snippet`、`agents-install`、`agents-doctor`、`demo-run`。
 - 把底层模块串起来，但不自己做复杂业务逻辑。
 
 核心结构：
@@ -304,10 +335,12 @@ build_parser()
   -> 定义 agents-snippet 子命令
   -> 定义 agents-install 子命令
   -> 定义 agents-doctor 子命令
+  -> 定义 demo-run 子命令
 
 main(argv)
   -> parse args
   -> if agents-snippet: build_agents_snippet
+  -> if demo-run: run_demo
   -> MemoryStore.from_home_arg(args.home)
   -> if agents-install: build_agents_install_plan + optional write
   -> if remember: detect_context + store.remember(domain, kind, ...)
@@ -581,7 +614,7 @@ def build_augmented_prompt(user_prompt: str, recalled_context: str) -> str:
 
 ## 5. 测试怎么读
 
-当前测试很少，主要验证最小闭环。
+当前测试主要保护四类能力：memory 存取召回、prompt wrapper、AGENTS.md 集成、demo transcript。
 
 ```text
 tests/test_memory_store.py
@@ -610,6 +643,10 @@ tests/test_agents_snippet.py
   test_agents_doctor_report_ready
   test_agents_doctor_report_setup_needed
   test_agents_doctor_cli
+
+tests/test_demo.py
+  test_run_demo_writes_transcript_and_memory
+  test_demo_run_cli
 ```
 
 `test_memory_store.py` 做的是：
@@ -620,9 +657,11 @@ tests/test_agents_snippet.py
 - 调用 `store.recall(...)` 找回 memory。
 - 调用 `compose_context(...)` 确认输出里有标题、关键句和可解释召回信息。
 
-这说明当前测试关注的是“能写、能召回、能渲染”，不是复杂召回质量。
+这说明当前测试关注的是“能写、能召回、能渲染、能安装、能自检、能演示”，不是复杂召回质量。
 
 `test_agents_snippet.py` 保护的是 AGENTS.md 自然语言触发入口，避免后续改文案时把关键命令或安全边界删掉。
+
+`test_demo.py` 保护的是演示闭环：能生成 mock project、AGENTS.md、memory card 和 transcript。
 
 运行测试：
 
@@ -640,6 +679,7 @@ PYTHONPATH=src python -m unittest discover -s tests
 - keyword 召回。
 - `recall` 预览短上下文。
 - `codex --dry-run` 查看最终 prompt。
+- `agents-install` / `agents-doctor` / `demo-run` 展示 AGENTS.md 集成闭环。
 
 ### 阶段二：下一步最自然的增强
 

@@ -97,6 +97,7 @@ MemAgent 要重点解决的是：
 - **召回可解释**：召回时可以显示 memory 来源、简单分数和命中词，避免变成黑盒记忆。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
 - **集成可检查**：通过 `agents-doctor` 检查当前项目 AGENTS.md 是否已具备 recall/remember 触发能力。
+- **演示可复现**：通过 `demo-run` 在隔离目录里生成 mock 项目和 transcript，稳定展示 install、doctor、recall、prompt patch。
 - **经验生命周期**：区分一次性上下文、可复用 workflow、可升格 `AGENTS.md` 的稳定规则。
 - **跨 coding agent**：当前主攻 Codex，但 memory card 设计不绑定 Codex，未来可以服务 Cursor、Claude Code 等 coding agent。
 

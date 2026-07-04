@@ -14,6 +14,7 @@ Added:
 - `agents-install` command to preview or write the MemAgent AGENTS.md block with managed markers.
 - `recall --show-reasons` and `codex --show-reasons` to display simple recall scores and matched query terms.
 - `agents-doctor` command to inspect whether the current project AGENTS.md has MemAgent recall/remember integration.
+- `demo-run` command to create an isolated mock project and write a shareable AGENTS.md integration transcript.
 - Competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
@@ -24,6 +25,7 @@ Changed:
 - v0.3 design now focuses on Codex natural-language integration through AGENTS.md snippets.
 - Generated AGENTS.md recall commands now include `--show-sources --show-reasons` for more transparent demos and debugging.
 - Generated AGENTS.md snippets now include managed Markdown markers for safe replacement by `agents-install`.
+- Demo documentation now points to the generated transcript flow as the fastest presentation path.
 
 ## v0.1.0-mvp - 2026-06-23
 

@@ -13,6 +13,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
+from memagent.demo import run_demo
 from memagent.memory import MemoryStore
 from memagent.wrapper import build_augmented_prompt
 
@@ -176,6 +177,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write the planned AGENTS.md change. Default is dry-run preview.",
     )
 
+    demo = subparsers.add_parser(
+        "demo-run",
+        help="Run an isolated AGENTS.md integration demo and write a Markdown transcript.",
+    )
+    demo.add_argument(
+        "--workspace",
+        default="local_memory_demo/demo_run",
+        help="Demo workspace directory. Default: local_memory_demo/demo_run.",
+    )
+    demo.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+    demo.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete the demo workspace before running.",
+    )
+
     return parser
 
 
@@ -185,6 +205,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agents-snippet":
         print(build_agents_snippet(Path(args.memagent_root) if args.memagent_root else None))
+        return 0
+
+    if args.command == "demo-run":
+        result = run_demo(
+            workspace=Path(args.workspace),
+            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            reset=args.reset,
+        )
+        print("[MemAgent demo-run]")
+        print(f"- workspace: {result.workspace}")
+        print(f"- project: {result.project_dir}")
+        print(f"- memory home: {result.memory_home}")
+        print(f"- transcript: {result.transcript_path}")
+        print(f"- steps: {len(result.steps)}")
         return 0
 
     store = MemoryStore.from_home_arg(args.home)

@@ -16,6 +16,26 @@ agents-install 安装 + agents-doctor 自检
 在 MemAgent 项目根目录运行：
 
 ```bash
+PYTHONPATH=src python -m memagent.cli demo-run --reset
+```
+
+它会创建：
+
+```text
+local_memory_demo/demo_run/
+  project/
+    AGENTS.md
+    pyproject.toml
+  memagent_home/
+    memories/
+  transcript.md
+```
+
+`transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、codex dry-run 的命令和输出。
+
+如果想手动分步演示，可以继续按下面步骤运行。
+
+```bash
 mkdir -p local_memory_demo/agents_flow
 ```
 

@@ -37,6 +37,12 @@ The doctor report checks whether an `AGENTS.md` file is visible from the current
 directory, whether it contains MemAgent recall/remember commands, and whether
 recall uses `--show-reasons` for explainable demos.
 
+For a full mock demo transcript, run:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli demo-run --reset
+```
+
 When the user says:
 
 - `记住这个`

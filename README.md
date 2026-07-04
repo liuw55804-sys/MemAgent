@@ -12,6 +12,7 @@ python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JS
 python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons
 python -m memagent.cli agents-install
 python -m memagent.cli agents-doctor
+python -m memagent.cli demo-run --reset
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
 ```
 
@@ -23,6 +24,7 @@ memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation
 memagent recall "continue checking attribution accuracy" --show-sources --show-reasons
 memagent agents-install
 memagent agents-doctor
+memagent demo-run --reset
 memagent codex "continue checking attribution accuracy"
 ```
 
@@ -135,6 +137,11 @@ the AGENTS.md integration self-check design.
 See [docs/design_v0.5_agents_install.md](docs/design_v0.5_agents_install.md) for
 the safe AGENTS.md installer design.
 
+## v0.6 Design
+
+See [docs/design_v0.6_demo_run.md](docs/design_v0.6_demo_run.md) for the
+reproducible demo transcript design.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
@@ -145,6 +152,18 @@ integration that lets Codex call MemAgent when the user says phrases like
 
 See [docs/demo_codex_agents_flow.md](docs/demo_codex_agents_flow.md) for a
 reproducible local demo of the AGENTS.md recall/remember flow.
+
+Generate a fresh mock transcript:
+
+```bash
+memagent demo-run --reset
+```
+
+The transcript is written to:
+
+```text
+local_memory_demo/demo_run/transcript.md
+```
 
 ## Development
 
