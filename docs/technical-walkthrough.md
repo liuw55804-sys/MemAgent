@@ -284,8 +284,10 @@ PYTHONPATH=src python -m memagent.cli agents-snippet
 
 这段 snippet 会告诉 Codex：
 
-- 用户说“召回一下相关记忆”时，调用 `memagent recall`。
-- 用户说“沉淀一下”时，总结短 memory 并调用 `memagent remember`。
+- 在非平凡 coding/debug/data/tool-heavy 任务开始时，判断是否需要先用 `memagent recall --trace` 查历史经验。
+- 用户说“这个入口下次别忘了”“沉淀一下”或线程出现明显可复用经验时，先预览短 memory，再由用户确认后调用 `memagent remember`。
+- 用户说“这个有用”“刚刚那条没帮上忙”时，把普通反馈映射到 `memagent trace label`。
+- 用户说“先到这”“上次做到哪”时，用 `memagent handoff save/show` 做线程交接。
 - recalled memory 只是提示，不是事实来源。
 - 不要保存 token、cookie、密码、私钥或原始敏感样本。
 
@@ -914,9 +916,9 @@ trace report
 
 这让 MemAgent 有了一条从真实 coding-agent 召回到人工反馈，再到召回质量汇总的小闭环。
 
-v0.19 把这条反馈闭环接到 AGENTS.md 和 MCP：
+v0.19 把这条反馈闭环接到 AGENTS.md 和 MCP；v0.26 进一步把触发词从工具语言改成普通反馈语言：
 
-- AGENTS.md snippet 包含“这次召回有用/没用”等自然语言触发。
+- AGENTS.md snippet 包含“这个有用”“刚刚那条没帮上忙”等自然语言触发。
 - MCP 暴露 `memagent_trace_list/show/label/report`，让非 Codex client 也能读写 trace feedback。
 
 ### 4.4 `handoff.py`

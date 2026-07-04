@@ -60,46 +60,55 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         ## MemAgent Natural Language Triggers
 
         MemAgent is a local workflow memory layer for Codex/coding-agent sessions.
-        Use it when the user explicitly asks to recall or save reusable workflow memory.
+        Use it as a small background memory helper. The user does not need to
+        know words like recall, trace, eval, replay, candidate, or handoff.
 
-        ### Recall
+        ### Task-Start Memory Check
 
-        When the user says phrases like:
+        Before a non-trivial coding, debugging, data, or tool-heavy task, decide
+        whether prior workflow memory may help. Prefer a quick MemAgent check
+        when the task mentions repeated domains, tools, repos, data entrypoints,
+        or past failure signals such as:
 
-        - `召回一下相关记忆`
-        - `先看看之前有没有相关经验`
         - `有没有以前踩过类似坑`
-        - `用 MemAgent 看看`
-        - `查一下 MemAgent memory`
+        - `之前是不是查过这个`
+        - `又要查 bytedcli / RDS / owner`
+        - `继续排查 audit_rule_lib`
+        - `类似上次那个问题`
+        - `先按你觉得最省时间的方式来`
 
         Run:
 
         ```bash
-        {command_prefix} recall "<user task>" --show-sources --show-reasons --strategy bm25
+        {command_prefix} recall "<short user task>" --show-sources --show-reasons --strategy bm25 --trace
         ```
 
-        Then use the recalled context as hints only. Continue checking live code,
-        schemas, docs, command output, and tool results before acting.
+        Use the recalled context as hints only. Summarize any useful memory in
+        one short sentence, then continue checking live code, schemas, docs,
+        command output, and tool results before acting. If no memory is found,
+        continue normally without making the missing memory the center of the
+        conversation.
 
-        If the user explicitly wants to evaluate recall quality or says this is
-        a MemAgent demo, add `--trace` so the result can be labeled later:
+        Skip MemAgent for tiny edits, purely mechanical refactors, generic
+        questions, or tasks where live code/docs are obviously sufficient.
 
-        ```bash
-        {command_prefix} recall "<user task>" --show-sources --show-reasons --strategy bm25 --trace
-        ```
+        ### Opportunistic Memory Capture
 
-        ### Remember
-
-        When the user says phrases like:
+        When the user says phrases like these, or when the thread clearly
+        produced a reusable workflow lesson, draft a short memory preview first:
 
         - `记住这个`
         - `沉淀一下`
         - `下次别再踩这个坑`
         - `把这次排查做成 memory`
         - `保存为 MemAgent 记忆`
+        - `这个入口下次别忘了`
+        - `这个命令以后还会用`
+        - `刚刚绕路的原因记一下`
 
-        Summarize one short, actionable memory from the current thread, choose a
-        suitable `kind`, then run:
+        The preview should include `topic`, `kind`, `triggers`, and a 1-3
+        sentence memory. Ask the user to confirm before saving. After the user
+        accepts the preview, run:
 
         ```bash
         {command_prefix} remember \\
@@ -120,6 +129,10 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         - `workflow`: multi-step debugging or implementation flow
         - `note`: fallback when no specific kind fits
 
+        At the end of a task, if a durable lesson appeared but the user did not
+        explicitly ask to save it, suggest at most one memory candidate in plain
+        language. Do not save it until the user confirms.
+
         ### Handoff / Catch-up
 
         When the user says phrases like:
@@ -136,6 +149,9 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} handoff show
         ```
 
+        Also use this when the user opens a new thread with vague continuation
+        language such as `继续刚才的`, `接着做`, or `我们上回到哪了`.
+
         When the user says phrases like:
 
         - `交接一下`
@@ -143,6 +159,8 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         - `下次接着做`
         - `保存一个 handoff`
         - `生成 handoff draft`
+        - `先到这`
+        - `换个会话继续`
 
         If a session note, transcript, or summary file is available, draft first:
 
@@ -174,7 +192,8 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
 
         ### Codex Transcript Ingest
 
-        When the user says phrases like:
+        This is a review mode, not a normal daily interaction. Use it when the
+        user wants to mine older Codex sessions for memory candidates:
 
         - `从旧 Codex 线程里找可沉淀经验`
         - `看看以前 Codex 会话有没有能做成 memory 的`
@@ -211,42 +230,43 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} handoff promote --index 1 --write
         ```
 
-        ### Recall Trace Feedback
+        ### Feedback From Ordinary Language
 
-        When the user says phrases like:
+        When the user responds to a recalled memory with ordinary language like:
 
-        - `这次召回有用`
-        - `这次召回没用`
-        - `这个 memory 不相关`
-        - `标记这次 recall 有用`
-        - `给这次召回打个标签`
+        - `这个有用`
+        - `这条提醒是对的`
+        - `刚刚那条没帮上忙`
+        - `这个不相关`
+        - `不是这个问题`
 
-        Label the latest saved recall trace. Use `useful` when the recalled
-        memory helped, `not-useful` when it was wrong or stale, and `neutral`
-        when it was inconclusive:
+        Label the latest saved recall trace. Use `useful` when the memory helped,
+        `not-useful` when it was wrong or stale, and `neutral` when the signal is
+        inconclusive. Do not ask the user to say the word "trace".
 
         ```bash
         {command_prefix} trace label --rating useful --note "<short reason>"
         ```
 
-        To inspect recent recall quality, run:
+        ### Developer Evaluation Mode
+
+        Trace reports, eval, and replay are developer-facing quality tools.
+        Do not run them during normal product work unless the user asks to
+        evaluate MemAgent, prepare interview evidence, compare retrieval behavior,
+        or inspect memory quality.
+
+        To inspect recent feedback quickly, run:
 
         ```bash
         {command_prefix} trace report
         ```
 
-        When the user asks for a shareable evaluation artifact or interview demo
-        evidence, write a Markdown report from labeled traces:
+        To write Markdown artifacts, prefer an explicit workspace path so reports
+        do not scatter into the current service repo:
 
         ```bash
-        {command_prefix} trace eval
-        ```
-
-        When the user asks to replay saved traces, compare retrievers, or check
-        whether recall behavior changed after an iteration, run:
-
-        ```bash
-        {command_prefix} trace replay
+        {command_prefix} trace eval --workspace "<absolute-output-dir>/trace_eval"
+        {command_prefix} trace replay --workspace "<absolute-output-dir>/trace_replay"
         ```
 
         ### Safety
@@ -309,9 +329,9 @@ def build_agents_doctor_report(
             [
                 "- Status: ready",
                 (
-                    '- Next step: in Codex, say "上次做到哪" or '
-                    '"召回一下相关记忆，<your task>"; MemAgent should be called '
-                    "from AGENTS.md instructions."
+                    '- Next step: in Codex, ask a normal project question like '
+                    '"继续排查 audit_rule_lib 的 owner 问题" or "上次做到哪"; '
+                    "MemAgent should stay in the background unless it helps."
                 ),
             ]
         )

@@ -55,6 +55,7 @@ Added:
 - v0.24 landscape refresh comparing agentmemory, ai-memory, Reference, cccmemory, Headroom, Basic Memory, and mind.
 - v0.25 Codex transcript ingest design note for human-in-the-loop memory candidate review.
 - v0.25 Codex thread self-test playbook for product-style acceptance testing.
+- v0.26 Codex-native Memory UX plan and natural-language self-test playbook.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
@@ -69,6 +70,7 @@ Changed:
 - Generated AGENTS.md snippets now include handoff/catch-up natural-language triggers.
 - Generated AGENTS.md snippets now recommend draft-first handoff capture when a session note file is available.
 - Generated AGENTS.md snippets now include handoff candidate promotion triggers.
+- Generated AGENTS.md snippets now treat MemAgent as a background Codex helper: task-start memory checks use `recall --trace`, ordinary feedback can label traces, and `trace eval/replay` are framed as developer reports.
 
 ## v0.1.0-mvp - 2026-06-23
 

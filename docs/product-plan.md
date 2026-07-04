@@ -92,15 +92,15 @@ MemAgent 的定位不是重复 Codex 现有能力，而是补一个更显式、�
 MemAgent 要重点解决的是：
 
 - **显式可控**：用户可以明确说“沉淀一下”，也可以查看和编辑 memory card。
+- **Codex-native 交互**：用户不需要知道 `recall`、`trace`、`eval`、`replay`、`candidate` 等内部概念；Codex 根据任务语言判断是否召回、沉淀、标注反馈或保存 handoff。
 - **工具 recipe 保真**：本地私有记忆可以保留必要的 `bytedcli` 命令、库名、表名、API path、header、env 等工程入口。
 - **上下文短注入**：召回结果会被压缩成 10-30 行，避免把历史长线程塞进新会话。
 - **召回可解释**：召回时可以显示 memory 来源、简单分数和命中词，避免变成黑盒记忆。
 - **上下文可打包**：召回结果会经过 context packer，去重重复建议，控制短上下文预算，并标记是否截断。
 - **输出可结构化**：`recall --json` 和 MCP `format=json` 输出版本化 payload，避免其它 agent 解析 Markdown。
 - **召回可追踪**：`recall --trace` 把真实召回 payload 保存为本地 trace，后续可做人工标注、回放和质量评估。
-- **反馈可闭环**：`trace label/report` 支持 useful / not_useful / neutral 标注，并汇总真实召回有用率。
-- **反馈可成稿**：`trace eval` 从真实 labeled traces 生成 Markdown 报告，作为可复盘、可分享的真实使用评估 artifact。
-- **反馈可回放**：`trace replay` 回放保存过的 trace query，比较当前 retriever top match 和原 trace top match，作为轻量 regression signal。
+- **反馈可闭环**：用户可以用“这个有用”“刚刚那条没帮上忙”等普通语言表达反馈，Codex 再映射到 `trace label/report`。
+- **开发者质量报告**：`trace eval` 和 `trace replay` 退到开发者视角，用真实 labeled traces 生成 Markdown 报告和 top-stability regression signal。
 - **旧线程可抽取**：`ingest codex` 从本地 Codex session JSONL 生成 review-only memory candidates，先让用户审阅，再决定是否 `remember`。
 - **反馈可集成**：Codex 可通过 AGENTS.md 自然语言规则标注 trace，MCP client 可通过 trace tools 读写反馈并生成报告。
 - **集成可安装**：通过 `agents-install` 以 dry-run-first 的方式把 MemAgent 触发规则写入 `AGENTS.md`。
@@ -183,33 +183,33 @@ memagent codex "继续查机审归因准确率"
 - 适合产品验证。
 - 当前版本已经落地 `remember`、`recall`、`codex` 三个最小闭环命令。
 
-### 8.2 第二阶段：Codex 自然语言触发
+### 8.2 第二阶段：Codex-native 自然交互
 
-用户最终不应该记命令，而是在 Codex 里自然表达：
+用户最终不应该记命令，也不应该被训练成说 `recall`、`trace`、`candidate`。用户只是在 Codex 里自然表达任务或反馈：
 
 ```text
-记住这个
-沉淀一下
-下次别再踩这个坑
-把这次排查做成 memory
-先看看之前有没有相关经验
-召回一下相关记忆
+帮我排查 audit_rule_lib 的 owner 问题
+这个入口下次别忘了
+刚刚那条提醒有用
+刚刚那条没帮上忙
+先到这，下次继续
 ```
 
-触发方式：
+这些句子不是硬编码触发词，而是给 Codex / LLM router 读的语义示例：
 
 ```text
 用户自然语言
-  -> Codex 根据 AGENTS.md / Skill 规则识别意图
+  -> Codex 根据 AGENTS.md / Skill / LLM router 判断自然交互节点
+  -> 选择 recall / draft_memory / label_feedback / handoff / none
   -> Codex 调用 memagent CLI 或 MCP 工具
-  -> memagent 写入或召回本地记忆
+  -> memagent 写入、召回或标注本地记忆
 ```
 
-这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“当用户说这些话时，应该调用 memagent”。
+这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 可以把判断逻辑抽成 LLM-assisted router。
 
 ### 8.3 第三阶段：半自动提示
 
-检测到以下模式时，提示用户是否沉淀：
+Codex 或 LLM-assisted router 检测到以下模式时，提示用户是否沉淀：
 
 - 连续失败命令后出现成功命令。
 - final answer 中出现“正确口径”“下次建议”“不要再”。

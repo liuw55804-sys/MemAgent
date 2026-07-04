@@ -63,10 +63,10 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 ```
 
 For a real trace-feedback evaluation report, run after saving and labeling
-recall traces:
+recall traces. Prefer an explicit output workspace:
 
 ```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval --workspace /absolute/output/trace_eval
 ```
 
 For MCP clients, MemAgent also exposes the same memory operations through a
@@ -76,14 +76,58 @@ local stdio server:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli mcp-stdio
 ```
 
-When the user says:
+## Codex-Native Interaction Policy
+
+The user should not need to know `recall`, `trace`, `eval`, `replay`, or
+`candidate`. Codex should map ordinary task language to MemAgent operations.
+
+### Task-Start Memory Check
+
+Before a non-trivial coding, debugging, data, or tool-heavy task, Codex should
+decide whether prior workflow memory may help. This is especially useful when
+the prompt mentions repeated domains, tools, repos, data entrypoints, or past
+failure signals:
+
+- `有没有以前踩过类似坑`
+- `之前是不是查过这个`
+- `又要查 bytedcli / RDS / owner`
+- `继续排查 audit_rule_lib`
+- `类似上次那个问题`
+- `先按你觉得最省时间的方式来`
+
+Codex should call:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short user task" --show-sources --show-reasons --strategy bm25 --trace
+```
+
+`--show-sources` shows which memory card was used. `--show-reasons` shows the
+simple score and matched query terms, which makes the recall result easier to
+debug and demo. `--strategy bm25` uses the default BM25-style retriever
+explicitly, so the AGENTS.md rule documents the RAG scoring strategy.
+
+Use the recalled context as hints only. Summarize a useful memory in one short
+sentence, then continue checking live code, schemas, docs, command output, and
+tool results. If no memory is found, continue normally.
+
+Skip MemAgent for tiny edits, purely mechanical refactors, generic questions,
+or tasks where live code/docs are obviously sufficient.
+
+### Opportunistic Memory Capture
+
+When the user says phrases like these, or when the thread clearly produced a
+reusable workflow lesson, Codex should draft a short memory preview first:
 
 - `记住这个`
 - `沉淀一下`
 - `下次别再踩这个坑`
 - `把这次排查做成 memory`
+- `这个入口下次别忘了`
+- `这个命令以后还会用`
+- `刚刚绕路的原因记一下`
 
-Codex should summarize the lesson and call:
+The preview should include `topic`, `kind`, `triggers`, and a 1-3 sentence
+memory. Only after the user accepts the preview, Codex should call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli remember \
@@ -94,23 +138,11 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
   "short actionable memory"
 ```
 
-When the user says:
+At the end of a task, if a durable lesson appeared but the user did not ask to
+save it, Codex may suggest at most one memory candidate in plain language. It
+must not save it until the user confirms.
 
-- `先看看之前有没有相关经验`
-- `召回一下相关记忆`
-- `用 MemAgent 查一下`
-- `有没有以前踩过类似坑`
-
-Codex should call:
-
-```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli recall "short query" --show-sources --show-reasons --strategy bm25
-```
-
-`--show-sources` shows which memory card was used. `--show-reasons` shows the
-simple score and matched query terms, which makes the recall result easier to
-debug and demo. `--strategy bm25` uses the default BM25-style retriever
-explicitly, so the AGENTS.md rule documents the RAG scoring strategy.
+### Handoff / Catch-up
 
 When the user says:
 
@@ -118,6 +150,8 @@ When the user says:
 - `接着上次继续`
 - `catch me up`
 - `where did we leave off`
+- `继续刚才的`
+- `我们上回到哪了`
 
 Codex should call:
 
@@ -132,6 +166,8 @@ When the user says:
 - `下次接着做`
 - `保存一个 handoff`
 - `生成 handoff draft`
+- `先到这`
+- `换个会话继续`
 
 If a session note, transcript, or summary file is available, Codex should draft
 first:
@@ -162,7 +198,10 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 Use `handoff` for recent continuation state. Use `remember` only for durable
 workflow lessons that should be reusable beyond this one continuation.
 
-When the user says:
+### Codex Transcript Ingest
+
+This is a review mode, not a normal daily interaction. Use it when the user
+wants to mine older Codex sessions for memory candidates:
 
 - `从旧 Codex 线程里找可沉淀经验`
 - `看看以前 Codex 会话有没有能做成 memory 的`
@@ -177,6 +216,8 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 This writes Markdown drafts under `local_memory_demo/ingest_codex` by default.
 Review and edit candidates before saving any durable memory with `remember`.
+
+### Promote Handoff Candidates
 
 When the user says:
 
@@ -198,40 +239,45 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 Promotion writes durable memory cards, so do not skip the preview step.
 
-When the user says:
+### Feedback From Ordinary Language
 
-- `这次召回有用`
-- `这次召回没用`
-- `这个 memory 不相关`
-- `标记这次 recall 有用`
-- `给这次召回打个标签`
+When the user responds to a recalled memory with ordinary language:
 
-Codex should label the latest saved recall trace:
+- `这个有用`
+- `这条提醒是对的`
+- `刚刚那条没帮上忙`
+- `这个不相关`
+- `不是这个问题`
+
+Codex should label the latest saved recall trace. Use `useful` when the memory
+helped, `not-useful` when it was wrong or stale, and `neutral` when the signal
+is inconclusive:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace label --rating useful --note "short reason"
 ```
 
-Use `useful` when the recalled memory helped, `not-useful` when it was wrong or
-stale, and `neutral` when the result was inconclusive. To summarize recent trace
-feedback, call:
+Do not ask the user to say the word `trace`.
+
+### Developer Evaluation Mode
+
+Trace reports, eval, and replay are developer-facing quality tools. Do not run
+them during normal product work unless the user asks to evaluate MemAgent,
+prepare interview evidence, compare retrieval behavior, or inspect memory
+quality.
+
+To summarize recent trace feedback, call:
 
 ```bash
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace report
 ```
 
-When the user asks for a shareable evaluation artifact or interview demo
-evidence, Codex can write a Markdown report from labeled traces:
+When writing Markdown artifacts, prefer an explicit workspace path so reports do
+not scatter into the current service repo:
 
 ```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval
-```
-
-When the user asks to replay saved traces or compare recall behavior after an
-iteration, Codex can write a trace replay report:
-
-```bash
-PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace replay
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace eval --workspace /absolute/output/trace_eval
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli trace replay --workspace /absolute/output/trace_replay
 ```
 
 ## Safety

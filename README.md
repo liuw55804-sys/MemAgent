@@ -330,11 +330,19 @@ Codex transcript ingest. `memagent ingest codex` scans local Codex session JSONL
 files and writes review-only memory candidate drafts. It does not write durable
 memory cards until the user edits and saves a candidate with `remember`.
 
+## v0.26 Plan
+
+See [docs/plan_v0.26.md](docs/plan_v0.26.md) for the Codex-native Memory UX
+plan. v0.26 shifts the product from command-oriented triggers toward normal
+conversation: Codex decides when to check memory, draft a memory preview, label
+feedback, or save a handoff while the user talks in ordinary task language.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
-integration that lets Codex call MemAgent when the user says phrases like
-`沉淀一下`, `召回一下相关记忆`, or `上次做到哪`.
+integration that lets Codex call MemAgent from ordinary task language such as
+`继续排查 audit_rule_lib`, `这个入口下次别忘了`, `刚刚那条提醒有用`, or
+`上次做到哪`.
 
 ## Demo
 
