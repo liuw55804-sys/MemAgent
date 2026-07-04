@@ -8,7 +8,7 @@ import unittest
 
 from memagent.agents import MEMAGENT_BLOCK_START
 from memagent.cli import main
-from memagent.demo import run_demo
+from memagent.demo import run_demo, run_demo_bundle
 
 
 class DemoRunTest(unittest.TestCase):
@@ -55,6 +55,45 @@ class DemoRunTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("[MemAgent demo-run]", stdout.getvalue())
             self.assertTrue((workspace / "transcript.md").exists())
+
+    def test_run_demo_bundle_writes_interview_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "bundle"
+            result = run_demo_bundle(
+                workspace=workspace,
+                memagent_root=Path("/tmp/memagent"),
+                reset=False,
+            )
+            self.assertTrue(result.report_path.exists())
+            self.assertTrue((workspace / "agents_flow" / "transcript.md").exists())
+            self.assertTrue((workspace / "agents_flow" / "trace_eval" / "report.md").exists())
+            self.assertTrue((workspace / "recall_eval" / "report.md").exists())
+            self.assertIn("# MemAgent Interview Demo Bundle", result.report)
+            self.assertIn("## MCP Tool Surface", result.report)
+            self.assertIn("memagent_recall", result.report)
+            self.assertIn("bm25", result.report)
+            self.assertIn("Trace feedback eval", result.report)
+            self.assertEqual(result.mcp_tool_count, 12)
+
+    def test_demo_bundle_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "bundle"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "demo-bundle",
+                        "--workspace",
+                        str(workspace),
+                        "--memagent-root",
+                        "/tmp/memagent",
+                        "--reset",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("[MemAgent demo-bundle]", stdout.getvalue())
+            self.assertIn("mcp tools: 12", stdout.getvalue())
+            self.assertTrue((workspace / "interview_demo.md").exists())
 
 
 if __name__ == "__main__":

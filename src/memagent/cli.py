@@ -14,7 +14,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
-from memagent.demo import run_demo
+from memagent.demo import run_demo, run_demo_bundle
 from memagent.eval import run_recall_eval, run_trace_eval
 from memagent.handoff import (
     HandoffStore,
@@ -225,6 +225,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--reset",
         action="store_true",
         help="Delete the demo workspace before running.",
+    )
+
+    demo_bundle = subparsers.add_parser(
+        "demo-bundle",
+        help="Generate a shareable interview demo bundle from mock data.",
+    )
+    demo_bundle.add_argument(
+        "--workspace",
+        default="local_memory_demo/demo_bundle",
+        help="Demo bundle workspace directory. Default: local_memory_demo/demo_bundle.",
+    )
+    demo_bundle.add_argument(
+        "--memagent-root",
+        help="MemAgent project root. Defaults to the installed package root.",
+    )
+    demo_bundle.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete the bundle workspace before running.",
     )
 
     mcp = subparsers.add_parser(
@@ -473,6 +492,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- memory home: {result.memory_home}")
         print(f"- transcript: {result.transcript_path}")
         print(f"- steps: {len(result.steps)}")
+        return 0
+
+    if args.command == "demo-bundle":
+        result = run_demo_bundle(
+            workspace=Path(args.workspace),
+            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            reset=args.reset,
+        )
+        print("[MemAgent demo-bundle]")
+        print(f"- workspace: {result.workspace}")
+        print(f"- report: {result.report_path}")
+        print(f"- transcript: {result.demo.transcript_path}")
+        print(f"- recall eval: {result.recall_eval.report_path}")
+        print(f"- trace eval: {result.demo.workspace / 'trace_eval' / 'report.md'}")
+        print(f"- mcp tools: {result.mcp_tool_count}")
         return 0
 
     if args.command == "mcp-stdio":

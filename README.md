@@ -22,6 +22,7 @@ python -m memagent.cli handoff show
 python -m memagent.cli handoff draft --from-file ./session_notes.md
 python -m memagent.cli handoff promote --index 1
 python -m memagent.cli demo-run --reset
+python -m memagent.cli demo-bundle --reset
 python -m memagent.cli mcp-stdio
 python -m memagent.cli recall-eval
 python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
@@ -45,6 +46,7 @@ memagent handoff show
 memagent handoff draft --from-file ./session_notes.md
 memagent handoff promote --index 1
 memagent demo-run --reset
+memagent demo-bundle --reset
 memagent mcp-stdio
 memagent recall-eval
 memagent codex "continue checking attribution accuracy"
@@ -289,6 +291,13 @@ trace feedback evaluation report design. `memagent trace eval` writes a Markdown
 report from real labeled recall traces, complementing the mock `recall-eval`
 benchmark.
 
+## v0.21 Design
+
+See [docs/design_v0.21_demo_bundle.md](docs/design_v0.21_demo_bundle.md) for the
+interview demo bundle design. `memagent demo-bundle --reset` generates one
+shareable Markdown entrypoint that links the AGENTS.md flow transcript, mock RAG
+benchmark, real trace-feedback report, and MCP tool surface.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
@@ -310,6 +319,18 @@ The transcript is written to:
 
 ```text
 local_memory_demo/demo_run/transcript.md
+```
+
+Generate a complete interview demo bundle:
+
+```bash
+memagent demo-bundle --reset
+```
+
+The entry report is written to:
+
+```text
+local_memory_demo/demo_bundle/interview_demo.md
 ```
 
 ## Development

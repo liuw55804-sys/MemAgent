@@ -44,6 +44,12 @@ For a full mock demo transcript, run:
 PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli demo-run --reset
 ```
 
+For a shareable interview demo entrypoint, run:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli demo-bundle --reset
+```
+
 For a mock retriever evaluation report, run:
 
 ```bash

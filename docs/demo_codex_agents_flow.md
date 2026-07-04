@@ -43,6 +43,24 @@ local_memory_demo/demo_run/
 `transcript.md` 是完整演示记录，包含 install、doctor、remember、recall、structured JSON recall、trace list、trace label/report、codex dry-run、handoff draft/save/show、handoff promote、promoted recall 的命令和输出。
 v0.16 起 transcript 包含 `recall --json`，用于展示同一套召回结果可以作为结构化 agent contract 使用。v0.17 起 transcript 也包含 `trace list`，用于展示真实召回可留痕、可复盘。v0.18 起 transcript 还包含 `trace label/report`，用于展示真实反馈闭环。v0.20 起还会生成 `trace_eval/report.md`，用于展示真实反馈评估 artifact。
 
+如果是面试或作品集演示，优先运行完整 bundle：
+
+```bash
+PYTHONPATH=src python -m memagent.cli demo-bundle --reset
+```
+
+它会创建：
+
+```text
+local_memory_demo/demo_bundle/
+  interview_demo.md
+  agents_flow/transcript.md
+  agents_flow/trace_eval/report.md
+  recall_eval/report.md
+```
+
+`interview_demo.md` 是推荐打开的第一个文件：它把 AGENTS.md、RAG、MCP、handoff、trace feedback 和 eval 证据串成一个可讲的系统故事。
+
 如果想手动分步演示，可以继续按下面步骤运行。
 
 ```bash

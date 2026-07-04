@@ -15,7 +15,7 @@ from memagent.agents import (
     write_agents_install_plan,
 )
 from memagent.context import detect_context
-from memagent.eval import run_trace_eval
+from memagent.eval import RecallEvalResult, run_recall_eval, run_trace_eval
 from memagent.handoff import (
     HandoffStore,
     draft_handoff_from_text,
@@ -23,6 +23,7 @@ from memagent.handoff import (
     render_promotion_preview,
 )
 from memagent.memory import MemoryStore
+from memagent.mcp import tool_definitions
 from memagent.wrapper import build_augmented_prompt
 
 
@@ -76,6 +77,16 @@ class DemoRunResult:
     transcript_path: Path
     transcript: str
     steps: tuple[DemoStep, ...]
+
+
+@dataclass(frozen=True)
+class DemoBundleResult:
+    workspace: Path
+    report_path: Path
+    report: str
+    demo: DemoRunResult
+    recall_eval: RecallEvalResult
+    mcp_tool_count: int
 
 
 def run_demo(
@@ -381,6 +392,44 @@ def run_demo(
     )
 
 
+def run_demo_bundle(
+    *,
+    workspace: Path,
+    memagent_root: Path | None = None,
+    reset: bool = False,
+) -> DemoBundleResult:
+    root = (memagent_root or default_memagent_root()).expanduser().resolve()
+    workspace = workspace.expanduser().resolve()
+    if reset and workspace.exists():
+        shutil.rmtree(workspace)
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    demo = run_demo(
+        workspace=workspace / "agents_flow",
+        memagent_root=root,
+        reset=True,
+    )
+    recall_eval = run_recall_eval(workspace=workspace / "recall_eval")
+    tools = tool_definitions()
+    report = render_demo_bundle_report(
+        workspace=workspace,
+        memagent_root=root,
+        demo=demo,
+        recall_eval=recall_eval,
+        tools=tools,
+    )
+    report_path = workspace / "interview_demo.md"
+    report_path.write_text(report, encoding="utf-8")
+    return DemoBundleResult(
+        workspace=workspace,
+        report_path=report_path,
+        report=report,
+        demo=demo,
+        recall_eval=recall_eval,
+        mcp_tool_count=len(tools),
+    )
+
+
 def render_demo_transcript(
     *,
     workspace: Path,
@@ -418,6 +467,101 @@ def render_demo_transcript(
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_demo_bundle_report(
+    *,
+    workspace: Path,
+    memagent_root: Path,
+    demo: DemoRunResult,
+    recall_eval: RecallEvalResult,
+    tools: list[dict[str, object]],
+) -> str:
+    trace_eval_report = demo.workspace / "trace_eval" / "report.md"
+    bm25 = _strategy_summary(recall_eval, "bm25")
+    keyword = _strategy_summary(recall_eval, "keyword")
+    regenerate_workspace = _display_path(workspace, root=memagent_root)
+    lines = [
+        "# MemAgent Interview Demo Bundle",
+        "",
+        "This bundle is generated from local mock data. It is safe to share.",
+        "",
+        "## Artifacts",
+        "",
+        "| Artifact | Path | What it proves |",
+        "|---|---|---|",
+        f"| AGENTS.md flow transcript | `{_display_path(demo.transcript_path, root=workspace)}` | Codex natural-language triggers, recall, handoff, prompt patch |",
+        f"| Trace feedback eval | `{_display_path(trace_eval_report, root=workspace)}` | Real-use recall feedback can be labeled and reported |",
+        f"| Recall benchmark | `{_display_path(recall_eval.report_path, root=workspace)}` | BM25 recall can be compared against a keyword baseline |",
+        f"| Demo project AGENTS.md | `{_display_path(demo.project_dir / 'AGENTS.md', root=workspace)}` | The integration can be installed and checked in a project |",
+        "",
+        "## System Story",
+        "",
+        "```mermaid",
+        "flowchart LR",
+        '  A["Codex + AGENTS.md<br>Natural language trigger"] --> B["MemAgent CLI / MCP<br>tool surface"]',
+        '  B --> C["Memory Cards<br>workflow lessons"]',
+        '  C --> D["RAG Recall<br>BM25 + explanations"]',
+        '  D --> E["Context Pack<br>short Codex prompt patch"]',
+        '  E --> F["Trace Feedback<br>useful / not_useful labels"]',
+        '  F --> G["Eval Reports<br>mock + real-use evidence"]',
+        "```",
+        "",
+        "## Capability Evidence",
+        "",
+        "| Capability | Evidence |",
+        "|---|---|",
+        f"| AGENTS.md integration | `demo-run` generated `{len(demo.steps)}` reproducible steps and a ready doctor check |",
+        f"| RAG evaluation | `bm25` {bm25}; `keyword` {keyword} |",
+        f"| MCP protocol surface | `{len(tools)}` tools exposed with annotations |",
+        "| Agent memory lifecycle | remember -> recall -> handoff -> promote -> recall promoted memory |",
+        "| Feedback loop | recall trace -> label useful -> report -> trace eval Markdown artifact |",
+        "",
+        "## MCP Tool Surface",
+        "",
+        "| Tool | Read-only | Idempotent | Purpose |",
+        "|---|---|---|---|",
+    ]
+    for tool in tools:
+        annotations = tool.get("annotations") if isinstance(tool.get("annotations"), dict) else {}
+        lines.append(
+            "| "
+            f"{tool.get('name')} | "
+            f"{_yes_no(bool(annotations.get('readOnlyHint')))} | "
+            f"{_yes_no(bool(annotations.get('idempotentHint')))} | "
+            f"{_md_cell(str(tool.get('description') or ''))} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Five-Minute Demo Script",
+            "",
+            "1. Open the AGENTS.md flow transcript and show the doctor output marked `Status: ready`.",
+            "2. Show the recall step with sources, matched terms, and BM25 strategy.",
+            "3. Show the Codex dry-run prompt patch to prove MemAgent augments Codex instead of replacing it.",
+            "4. Show handoff and promotion to explain memory lifecycle beyond plain RAG.",
+            "5. Show recall-eval and trace-eval reports to explain offline and real-use evaluation.",
+            "",
+            "## Positioning",
+            "",
+            "MemAgent is not another general agent platform. It is a Codex-first workflow memory layer:",
+            "",
+            "- AGENTS.md teaches Codex when to call MemAgent.",
+            "- Memory cards store reusable workflow lessons, not whole chat history.",
+            "- Recall output is short, source-backed, explainable, and pack-budgeted.",
+            "- MCP exposes the same capabilities to other coding-agent clients.",
+            "- Evaluation combines controlled mock retrieval and real trace feedback.",
+            "",
+            "## Regenerate",
+            "",
+            "```bash",
+            f"PYTHONPATH=src python -m memagent.cli demo-bundle --workspace {_quote(regenerate_workspace)} --reset",
+            "```",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _ensure_demo_project(project_dir: Path) -> None:
@@ -458,3 +602,25 @@ def _command_prefix(*, root: Path, memory_home: Path) -> str:
 
 def _quote(value: str | Path) -> str:
     return shlex.quote(str(value))
+
+
+def _strategy_summary(result: RecallEvalResult, strategy: str) -> str:
+    for item in result.strategy_results:
+        if item.strategy == strategy:
+            return f"hit@1={item.hit_at_1:.2f}, mrr={item.mrr:.2f}"
+    return "not run"
+
+
+def _yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def _md_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _display_path(path: Path, *, root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(path)

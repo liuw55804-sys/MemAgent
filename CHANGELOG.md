@@ -21,6 +21,7 @@ Added:
 - `handoff save/show` commands for per-project cross-session catch-up.
 - `handoff draft --from-file` to generate a reviewable handoff draft from session notes before saving.
 - `handoff promote` command to preview or write handoff memory candidates as durable memory cards.
+- `demo-bundle` command to generate a shareable interview demo entrypoint from mock data.
 - MCP tools for saving and showing project handoffs.
 - MCP tool for drafting and optionally saving handoffs from session text.
 - MCP tool for promoting handoff memory candidates.
@@ -45,6 +46,7 @@ Added:
 - v0.18 trace feedback design note for closing the recall evaluation loop.
 - v0.19 trace feedback integration design note for AGENTS.md and MCP surfaces.
 - v0.20 trace feedback eval design note for generating reviewable real-use eval artifacts.
+- v0.21 demo bundle design note for tying AGENTS.md, RAG, MCP, and trace feedback evidence together.
 - Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
 
 Changed:
