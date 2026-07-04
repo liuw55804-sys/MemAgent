@@ -12,6 +12,30 @@ from memagent.cli import main
 
 
 class CliTest(unittest.TestCase):
+    def test_route_json_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "route",
+                        "帮我排查 audit_rule_lib 的 owner 问题，先按你觉得最省时间的方式来。",
+                        "--cwd",
+                        str(project),
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["schema_version"], "memagent.route.v1")
+            self.assertEqual(payload["action"], "recall")
+            self.assertEqual(payload["context"]["repo_name"], "project")
+
     def test_recall_json_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

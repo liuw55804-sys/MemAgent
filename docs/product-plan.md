@@ -205,7 +205,7 @@ memagent codex "继续查机审归因准确率"
   -> memagent 写入、召回或标注本地记忆
 ```
 
-这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 可以把判断逻辑抽成 LLM-assisted router。
+这时 `AGENTS.md` 不是存储 memory 的地方，而是告诉 Codex：“看到这类语义时，可以把 MemAgent 当作后台记忆工具”。v0.26 先用 AGENTS.md prompt policy 校准行为；v0.27 将判断逻辑抽成 `memagent route` / `memagent_route`，用同一份 schema 支持本地 heuristic 和 OpenAI-compatible LLM provider。
 
 ### 8.3 第三阶段：半自动提示
 

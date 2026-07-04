@@ -29,6 +29,7 @@ from memagent.ingest import (
 )
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
+from memagent.router import render_route_decision, route_interaction
 from memagent.wrapper import build_augmented_prompt
 
 
@@ -108,6 +109,41 @@ def build_parser() -> argparse.ArgumentParser:
         "--trace",
         action="store_true",
         help="Save this recall payload under the local recall_traces directory.",
+    )
+
+    route = subparsers.add_parser(
+        "route",
+        help="Classify a natural Codex interaction into a MemAgent action.",
+    )
+    route.add_argument("message", help="Latest user message or task.")
+    route.add_argument(
+        "--cwd",
+        help="Project directory for routing context. Defaults to the current working directory.",
+    )
+    route.add_argument(
+        "--recent-text",
+        default="",
+        help="Optional recent conversation excerpt for memory drafting decisions.",
+    )
+    route.add_argument(
+        "--from-file",
+        help='Read recent conversation text from a file, or "-" for stdin.',
+    )
+    route.add_argument(
+        "--provider",
+        default="heuristic",
+        choices=["heuristic", "openai-compatible"],
+        help="Routing provider. Default: heuristic.",
+    )
+    route.add_argument(
+        "--recent-trace",
+        action="store_true",
+        help="Tell the router a recent recall trace exists for feedback labeling.",
+    )
+    route.add_argument(
+        "--json",
+        action="store_true",
+        help="Print structured route payload instead of text.",
     )
 
     codex = subparsers.add_parser(
@@ -672,6 +708,29 @@ def main(argv: list[str] | None = None) -> int:
             write_agents_install_plan(plan)
         print(render_agents_install_report(plan, write=args.write))
         return 1 if plan.blocked and args.write else 0
+
+    if args.command == "route":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        if args.from_file:
+            source_text = sys.stdin.read() if args.from_file == "-" else Path(args.from_file).expanduser().read_text(encoding="utf-8")
+            recent_text = "\n".join(part for part in (args.recent_text, source_text) if part)
+        else:
+            recent_text = args.recent_text
+        try:
+            decision = route_interaction(
+                args.message,
+                recent_text=recent_text,
+                context=context,
+                provider=args.provider,
+                has_recent_trace=True if args.recent_trace else None,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.json:
+            print(json.dumps(decision.to_payload(context=context), ensure_ascii=False, indent=2))
+        else:
+            print(render_route_decision(decision, context=context))
+        return 0
 
     if args.command == "trace":
         try:

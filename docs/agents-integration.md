@@ -80,6 +80,11 @@ PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m 
 
 The user should not need to know `recall`, `trace`, `eval`, `replay`, or
 `candidate`. Codex should map ordinary task language to MemAgent operations.
+When the intent is unclear, Codex can ask the read-only router first:
+
+```bash
+PYTHONPATH=/Users/bytedance/Desktop/work/personal_agents/memagent/src python -m memagent.cli route "latest user message" --json
+```
 
 ### Task-Start Memory Check
 

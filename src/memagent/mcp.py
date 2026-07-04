@@ -16,6 +16,7 @@ from memagent.handoff import (
     render_promotion_preview,
 )
 from memagent.memory import MemoryStore
+from memagent.router import render_route_decision, route_interaction
 
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
@@ -127,6 +128,8 @@ class McpServer:
             return _tool_text(self._tool_trace_eval(arguments))
         if name == "memagent_trace_replay":
             return _tool_text(self._tool_trace_replay(arguments))
+        if name == "memagent_route":
+            return _tool_text(self._tool_route(arguments))
         if name == "memagent_agents_doctor":
             return _tool_text(self._tool_agents_doctor(arguments))
         raise ValueError(f"Unknown tool: {name}")
@@ -170,6 +173,24 @@ class McpServer:
             exportable=_optional_bool(arguments, "exportable", False),
         )
         return f"Saved memory: {saved.path}"
+
+    def _tool_route(self, arguments: dict[str, Any]) -> str:
+        context = detect_context(_optional_path(arguments, "cwd"))
+        decision = route_interaction(
+            _required_str(arguments, "message"),
+            recent_text=_optional_str(arguments, "recent_text") or "",
+            context=context,
+            provider=_optional_str(arguments, "provider") or "heuristic",
+            has_recent_trace=_optional_bool(arguments, "recent_trace", False)
+            if "recent_trace" in arguments
+            else None,
+        )
+        response_format = _optional_str(arguments, "format") or "text"
+        if response_format not in {"text", "json"}:
+            raise ValueError("format must be text or json")
+        if response_format == "json":
+            return json.dumps(decision.to_payload(context=context), ensure_ascii=False, indent=2)
+        return render_route_decision(decision, context=context)
 
     def _tool_agents_doctor(self, arguments: dict[str, Any]) -> str:
         context = detect_context(_optional_path(arguments, "cwd"))
@@ -405,6 +426,39 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "properties": {
                     "cwd": {"type": "string", "description": "Optional project directory."},
                 },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "memagent_route",
+            "title": "Route MemAgent Interaction",
+            "description": "Classify ordinary Codex user language into a suggested MemAgent action.",
+            "annotations": _tool_annotations(read_only=True, idempotent=True),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Latest user message or task."},
+                    "recent_text": {
+                        "type": "string",
+                        "description": "Optional recent conversation excerpt for memory drafting decisions.",
+                    },
+                    "cwd": {"type": "string", "description": "Optional project directory."},
+                    "provider": {
+                        "type": "string",
+                        "description": "Routing provider.",
+                        "enum": ["heuristic", "openai-compatible"],
+                    },
+                    "recent_trace": {
+                        "type": "boolean",
+                        "description": "Whether a recent recall trace exists for feedback labeling.",
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Return format: text or json.",
+                        "enum": ["text", "json"],
+                    },
+                },
+                "required": ["message"],
                 "additionalProperties": False,
             },
         },

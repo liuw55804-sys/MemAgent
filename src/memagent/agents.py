@@ -63,6 +63,13 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         Use it as a small background memory helper. The user does not need to
         know words like recall, trace, eval, replay, candidate, or handoff.
 
+        When the intent is unclear, ask MemAgent's router for a read-only
+        recommendation before choosing a memory action:
+
+        ```bash
+        {command_prefix} route "<latest user message>" --json
+        ```
+
         ### Task-Start Memory Check
 
         Before a non-trivial coding, debugging, data, or tool-heavy task, decide

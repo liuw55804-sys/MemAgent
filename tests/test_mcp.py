@@ -37,6 +37,7 @@ class McpServerTest(unittest.TestCase):
                     "memagent_recall",
                     "memagent_remember",
                     "memagent_agents_doctor",
+                    "memagent_route",
                     "memagent_handoff_save",
                     "memagent_handoff_show",
                     "memagent_handoff_draft",
@@ -67,6 +68,7 @@ class McpServerTest(unittest.TestCase):
         read_only_tools = {
             "memagent_recall",
             "memagent_agents_doctor",
+            "memagent_route",
             "memagent_handoff_show",
             "memagent_trace_list",
             "memagent_trace_show",
@@ -79,6 +81,7 @@ class McpServerTest(unittest.TestCase):
             "memagent_trace_list",
             "memagent_trace_show",
             "memagent_trace_report",
+            "memagent_route",
             "memagent_trace_eval",
             "memagent_trace_replay",
         }
@@ -166,6 +169,36 @@ class McpServerTest(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "memagent.recall.v1")
             self.assertEqual(payload["matches"][0]["title"], "Attribution accuracy pitfall")
             self.assertIn("text", payload)
+
+    def test_route_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+            server = McpServer.from_home_arg(str(Path(tmp) / "home"), "/tmp/memagent")
+
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memagent_route",
+                        "arguments": {
+                            "message": "刚刚那条提醒有用。",
+                            "recent_trace": True,
+                            "cwd": str(project),
+                            "format": "json",
+                        },
+                    },
+                }
+            )
+
+            self.assertFalse(response["result"]["isError"])
+            payload = json.loads(response["result"]["content"][0]["text"])
+            self.assertEqual(payload["schema_version"], "memagent.route.v1")
+            self.assertEqual(payload["action"], "label_feedback")
+            self.assertEqual(payload["feedback_rating"], "useful")
 
     def test_handoff_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

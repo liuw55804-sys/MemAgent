@@ -26,6 +26,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn(MEMAGENT_BLOCK_START, snippet)
         self.assertIn(MEMAGENT_BLOCK_END, snippet)
         self.assertIn("The user does not need to", snippet)
+        self.assertIn(f"PYTHONPATH={root / 'src'} python -m memagent.cli route", snippet)
         self.assertIn("Task-Start Memory Check", snippet)
         self.assertIn("继续排查 audit_rule_lib", snippet)
         self.assertIn("先按你觉得最省时间的方式来", snippet)

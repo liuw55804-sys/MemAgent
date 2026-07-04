@@ -337,6 +337,13 @@ plan. v0.26 shifts the product from command-oriented triggers toward normal
 conversation: Codex decides when to check memory, draft a memory preview, label
 feedback, or save a handoff while the user talks in ordinary task language.
 
+## v0.27 Design
+
+See [docs/design_v0.27_llm_router.md](docs/design_v0.27_llm_router.md) for the
+LLM-assisted router contract. `memagent route` classifies ordinary Codex
+messages into suggested memory actions with a deterministic baseline and an
+optional OpenAI-compatible provider.
+
 ## Codex Natural Language Triggers
 
 See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
