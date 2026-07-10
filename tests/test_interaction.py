@@ -62,10 +62,41 @@ class InteractionProcessTest(unittest.TestCase):
 
             self.assertEqual(result.route.action, "draft_memory")
             self.assertTrue(result.executed)
-            self.assertEqual(result.writes, ("process_trace",))
+            self.assertEqual(result.writes, ("pending_memory_draft", "process_trace"))
             self.assertEqual(result.artifacts["requires_confirmation"], True)
+            self.assertTrue(store.has_pending_memory_draft(context=context))
             self.assertIn("process_trace_path", result.artifacts)
             self.assertEqual(store.count_memory_cards(), 0)
+
+    def test_process_confirmation_saves_pending_memory_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+            draft = process_interaction(
+                message="这个入口下次别忘了",
+                recent_text="Before owner diagnosis, check the live RDS schema first.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+            self.assertEqual(draft.route.action, "draft_memory")
+            self.assertTrue(store.has_pending_memory_draft(context=context))
+
+            saved = process_interaction(
+                message="确认保存",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+
+            self.assertEqual(saved.route.action, "save_memory")
+            self.assertTrue(saved.executed)
+            self.assertIn("memory", saved.writes)
+            self.assertFalse(store.has_pending_memory_draft(context=context))
+            self.assertEqual(store.count_memory_cards(), 1)
 
     def test_process_feedback_labels_latest_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

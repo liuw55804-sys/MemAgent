@@ -78,17 +78,15 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
             self.assertTrue(draft.artifacts["requires_confirmation"])
             self.assertEqual(store.count_memory_cards(), 1)
 
-            # This is the command the user-level Skill runs only after "确认保存".
-            store.remember(
-                text="Before audit_rule_lib owner diagnosis, check the live RDS schema, then DAL and call path.",
-                topic="audit_rule_lib owner diagnosis",
-                domain="coding",
-                kind="workflow",
-                repo=context.repo_name,
-                module=None,
-                triggers=["audit_rule_lib", "owner"],
-                exportable=False,
+            confirmed = process_interaction(
+                message="确认保存",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
             )
+            self.assertEqual(confirmed.route.action, "save_memory")
+            self.assertIn("memory", confirmed.writes)
 
             activity = build_activity_report(
                 store=store,
@@ -97,6 +95,7 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
             )
             self.assertEqual(activity.action_counts["recall"], 1)
             self.assertEqual(activity.action_counts["draft_memory"], 1)
+            self.assertEqual(activity.action_counts["save_memory"], 1)
             self.assertEqual(activity.feedback_counts["useful"], 1)
             self.assertEqual(activity.memory_count, 2)
             self.assertEqual(_git(project, "status", "--porcelain"), "")

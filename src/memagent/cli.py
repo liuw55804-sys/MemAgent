@@ -155,6 +155,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tell the router a recent recall trace exists for feedback labeling.",
     )
     route.add_argument(
+        "--pending-draft",
+        action="store_true",
+        help="Tell the router a pending memory preview exists for confirmation saving.",
+    )
+    route.add_argument(
         "--json",
         action="store_true",
         help="Print structured route payload instead of text.",
@@ -1070,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:
                 llm_profile=args.llm_profile,
                 llm_config_path=Path(args.llm_config) if args.llm_config else None,
                 has_recent_trace=True if args.recent_trace else None,
+                has_pending_draft=True if args.pending_draft else None,
             )
         except ValueError as exc:
             parser.error(str(exc))

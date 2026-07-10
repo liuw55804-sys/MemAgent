@@ -60,14 +60,17 @@ use one `process` entrypoint for a memory-relevant task:
 memagent process "<latest user message>"
 ```
 
-The action can be `recall`, `draft_memory`, `label_feedback`, `handoff_show`,
-or `handoff_save`. Durable memory still requires an explicit preview and user
-confirmation. A no-op does not create a normal trace.
+The action can be `recall`, `draft_memory`, `save_memory`, `label_feedback`,
+`handoff_show`, or `handoff_save`. `draft_memory` stores a compact pending
+preview only; `save_memory` occurs after an explicit natural-language
+confirmation and writes that reviewed preview as a durable memory. A no-op does
+not create a normal trace.
 
 Examples of ordinary user language:
 
 - "之前这个怎么查？"
 - "记住这次踩坑。"
+- "确认保存。"
 - "刚刚那条有用。"
 - "按上次的思路继续。"
 

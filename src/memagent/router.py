@@ -14,6 +14,7 @@ ROUTE_SCHEMA_VERSION = "memagent.route.v1"
 ROUTE_ACTIONS = {
     "recall",
     "draft_memory",
+    "save_memory",
     "label_feedback",
     "handoff_show",
     "handoff_save",
@@ -34,6 +35,7 @@ class RouteDecision:
     query: str | None = None
     feedback_rating: str | None = None
     requires_confirmation: bool = False
+    requires_pending_draft: bool = False
     requires_recent_trace: bool = False
     developer_mode: bool = False
     suggested_next: str | None = None
@@ -51,6 +53,7 @@ class RouteDecision:
             "query": self.query,
             "feedback_rating": self.feedback_rating,
             "requires_confirmation": self.requires_confirmation,
+            "requires_pending_draft": self.requires_pending_draft,
             "requires_recent_trace": self.requires_recent_trace,
             "developer_mode": self.developer_mode,
             "suggested_next": self.suggested_next,
@@ -75,6 +78,7 @@ def route_interaction(
     llm_profile: str | None = None,
     llm_config_path: Path | None = None,
     has_recent_trace: bool | None = None,
+    has_pending_draft: bool | None = None,
 ) -> RouteDecision:
     message = _clean(user_message)
     if not message:
@@ -85,6 +89,7 @@ def route_interaction(
             message,
             recent_text=recent_text,
             has_recent_trace=has_recent_trace,
+            has_pending_draft=has_pending_draft,
         )
     if provider == "openai-compatible":
         return route_with_openai_compatible(
@@ -94,6 +99,7 @@ def route_interaction(
             llm_profile=llm_profile,
             llm_config_path=llm_config_path,
             has_recent_trace=has_recent_trace,
+            has_pending_draft=has_pending_draft,
         )
     raise ValueError("provider must be heuristic or openai-compatible")
 
@@ -103,6 +109,7 @@ def route_with_heuristics(
     *,
     recent_text: str = "",
     has_recent_trace: bool | None = None,
+    has_pending_draft: bool | None = None,
 ) -> RouteDecision:
     text = _clean(user_message)
     lower = text.lower()
@@ -185,6 +192,31 @@ def route_with_heuristics(
                 provider="heuristic",
                 requires_confirmation=False,
                 suggested_next="Summarize done/next/open questions and run handoff save.",
+            )
+        )
+
+    confirmation_signals = _matched(
+        lower,
+        (
+            "确认保存",
+            "确认下保存",
+            "就按这个保存",
+            "按这个保存",
+            "确认写入",
+            "保存这条",
+        ),
+    )
+    if confirmation_signals and has_pending_draft is True:
+        candidates.append(
+            RouteDecision(
+                action="save_memory",
+                confidence=_confidence(confirmation_signals, base=0.9),
+                reason="The user confirmed the pending memory preview.",
+                signals=confirmation_signals,
+                user_message=text,
+                provider="heuristic",
+                requires_pending_draft=True,
+                suggested_next="Save the pending memory draft for the current project.",
             )
         )
 
@@ -275,6 +307,7 @@ def route_with_openai_compatible(
     llm_profile: str | None,
     llm_config_path: Path | None,
     has_recent_trace: bool | None,
+    has_pending_draft: bool | None,
 ) -> RouteDecision:
     config = (
         OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
@@ -296,6 +329,7 @@ def route_with_openai_compatible(
         "recent_text": recent_text[-4000:],
         "context": context_payload,
         "has_recent_trace": has_recent_trace,
+        "has_pending_memory_draft": has_pending_draft,
         "allowed_actions": sorted(ROUTE_ACTIONS),
         "allowed_feedback_ratings": sorted(FEEDBACK_RATINGS),
     }
@@ -333,6 +367,8 @@ def render_route_decision(decision: RouteDecision, *, context: ProjectContext | 
         lines.append(f"- feedback_rating: {payload['feedback_rating']}")
     if payload.get("requires_confirmation"):
         lines.append("- requires_confirmation: yes")
+    if payload.get("requires_pending_draft"):
+        lines.append("- requires_pending_draft: yes")
     if payload.get("requires_recent_trace"):
         lines.append("- requires_recent_trace: yes")
     if payload.get("developer_mode"):
@@ -364,6 +400,7 @@ def _decision_from_payload(payload: dict[str, Any], *, user_message: str, provid
         query=str(payload.get("query")) if payload.get("query") else None,
         feedback_rating=feedback_rating,
         requires_confirmation=bool(payload.get("requires_confirmation")),
+        requires_pending_draft=bool(payload.get("requires_pending_draft")),
         requires_recent_trace=bool(payload.get("requires_recent_trace")),
         developer_mode=bool(payload.get("developer_mode")),
         suggested_next=str(payload.get("suggested_next")) if payload.get("suggested_next") else None,
@@ -439,6 +476,7 @@ Return only a JSON object. Do not explain outside JSON.
 Allowed actions:
 - recall: task start may benefit from prior coding workflow memory.
 - draft_memory: current interaction contains a reusable lesson; preview before saving.
+- save_memory: user confirmed the pending memory preview for the current project.
 - label_feedback: user gave feedback on a recalled memory.
 - handoff_show: user wants to resume previous project state.
 - handoff_save: user wants to stop or continue in another session.
@@ -454,6 +492,7 @@ Required JSON shape:
   "query": "short recall query or null",
   "feedback_rating": "useful | not-useful | neutral | null",
   "requires_confirmation": false,
+  "requires_pending_draft": false,
   "requires_recent_trace": false,
   "developer_mode": false,
   "suggested_next": "short next step",
@@ -463,6 +502,7 @@ Required JSON shape:
 Rules:
 - Never choose draft_memory for ordinary summaries unless there is a reusable workflow lesson.
 - draft_memory always requires confirmation before durable saving.
+- Only choose save_memory when has_pending_memory_draft is true and the user explicitly confirms saving.
 - label_feedback requires a recent recall trace.
 - trace eval/replay are developer_eval, not normal product work.
 - Memories are hints; live code, schema, docs, and command output remain source of truth.

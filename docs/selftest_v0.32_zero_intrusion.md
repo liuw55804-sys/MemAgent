@@ -28,7 +28,8 @@ Use an actual task, then naturally say one of the following when appropriate:
 2. After finding a real reusable lesson: `这次踩坑记住，先给我看要保存的内容。`
 
    Expected: Codex shows a short preview. Reply `确认保存` only if the preview
-   is correct. The durable memory is then written locally.
+   is correct. The reviewed preview becomes a durable local memory; Codex does
+   not need to reconstruct its fields from the chat.
 
 3. Before leaving the task: `先到这，下次从这里接。`
 

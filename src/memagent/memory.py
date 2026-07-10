@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import Counter
+import hashlib
 import json
 import math
 import os
@@ -70,6 +71,13 @@ class SavedProcessTrace:
 
 
 @dataclass(frozen=True)
+class SavedPendingMemoryDraft:
+    path: Path
+    identifier: str
+    payload: dict[str, object]
+
+
+@dataclass(frozen=True)
 class RecallTraceSummary:
     path: Path
     identifier: str
@@ -109,6 +117,7 @@ class MemoryStore:
         self.memories_dir = self.home / "memories"
         self.traces_dir = self.home / "recall_traces"
         self.process_traces_dir = self.home / "process_traces"
+        self.pending_drafts_dir = self.home / "pending_memory_drafts"
         self.memories_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
@@ -304,6 +313,79 @@ class MemoryStore:
         path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return SavedProcessTrace(path=path, identifier=identifier, payload=trace_payload)
 
+    def save_pending_memory_draft(
+        self,
+        *,
+        draft: dict[str, object],
+        context: ProjectContext,
+    ) -> SavedPendingMemoryDraft:
+        suggested = draft.get("suggested_remember") if isinstance(draft.get("suggested_remember"), dict) else draft
+        text = str(suggested.get("text") or suggested.get("memory") or "").strip()
+        topic = str(suggested.get("topic") or "").strip()
+        kind = str(suggested.get("kind") or DEFAULT_KIND).strip()
+        domain = str(suggested.get("domain") or DEFAULT_DOMAIN).strip()
+        triggers_value = suggested.get("triggers")
+        triggers = [str(item).strip() for item in triggers_value] if isinstance(triggers_value, list) else []
+        triggers = [item for item in triggers if item]
+        if not text or not topic:
+            raise ValueError("pending memory draft requires topic and text")
+
+        now = datetime.now(timezone.utc)
+        identifier = f"pending_{_pending_draft_key(context)}"
+        path = self.pending_drafts_dir / f"{identifier}.json"
+        payload: dict[str, object] = {
+            "schema_version": "memagent.pending_memory_draft.v1",
+            "pending": {
+                "id": identifier,
+                "created_at": now.isoformat(),
+                "path": str(path),
+            },
+            "context": _context_payload(context),
+            "draft": {
+                "domain": normalize_domain(domain),
+                "kind": normalize_kind(kind),
+                "topic": topic,
+                "triggers": triggers or ["memory"],
+                "text": text,
+            },
+        }
+        self.pending_drafts_dir.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return SavedPendingMemoryDraft(path=path, identifier=identifier, payload=payload)
+
+    def has_pending_memory_draft(self, *, context: ProjectContext) -> bool:
+        return self._pending_memory_draft_path(context).exists()
+
+    def remember_pending_memory_draft(self, *, context: ProjectContext) -> SavedMemory:
+        path = self._pending_memory_draft_path(context)
+        if not path.exists():
+            raise ValueError("no pending memory draft found for this project")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid pending memory draft JSON: {path}") from exc
+        draft = payload.get("draft") if isinstance(payload, dict) and isinstance(payload.get("draft"), dict) else {}
+        text = str(draft.get("text") or "").strip()
+        topic = str(draft.get("topic") or "").strip()
+        kind = str(draft.get("kind") or DEFAULT_KIND)
+        domain = str(draft.get("domain") or DEFAULT_DOMAIN)
+        triggers_value = draft.get("triggers")
+        triggers = [str(item).strip() for item in triggers_value] if isinstance(triggers_value, list) else []
+        if not text or not topic:
+            raise ValueError("pending memory draft is missing topic or text")
+        saved = self.remember(
+            text=text,
+            topic=topic,
+            domain=domain,
+            kind=kind,
+            repo=context.repo_name,
+            module=None,
+            triggers=[item for item in triggers if item],
+            exportable=False,
+        )
+        path.unlink()
+        return saved
+
     def load_process_trace(self, identifier: str | None = None) -> dict[str, object]:
         path = self._resolve_process_trace_path(identifier)
         try:
@@ -461,6 +543,10 @@ class MemoryStore:
             return path
         raise ValueError(f"process trace not found: {identifier}")
 
+    def _pending_memory_draft_path(self, context: ProjectContext) -> Path:
+        identifier = f"pending_{_pending_draft_key(context)}"
+        return self.pending_drafts_dir / f"{identifier}.json"
+
 
 def _render_memory_card(
     *,
@@ -518,6 +604,12 @@ def _context_payload(context: ProjectContext) -> dict[str, object]:
         "recent_files": [str(path) for path in context.recent_files],
         "agents_files": [str(path) for path in context.agents_files],
     }
+
+
+def _pending_draft_key(context: ProjectContext) -> str:
+    root = context.git_root or context.cwd
+    digest = hashlib.sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:12]
+    return digest
 
 
 def _match_payload(match: MemoryMatch) -> dict[str, object]:

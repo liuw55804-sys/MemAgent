@@ -43,6 +43,13 @@ class RouterTest(unittest.TestCase):
         self.assertEqual(decision.action, "label_feedback")
         self.assertEqual(decision.feedback_rating, "useful")
 
+    def test_routes_confirmation_only_with_pending_draft(self) -> None:
+        decision = route_interaction("确认保存", has_pending_draft=True)
+
+        self.assertEqual(decision.action, "save_memory")
+        self.assertTrue(decision.requires_pending_draft)
+        self.assertEqual(route_interaction("确认保存", has_pending_draft=False).action, "none")
+
     def test_routes_handoff_save(self) -> None:
         decision = route_interaction("先到这，下次继续时帮我接上。")
 

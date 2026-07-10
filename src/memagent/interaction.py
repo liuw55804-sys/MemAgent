@@ -76,6 +76,7 @@ def process_interaction(
         llm_profile=llm_profile,
         llm_config_path=llm_config_path,
         has_recent_trace=_has_recent_trace(store),
+        has_pending_draft=store.has_pending_memory_draft(context=context),
     )
 
     if route.action == "recall":
@@ -104,9 +105,25 @@ def process_interaction(
                 route=route,
                 context=context,
                 recent_text=recent_text,
+                store=store,
+                allow_writes=allow_writes,
                 provider=provider,
                 llm_profile=llm_profile,
                 llm_config_path=llm_config_path,
+            ),
+            context=context,
+            store=store,
+            allow_writes=allow_writes,
+            recent_text=recent_text,
+            trace_none=trace_none,
+        )
+    if route.action == "save_memory":
+        return _with_process_trace(
+            _process_save_memory(
+                route=route,
+                context=context,
+                store=store,
+                allow_writes=allow_writes,
             ),
             context=context,
             store=store,
@@ -280,6 +297,8 @@ def _process_draft_memory(
     route: RouteDecision,
     context: ProjectContext,
     recent_text: str,
+    store: MemoryStore,
+    allow_writes: bool,
     provider: str,
     llm_profile: str | None,
     llm_config_path: Path | None,
@@ -294,17 +313,70 @@ def _process_draft_memory(
     )
     payload = draft.to_payload(context=context)
     warnings = tuple(payload.get("warnings") or ())
+    artifacts: dict[str, Any] = {
+        "quality_label": draft.quality_label,
+        "requires_confirmation": draft.requires_confirmation,
+    }
+    writes: tuple[str, ...] = ()
+    if allow_writes:
+        pending = store.save_pending_memory_draft(draft=payload, context=context)
+        artifacts["pending_draft_id"] = pending.identifier
+        artifacts["pending_draft_path"] = str(pending.path)
+        writes = ("pending_memory_draft",)
+    else:
+        warnings = (*warnings, "writes disabled; memory draft was not saved for confirmation")
     return ProcessResult(
         route=route,
         executed=True,
         result_text=render_memory_draft(draft, context=context),
-        artifacts={
-            "quality_label": draft.quality_label,
-            "requires_confirmation": draft.requires_confirmation,
-        },
-        writes=(),
+        artifacts=artifacts,
+        writes=writes,
         warnings=warnings,
         payload=payload,
+    )
+
+
+def _process_save_memory(
+    *,
+    route: RouteDecision,
+    context: ProjectContext,
+    store: MemoryStore,
+    allow_writes: bool,
+) -> ProcessResult:
+    if not allow_writes:
+        return ProcessResult(
+            route=route,
+            executed=False,
+            result_text="[MemAgent memory save]\n- Confirmation received, but writes are disabled.",
+            artifacts={},
+            writes=(),
+            warnings=("writes disabled; pending memory draft was not saved",),
+        )
+    try:
+        saved = store.remember_pending_memory_draft(context=context)
+    except ValueError as exc:
+        return ProcessResult(
+            route=route,
+            executed=False,
+            result_text=f"[MemAgent memory save]\n- Could not save the pending draft: {exc}",
+            artifacts={},
+            writes=(),
+            warnings=(str(exc),),
+        )
+    return ProcessResult(
+        route=route,
+        executed=True,
+        result_text="\n".join(
+            [
+                "[MemAgent memory saved]",
+                f"- id: {saved.identifier}",
+                f"- path: {saved.path}",
+                "- source: confirmed pending memory preview",
+            ]
+        ),
+        artifacts={"memory_id": saved.identifier, "memory_path": str(saved.path)},
+        writes=("memory", "pending_memory_draft_cleared"),
+        warnings=(),
     )
 
 

@@ -46,17 +46,13 @@ the lesson from the current conversation as `--recent-text`; do not pass a full
 transcript. For a handoff save, use `--recent-text` for a compact summary of
 done work, next step, and open question.
 
-When the user confirms a previously shown memory preview, save exactly that
-reviewed content with `remember`. Preserve its `topic`, `kind`, and triggers;
-do not silently rewrite it or add unrelated context:
+The preview is kept as a small pending draft under `~/.memagent/`, scoped to
+the current Git project. When the user confirms a previously shown preview,
+run `process` again. It saves exactly that reviewed content and clears the
+pending draft; do not silently rewrite it or add unrelated context:
 
 ```bash
-__MEMAGENT_COMMAND__ remember \
-  --domain coding \
-  --kind "<preview kind>" \
-  --topic "<preview topic>" \
-  --trigger "<preview trigger>" \
-  "<approved memory text>"
+__MEMAGENT_COMMAND__ process "确认保存"
 ```
 
 ## Natural Requests

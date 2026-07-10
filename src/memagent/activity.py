@@ -289,6 +289,8 @@ def _event_detail(action: str, artifacts: dict[str, Any]) -> str:
         return f"{matches} matching memories" if matches is not None else "memory recall"
     if action == "draft_memory":
         return _text(artifacts.get("topic")) or "memory preview drafted"
+    if action == "save_memory":
+        return "confirmed memory preview saved"
     if action == "label_feedback":
         return _text(artifacts.get("rating")) or "recall feedback labeled"
     if action.startswith("handoff"):

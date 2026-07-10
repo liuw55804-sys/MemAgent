@@ -100,7 +100,7 @@ class CliTest(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["schema_version"], "memagent.process.v1")
             self.assertEqual(payload["route"]["action"], "draft_memory")
-            self.assertEqual(payload["writes"], ["process_trace"])
+            self.assertEqual(payload["writes"], ["pending_memory_draft", "process_trace"])
             self.assertIn("process_trace_path", payload["artifacts"])
             self.assertEqual(payload["context"]["repo_name"], "project")
 
