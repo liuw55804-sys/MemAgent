@@ -352,6 +352,7 @@ def _process_save_memory(
             writes=(),
             warnings=("writes disabled; pending memory draft was not saved",),
         )
+    pending_draft_id = store.pending_memory_draft_identifier(context=context)
     try:
         saved = store.remember_pending_memory_draft(context=context)
     except ValueError as exc:
@@ -374,7 +375,11 @@ def _process_save_memory(
                 "- source: confirmed pending memory preview",
             ]
         ),
-        artifacts={"memory_id": saved.identifier, "memory_path": str(saved.path)},
+        artifacts={
+            "memory_id": saved.identifier,
+            "memory_path": str(saved.path),
+            "pending_draft_id": pending_draft_id,
+        },
         writes=("memory", "pending_memory_draft_cleared"),
         warnings=(),
     )

@@ -11,10 +11,28 @@ from memagent.activity import build_activity_report, render_activity_report
 from memagent.cli import main
 from memagent.context import ProjectContext
 from memagent.handoff import HandoffStore
+from memagent.interaction import process_interaction
 from memagent.memory import MemoryStore
 
 
 class ActivityTest(unittest.TestCase):
+    def test_empty_activity_report_is_quiet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            context = _context(root / "project")
+            store = MemoryStore(root / "home")
+
+            report = build_activity_report(
+                store=store,
+                handoff_store=HandoffStore(store.home),
+                context=context,
+            )
+
+            rendered = render_activity_report(report)
+            self.assertIn("No local MemAgent activity", rendered)
+            self.assertNotIn("Draft lifecycle", rendered)
+            self.assertNotIn("Memory reuse", rendered)
+
     def test_project_activity_uses_local_records_without_project_writes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -125,6 +143,36 @@ class ActivityTest(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["schema_version"], "memagent.activity.v1")
             self.assertEqual(payload["summary"]["actions"], {"draft_memory": 1})
+
+    def test_activity_distinguishes_pending_and_unconfirmed_drafts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            context = _context(root / "project")
+            store = MemoryStore(root / "home")
+            handoffs = HandoffStore(store.home)
+            first = process_interaction(
+                message="记住这次踩坑，先给预览。",
+                recent_text="Before debugging owner assignment, inspect the live schema.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+            second = process_interaction(
+                message="记住这个入口，先给预览。",
+                recent_text="For audit errors, start from the live API entrypoint.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+
+            report = build_activity_report(store=store, handoff_store=handoffs, context=context)
+
+            self.assertNotEqual(first.artifacts["pending_draft_id"], second.artifacts["pending_draft_id"])
+            self.assertEqual(report.lifecycle.draft_total, 2)
+            self.assertEqual(report.lifecycle.draft_confirmed, 0)
+            self.assertEqual(len(report.lifecycle.draft_pending), 1)
+            self.assertEqual(report.lifecycle.draft_unconfirmed, 1)
+            self.assertIn("Pending draft", render_activity_report(report))
 
 
 def _context(project: Path) -> ProjectContext:

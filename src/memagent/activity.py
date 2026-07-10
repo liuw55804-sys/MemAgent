@@ -9,6 +9,7 @@ from typing import Any
 
 from memagent.context import ProjectContext
 from memagent.handoff import HandoffStore, project_handoff_key
+from memagent.lifecycle import LifecycleSummary, build_lifecycle_summary
 from memagent.memory import MemoryStore
 
 
@@ -40,6 +41,7 @@ class ActivityReport:
     feedback_counts: dict[str, int]
     memory_count: int
     handoff_count: int
+    lifecycle: LifecycleSummary
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -58,6 +60,7 @@ class ActivityReport:
                 "handoffs_saved": self.handoff_count,
             },
             "events": [event.to_payload() for event in self.events],
+            "lifecycle": self.lifecycle.to_payload(),
         }
 
 
@@ -150,6 +153,7 @@ def build_activity_report(
         )
 
     events.sort(key=lambda event: event.created_at, reverse=True)
+    lifecycle = build_lifecycle_summary(store=store, context=context, since=since)
     return ActivityReport(
         context=context,
         window_label=_window_label(since),
@@ -159,10 +163,20 @@ def build_activity_report(
         feedback_counts=dict(sorted(feedback_counts.items())),
         memory_count=memory_count,
         handoff_count=handoff_count,
+        lifecycle=lifecycle,
     )
 
 
 def render_activity_report(report: ActivityReport) -> str:
+    if not report.events and not _has_lifecycle_data(report.lifecycle):
+        return "\n".join(
+            [
+                "[MemAgent activity]",
+                f"- Project: {report.context.repo_name or 'unknown'}",
+                f"- Window: {report.window_label}",
+                "- No local MemAgent activity found in this window.",
+            ]
+        )
     lines = [
         "[MemAgent activity]",
         f"- Project: {report.context.repo_name or 'unknown'}",
@@ -173,10 +187,33 @@ def render_activity_report(report: ActivityReport) -> str:
         f"- Recall feedback: {_render_counts(report.feedback_counts)}",
         f"- Memory cards saved: {report.memory_count}",
         f"- Handoffs saved: {report.handoff_count}",
+        (
+            "- Draft lifecycle: "
+            f"total={report.lifecycle.draft_total}, "
+            f"pending={len(report.lifecycle.draft_pending)}, "
+            f"confirmed={report.lifecycle.draft_confirmed}, "
+            f"unconfirmed={report.lifecycle.draft_unconfirmed}"
+        ),
+        (
+            "- Memory reuse: "
+            f"{report.lifecycle.memory_recalled_again}/{report.lifecycle.memory_total} cards recalled again; "
+            f"later recalls={report.lifecycle.later_recall_count}"
+        ),
     ]
     if not report.events:
         lines.append("- No local MemAgent activity found in this window.")
         return "\n".join(lines)
+    if report.lifecycle.draft_legacy_unlinked:
+        lines.append(
+            "- Legacy draft links: "
+            f"{report.lifecycle.draft_legacy_unlinked} older drafts cannot be matched to confirmation events."
+        )
+    if report.lifecycle.draft_pending or report.lifecycle.reused_memories:
+        lines.extend(["", "## Lifecycle", ""])
+        for draft in report.lifecycle.draft_pending:
+            lines.append(f"- Pending draft: {draft.topic} | waiting {_render_age(draft.age_seconds)}")
+        for memory in report.lifecycle.reused_memories:
+            lines.append(f"- Recalled again: {memory.topic} | {memory.later_recall_count} later recalls")
     lines.extend(["", "## Recent activity", ""])
     for event in report.events:
         local = event.created_at.astimezone().strftime("%Y-%m-%d %H:%M")
@@ -300,6 +337,25 @@ def _event_detail(action: str, artifacts: dict[str, Any]) -> str:
 
 def _render_counts(counts: dict[str, int]) -> str:
     return ", ".join(f"{key}={value}" for key, value in counts.items()) if counts else "none"
+
+
+def _render_age(seconds: int) -> str:
+    if seconds < 60:
+        return "under 1 minute"
+    if seconds < 3600:
+        return f"{seconds // 60} minutes"
+    if seconds < 86400:
+        return f"{seconds // 3600} hours"
+    return f"{seconds // 86400} days"
+
+
+def _has_lifecycle_data(lifecycle: LifecycleSummary) -> bool:
+    return bool(
+        lifecycle.recall_total
+        or lifecycle.draft_total
+        or lifecycle.draft_pending
+        or lifecycle.memory_total
+    )
 
 
 def _window_label(since: date | None) -> str:

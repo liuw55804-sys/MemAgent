@@ -331,8 +331,8 @@ class MemoryStore:
             raise ValueError("pending memory draft requires topic and text")
 
         now = datetime.now(timezone.utc)
-        identifier = f"pending_{_pending_draft_key(context)}"
-        path = self.pending_drafts_dir / f"{identifier}.json"
+        identifier = f"pending_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+        path = self._pending_memory_draft_path(context)
         payload: dict[str, object] = {
             "schema_version": "memagent.pending_memory_draft.v1",
             "pending": {
@@ -355,6 +355,18 @@ class MemoryStore:
 
     def has_pending_memory_draft(self, *, context: ProjectContext) -> bool:
         return self._pending_memory_draft_path(context).exists()
+
+    def pending_memory_draft_identifier(self, *, context: ProjectContext) -> str | None:
+        path = self._pending_memory_draft_path(context)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+        pending = payload.get("pending") if isinstance(payload, dict) and isinstance(payload.get("pending"), dict) else {}
+        identifier = pending.get("id")
+        return str(identifier) if identifier else None
 
     def remember_pending_memory_draft(self, *, context: ProjectContext) -> SavedMemory:
         path = self._pending_memory_draft_path(context)

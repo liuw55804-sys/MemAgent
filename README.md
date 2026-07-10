@@ -114,6 +114,9 @@ See [docs/plan_v0.32.md](docs/plan_v0.32.md) for the product boundary and
 verification flow.
 Use [docs/selftest_v0.32_zero_intrusion.md](docs/selftest_v0.32_zero_intrusion.md)
 for the short product self-test in a real service repository.
+See [docs/plan_v0.33.md](docs/plan_v0.33.md) for lifecycle observability and
+[docs/selftest_v0.33_lifecycle.md](docs/selftest_v0.33_lifecycle.md) for the
+next product-use check.
 
 ## Product Plan
 

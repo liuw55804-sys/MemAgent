@@ -72,6 +72,12 @@ Treat natural language such as the following as intent, not a rigid trigger list
 __MEMAGENT_COMMAND__ activity --today
 ```
 
+- "MemAgent 最近做得怎么样" -> run the all-history project report:
+
+```bash
+__MEMAGENT_COMMAND__ activity
+```
+
 Use an explicit project path only when the current shell directory differs from
 the task directory:
 

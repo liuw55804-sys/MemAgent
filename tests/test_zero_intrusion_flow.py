@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import redirect_stdout
+from io import StringIO
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -7,6 +10,7 @@ import unittest
 
 from memagent.activity import build_activity_report
 from memagent.codex_skill import build_user_codex_skill_plan, write_user_codex_skill_plan
+from memagent.cli import main
 from memagent.context import detect_context
 from memagent.handoff import HandoffStore
 from memagent.interaction import process_interaction
@@ -87,6 +91,10 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
             )
             self.assertEqual(confirmed.route.action, "save_memory")
             self.assertIn("memory", confirmed.writes)
+            self.assertEqual(
+                confirmed.artifacts["pending_draft_id"],
+                draft.artifacts["pending_draft_id"],
+            )
 
             activity = build_activity_report(
                 store=store,
@@ -98,6 +106,28 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
             self.assertEqual(activity.action_counts["save_memory"], 1)
             self.assertEqual(activity.feedback_counts["useful"], 1)
             self.assertEqual(activity.memory_count, 2)
+            self.assertEqual(activity.lifecycle.draft_total, 1)
+            self.assertEqual(activity.lifecycle.draft_confirmed, 1)
+            self.assertEqual(len(activity.lifecycle.draft_pending), 0)
+            self.assertEqual(activity.lifecycle.draft_unconfirmed, 0)
+            self.assertEqual(activity.lifecycle.memory_recalled_again, 1)
+            self.assertEqual(activity.lifecycle.later_recall_count, 1)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                activity_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "activity",
+                        "--cwd",
+                        str(project),
+                        "--json",
+                    ]
+                )
+            activity_payload = json.loads(stdout.getvalue())
+            self.assertEqual(activity_code, 0)
+            self.assertEqual(activity_payload["lifecycle"]["draft"]["confirmed"], 1)
+            self.assertEqual(activity_payload["lifecycle"]["memory_reuse"]["recalled_again"], 1)
             self.assertEqual(_git(project, "status", "--porcelain"), "")
 
 
