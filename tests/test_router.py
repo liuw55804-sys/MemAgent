@@ -37,6 +37,12 @@ class RouterTest(unittest.TestCase):
         self.assertEqual(decision.feedback_rating, "not-useful")
         self.assertTrue(decision.requires_recent_trace)
 
+    def test_routes_short_positive_feedback_label(self) -> None:
+        decision = route_interaction("刚刚那条有用。", has_recent_trace=True)
+
+        self.assertEqual(decision.action, "label_feedback")
+        self.assertEqual(decision.feedback_rating, "useful")
+
     def test_routes_handoff_save(self) -> None:
         decision = route_interaction("先到这，下次继续时帮我接上。")
 

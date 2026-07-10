@@ -372,7 +372,10 @@ def _decision_from_payload(payload: dict[str, Any], *, user_message: str, provid
 
 
 def _feedback_signal(text: str) -> tuple[str | None, tuple[str, ...]]:
-    positive = _matched(text, ("这个有用", "提醒有用", "是对的", "帮到了", "命中了", "有帮助", "useful"))
+    positive = _matched(
+        text,
+        ("这个有用", "那条有用", "提醒有用", "是对的", "帮到了", "命中了", "有帮助", "useful"),
+    )
     negative = _matched(text, ("没帮上忙", "不相关", "不是这个问题", "没用", "错了", "过期", "not useful"))
     if positive and not negative:
         return "useful", positive
