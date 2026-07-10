@@ -1,0 +1,6 @@
+interface:
+  display_name: "MemAgent"
+  short_description: "Recall and preserve local coding workflow memory."
+  default_prompt: "Use $memagent to check relevant local workflow memory for this coding task."
+policy:
+  allow_implicit_invocation: true

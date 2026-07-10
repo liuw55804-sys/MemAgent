@@ -93,6 +93,28 @@ Skip memory recall for one run:
 memagent codex --no-memory "continue checking attribution accuracy"
 ```
 
+## Zero-Intrusion Codex Integration
+
+Install MemAgent as a user-level Codex Skill instead of editing each business
+repository's `AGENTS.md`:
+
+```bash
+PYTHONPATH=src python -m memagent.cli install-user-codex --write
+PYTHONPATH=src python -m memagent.cli user-codex-doctor
+```
+
+The Skill lives at `~/.codex/skills/memagent/SKILL.md`; memories and traces stay
+under `~/.memagent/`. Review one project's local MemAgent activity with:
+
+```bash
+PYTHONPATH=src python -m memagent.cli activity --cwd /path/to/project --today
+```
+
+See [docs/plan_v0.32.md](docs/plan_v0.32.md) for the product boundary and
+verification flow.
+Use [docs/selftest_v0.32_zero_intrusion.md](docs/selftest_v0.32_zero_intrusion.md)
+for the short product self-test in a real service repository.
+
 ## Product Plan
 
 See [docs/product-plan.md](docs/product-plan.md).

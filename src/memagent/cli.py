@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import subprocess
@@ -12,6 +13,14 @@ from memagent.agents import (
     build_agents_snippet,
     render_agents_install_report,
     write_agents_install_plan,
+)
+from memagent.activity import build_activity_report, render_activity_report
+from memagent.codex_skill import (
+    build_user_codex_skill_plan,
+    render_user_codex_skill_report,
+    uninstall_user_codex_skill,
+    write_user_codex_skill_plan,
+    write_user_codex_skill_uninstall,
 )
 from memagent.context import detect_context
 from memagent.demo import run_demo, run_demo_bundle, run_mcp_demo
@@ -426,6 +435,95 @@ def build_parser() -> argparse.ArgumentParser:
         "--write",
         action="store_true",
         help="Write the planned AGENTS.md change. Default is dry-run preview.",
+    )
+
+    user_codex_install = subparsers.add_parser(
+        "install-user-codex",
+        help="Install the MemAgent skill under the user's Codex skills directory, never in a project repo.",
+    )
+    user_codex_install.add_argument(
+        "--target",
+        help="Target SKILL.md path. Defaults to $CODEX_HOME/skills/memagent/SKILL.md.",
+    )
+    user_codex_install.add_argument(
+        "--memagent-root",
+        help="MemAgent project root used by the generated command. Defaults to the installed package root.",
+    )
+    user_codex_install.add_argument(
+        "--command-prefix",
+        help="Override the command embedded in the user-level skill.",
+    )
+    user_codex_install.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing non-managed skill only after reviewing it.",
+    )
+    user_codex_install.add_argument(
+        "--write",
+        action="store_true",
+        help="Write the user-level skill. Default is dry-run preview.",
+    )
+
+    user_codex_doctor = subparsers.add_parser(
+        "user-codex-doctor",
+        help="Check the user-level MemAgent Codex skill without inspecting or changing a project repo.",
+    )
+    user_codex_doctor.add_argument(
+        "--target",
+        help="Target SKILL.md path. Defaults to $CODEX_HOME/skills/memagent/SKILL.md.",
+    )
+    user_codex_doctor.add_argument(
+        "--memagent-root",
+        help="MemAgent project root used by the generated command. Defaults to the installed package root.",
+    )
+
+    user_codex_uninstall = subparsers.add_parser(
+        "uninstall-user-codex",
+        help="Remove only the managed user-level MemAgent Codex skill.",
+    )
+    user_codex_uninstall.add_argument(
+        "--target",
+        help="Target SKILL.md path. Defaults to $CODEX_HOME/skills/memagent/SKILL.md.",
+    )
+    user_codex_uninstall.add_argument(
+        "--force",
+        action="store_true",
+        help="Remove a non-managed skill only after reviewing it.",
+    )
+    user_codex_uninstall.add_argument(
+        "--write",
+        action="store_true",
+        help="Remove the user-level skill. Default is dry-run preview.",
+    )
+
+    activity = subparsers.add_parser(
+        "activity",
+        help="Summarize local MemAgent actions for one project without changing the project repo.",
+    )
+    activity.add_argument(
+        "--cwd",
+        help="Project directory to summarize. Defaults to the current working directory.",
+    )
+    activity_window = activity.add_mutually_exclusive_group()
+    activity_window.add_argument(
+        "--today",
+        action="store_true",
+        help="Only include activity from the current local calendar day.",
+    )
+    activity_window.add_argument(
+        "--since",
+        help="Only include activity on or after this local date (YYYY-MM-DD).",
+    )
+    activity.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Maximum recent events to print. Default: 20.",
+    )
+    activity.add_argument(
+        "--json",
+        action="store_true",
+        help="Print structured activity data instead of text.",
     )
 
     demo = subparsers.add_parser(
@@ -878,6 +976,59 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     store = MemoryStore.from_home_arg(args.home)
+    if args.command == "install-user-codex":
+        plan = build_user_codex_skill_plan(
+            target=Path(args.target) if args.target else None,
+            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            command_prefix=args.command_prefix,
+            force=args.force,
+        )
+        if args.write:
+            write_user_codex_skill_plan(plan)
+        print(render_user_codex_skill_report(plan, write=args.write))
+        return 1 if plan.blocked and args.write else 0
+
+    if args.command == "user-codex-doctor":
+        plan = build_user_codex_skill_plan(
+            target=Path(args.target) if args.target else None,
+            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+        )
+        print(render_user_codex_skill_report(plan, write=False))
+        return 0
+
+    if args.command == "uninstall-user-codex":
+        plan = uninstall_user_codex_skill(
+            target=Path(args.target) if args.target else None,
+            force=args.force,
+        )
+        if args.write:
+            write_user_codex_skill_uninstall(plan)
+        print(render_user_codex_skill_report(plan, write=args.write))
+        return 1 if plan.blocked and args.write else 0
+
+    if args.command == "activity":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        since = None
+        if args.today:
+            since = datetime.now().astimezone().date()
+        elif args.since:
+            try:
+                since = datetime.strptime(args.since, "%Y-%m-%d").date()
+            except ValueError:
+                parser.error("--since must use YYYY-MM-DD")
+        report = build_activity_report(
+            store=store,
+            handoff_store=HandoffStore(store.home),
+            context=context,
+            since=since,
+            limit=args.limit,
+        )
+        if args.json:
+            print(json.dumps(report.to_payload(), ensure_ascii=False, indent=2))
+        else:
+            print(render_activity_report(report))
+        return 0
+
     if args.command == "agents-doctor":
         context = detect_context(Path(args.cwd) if args.cwd else None)
         print(
