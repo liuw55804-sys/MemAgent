@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 import re
@@ -14,6 +14,39 @@ from memagent.memory import ALLOWED_KINDS, DEFAULT_DOMAIN, normalize_kind
 
 MEMORY_DRAFT_SCHEMA_VERSION = "memagent.memory_draft.v1"
 QUALITY_LABELS = {"keep", "revise", "reject"}
+LLM_ASSIST_KINDS = {"preference", "decision", "workflow"}
+AMBIGUOUS_QUALITY_MIN = 0.32
+AMBIGUOUS_QUALITY_MAX = 0.60
+
+
+@dataclass(frozen=True)
+class QualityGateTrace:
+    provider: str
+    attempted: bool
+    selected: bool
+    fallback: bool
+    final_source: str
+    heuristic_score: float
+    heuristic_label: str
+    fallback_reason: str | None = None
+    llm_score: float | None = None
+    llm_label: str | None = None
+    suggested_rewrite: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "attempted": self.attempted,
+            "selected": self.selected,
+            "fallback": self.fallback,
+            "final_source": self.final_source,
+            "heuristic_score": round(self.heuristic_score, 2),
+            "heuristic_label": self.heuristic_label,
+            "fallback_reason": self.fallback_reason,
+            "llm_score": round(self.llm_score, 2) if self.llm_score is not None else None,
+            "llm_label": self.llm_label,
+            "suggested_rewrite": self.suggested_rewrite,
+        }
 
 
 @dataclass(frozen=True)
@@ -30,6 +63,7 @@ class MemoryDraft:
     provider: str = "heuristic"
     domain: str = DEFAULT_DOMAIN
     requires_confirmation: bool = True
+    quality_gate: QualityGateTrace | None = None
 
     def to_payload(self, *, context: ProjectContext | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -46,6 +80,7 @@ class MemoryDraft:
             "warnings": list(self.warnings),
             "requires_confirmation": self.requires_confirmation,
             "source_excerpt": self.source_excerpt,
+            "quality_gate": self.quality_gate.to_payload() if self.quality_gate else None,
             "suggested_remember": {
                 "domain": self.domain,
                 "kind": self.kind,
@@ -117,6 +152,15 @@ def draft_memory_heuristic(
         warnings=tuple(warnings),
         source_excerpt=_excerpt(source_text),
         provider="heuristic",
+        quality_gate=QualityGateTrace(
+            provider="heuristic",
+            attempted=False,
+            selected=False,
+            fallback=False,
+            final_source="heuristic",
+            heuristic_score=score,
+            heuristic_label=label,
+        ),
     )
 
 
@@ -130,38 +174,82 @@ def draft_memory_openai_compatible(
     kind: str | None,
     max_chars: int,
 ) -> MemoryDraft:
-    config = (
-        OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
-        if llm_profile
-        else OpenAICompatibleConfig.from_env()
+    baseline = draft_memory_heuristic(
+        source_text,
+        context=context,
+        topic=topic,
+        kind=kind,
+        max_chars=max_chars,
     )
-    context_payload = (
-        {
-            "cwd": str(context.cwd),
-            "git_root": str(context.git_root) if context.git_root else None,
-            "branch": context.branch,
-            "repo_name": context.repo_name,
-        }
-        if context is not None
-        else {}
+    if not _should_use_llm_quality_gate(baseline, source_text):
+        return replace(
+            baseline,
+            quality_gate=QualityGateTrace(
+                provider="openai-compatible",
+                attempted=False,
+                selected=False,
+                fallback=False,
+                final_source="heuristic_skipped",
+                heuristic_score=baseline.quality_score,
+                heuristic_label=baseline.quality_label,
+            ),
+        )
+    try:
+        config = (
+            OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
+            if llm_profile
+            else OpenAICompatibleConfig.from_env()
+        )
+        completion = chat_completion(
+            config=config,
+            messages=[
+                {"role": "system", "content": _QUALITY_GATE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        _quality_gate_input(baseline=baseline, source_text=source_text, context=context),
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+        )
+        assessment = _quality_assessment_from_payload(loads_json_object(completion))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return replace(
+            baseline,
+            warnings=(*baseline.warnings, "LLM quality gate unavailable; used heuristic fallback"),
+            quality_gate=QualityGateTrace(
+                provider="openai-compatible",
+                attempted=True,
+                selected=False,
+                fallback=True,
+                final_source="heuristic_fallback",
+                heuristic_score=baseline.quality_score,
+                heuristic_label=baseline.quality_label,
+                fallback_reason=_safe_error_reason(exc),
+            ),
+        )
+
+    return replace(
+        baseline,
+        kind=assessment["kind"],
+        quality_score=assessment["quality_score"],
+        quality_label=assessment["quality_label"],
+        reasons=assessment["reasons"] or baseline.reasons,
+        provider="openai-compatible",
+        quality_gate=QualityGateTrace(
+            provider="openai-compatible",
+            attempted=True,
+            selected=True,
+            fallback=False,
+            final_source="llm_assisted",
+            heuristic_score=baseline.quality_score,
+            heuristic_label=baseline.quality_label,
+            llm_score=assessment["quality_score"],
+            llm_label=assessment["quality_label"],
+            suggested_rewrite=assessment["memory_rewrite"],
+        ),
     )
-    prompt_payload = {
-        "source_text": source_text[-6000:],
-        "context": context_payload,
-        "topic_override": topic,
-        "kind_override": kind,
-        "allowed_kinds": sorted(ALLOWED_KINDS),
-        "max_memory_chars": max_chars,
-    }
-    completion = chat_completion(
-        config=config,
-        messages=[
-            {"role": "system", "content": _DRAFT_SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps(prompt_payload, ensure_ascii=False)},
-        ],
-    )
-    payload = loads_json_object(completion)
-    return _draft_from_payload(payload, source_text=source_text, provider="openai-compatible", topic=topic, kind=kind)
 
 
 def render_memory_draft(draft: MemoryDraft, *, context: ProjectContext | None = None) -> str:
@@ -180,42 +268,25 @@ def render_memory_draft(draft: MemoryDraft, *, context: ProjectContext | None = 
         lines.append(f"- reasons: {'; '.join(payload['reasons'])}")
     if payload["warnings"]:
         lines.append(f"- warnings: {'; '.join(payload['warnings'])}")
+    quality_gate = payload.get("quality_gate")
+    if isinstance(quality_gate, dict):
+        lines.append(
+            "- quality_gate: "
+            f"{quality_gate.get('final_source')}; "
+            f"heuristic={quality_gate.get('heuristic_label')} ({quality_gate.get('heuristic_score')})"
+        )
+        if quality_gate.get("fallback"):
+            lines.append(f"- quality_gate_fallback: {quality_gate.get('fallback_reason') or 'provider unavailable'}")
+        if quality_gate.get("suggested_rewrite"):
+            lines.append(f"- llm_rewrite: {quality_gate['suggested_rewrite']}")
     lines.extend(["", "[Suggested remember command]", _remember_command(draft)])
     return "\n".join(lines)
 
 
-def _draft_from_payload(
-    payload: dict[str, Any],
-    *,
-    source_text: str,
-    provider: str,
-    topic: str | None,
-    kind: str | None,
-) -> MemoryDraft:
-    inferred_kind = normalize_kind(kind or str(payload.get("kind") or "note"))
-    triggers_value = payload.get("triggers")
-    triggers = tuple(_derive_triggers(" ".join(str(item) for item in triggers_value))) if isinstance(triggers_value, list) else tuple(_derive_triggers(source_text))
-    label = str(payload.get("quality_label") or "revise")
-    if label not in QUALITY_LABELS:
-        label = "revise"
-    reasons_value = payload.get("reasons")
-    warnings_value = payload.get("warnings")
-    return MemoryDraft(
-        topic=topic or _short(str(payload.get("topic") or _derive_topic(source_text, kind=inferred_kind)), 80),
-        kind=inferred_kind,
-        triggers=triggers[:8],
-        memory=_short(str(payload.get("memory") or _memory_text(source_text)), 600),
-        quality_score=float(payload.get("quality_score") or 0.5),
-        quality_label=label,
-        reasons=tuple(str(item) for item in reasons_value) if isinstance(reasons_value, list) else (),
-        warnings=tuple(str(item) for item in warnings_value) if isinstance(warnings_value, list) else (),
-        source_excerpt=_excerpt(source_text),
-        provider=provider,
-    )
-
-
 def _infer_kind(text: str) -> str:
     lower = text.lower()
+    if any(value in lower for value in ("用户偏好", "习惯", "默认", "除非", "不希望", "只修改", "不新增")):
+        return "preference"
     if any(value in lower for value in ("schema", "table", "db ", "数据库", "表名", "api", "endpoint", "入口")):
         return "data_entrypoint"
     if any(value in lower for value in ("bytedcli", "curl", "go test", "pytest", "sql", "mcp", "命令")):
@@ -262,6 +333,98 @@ def _quality(text: str, *, kind: str) -> tuple[float, str, list[str], list[str]]
     else:
         label = "reject"
     return score, label, reasons or ["generic note only"], warnings
+
+
+def _should_use_llm_quality_gate(baseline: MemoryDraft, source_text: str) -> bool:
+    if baseline.kind in LLM_ASSIST_KINDS:
+        return True
+    if AMBIGUOUS_QUALITY_MIN <= baseline.quality_score <= AMBIGUOUS_QUALITY_MAX:
+        return True
+    lower = source_text.lower()
+    return any(value in lower for value in ("用户偏好", "习惯", "默认", "除非", "不希望", "只修改", "不新增"))
+
+
+def _quality_gate_input(
+    *,
+    baseline: MemoryDraft,
+    source_text: str,
+    context: ProjectContext | None,
+) -> dict[str, object]:
+    return {
+        "candidate": {
+            "kind": baseline.kind,
+            "topic": _sanitize_for_llm(baseline.topic),
+            "triggers": [_sanitize_for_llm(trigger) for trigger in baseline.triggers[:6]],
+            "memory": _sanitize_for_llm(_short(baseline.memory, 420)),
+            "heuristic_quality": {
+                "score": round(baseline.quality_score, 2),
+                "label": baseline.quality_label,
+            },
+        },
+        "source_summary": _source_summary(source_text),
+        "context": {
+            "has_git_project": bool(context and context.git_root),
+            "has_branch": bool(context and context.branch),
+            "scope": "current_project" if context else "unknown_project",
+        },
+        "allowed_kinds": sorted(ALLOWED_KINDS),
+        "allowed_quality_labels": sorted(QUALITY_LABELS),
+        "privacy": "Identifiers, absolute paths, URLs, secrets, and long numeric values were generalized before this request.",
+    }
+
+
+def _quality_assessment_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    kind = normalize_kind(str(payload.get("kind") or "note"))
+    label = str(payload.get("quality_label") or "revise").strip().lower()
+    if label not in QUALITY_LABELS:
+        raise ValueError("LLM quality gate returned invalid quality_label")
+    try:
+        score = float(payload.get("quality_score"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("LLM quality gate returned invalid quality_score") from exc
+    if not 0.0 <= score <= 1.0:
+        raise ValueError("LLM quality gate quality_score must be between 0 and 1")
+    reasons_value = payload.get("reasons")
+    reasons = tuple(_short(str(item), 160) for item in reasons_value if str(item).strip()) if isinstance(reasons_value, list) else ()
+    rewrite = _short(str(payload.get("memory_rewrite") or ""), 420) or None
+    return {
+        "kind": kind,
+        "quality_label": label,
+        "quality_score": score,
+        "reasons": reasons[:4],
+        "memory_rewrite": rewrite,
+    }
+
+
+def _source_summary(source_text: str) -> str:
+    lower = source_text.lower()
+    signals: list[str] = []
+    if any(value in lower for value in ("用户偏好", "习惯", "默认", "除非", "不希望", "只修改", "不新增")):
+        signals.append("explicit user preference or default/exception rule")
+    if any(value in lower for value in ("先", "再", "然后", "最后", "流程", "workflow")):
+        signals.append("ordered workflow guidance")
+    if any(value in lower for value in ("bytedcli", "sql", "mcp", "curl", "go test", "pytest")):
+        signals.append("reusable tool or verification signal")
+    if any(value in lower for value in ("避免", "不要", "坑", "绕路", "error", "timeout", "报错")):
+        signals.append("pitfall or prohibited path")
+    if not signals:
+        signals.append("short reusable coding-session lesson")
+    return "; ".join(signals[:3])
+
+
+def _sanitize_for_llm(text: str) -> str:
+    sanitized = _clean_source(text)
+    sanitized = re.sub(r"https?://[^\s]+", "<url>", sanitized, flags=re.I)
+    sanitized = re.sub(r"(?:~|/Users|/home|/private|/tmp)/[^\s,，。；;]+", "<path>", sanitized)
+    sanitized = re.sub(r"\b(?:sk|rk|pk)[-_][A-Za-z0-9_-]{6,}\b", "<secret>", sanitized, flags=re.I)
+    sanitized = re.sub(r"\b(?:token|api[_-]?key|authorization)\s*[:=]\s*[^\s,，。；;]+", "<secret>", sanitized, flags=re.I)
+    sanitized = re.sub(r"\b[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)+\b", "<identifier>", sanitized)
+    sanitized = re.sub(r"\b\d{6,}\b", "<number>", sanitized)
+    return _short(sanitized, 420)
+
+
+def _safe_error_reason(exc: Exception) -> str:
+    return _short(re.sub(r"(?:sk|rk|pk)[-_][A-Za-z0-9_-]+", "<secret>", str(exc), flags=re.I), 180)
 
 
 def _memory_text(text: str, *, max_chars: int = 420) -> str:
@@ -367,29 +530,24 @@ def _short(text: str, limit: int) -> str:
     return clean[: max(limit - 1, 0)].rstrip() + "…"
 
 
-_DRAFT_SYSTEM_PROMPT = f"""
-You are MemAgent's memory draft generator for coding-agent workflow memory.
+_QUALITY_GATE_SYSTEM_PROMPT = f"""
+You are MemAgent's selective memory quality gate for coding-agent workflow memory.
 Return only a JSON object. Do not explain outside JSON.
 
 Allowed kinds: {sorted(ALLOWED_KINDS)}
 Allowed quality labels: {sorted(QUALITY_LABELS)}
 
-Create a short reviewable memory draft from the source text.
-The memory must be 1-3 sentences and action-oriented.
-Prefer exact reusable tool recipes, data entrypoints, pitfalls, and verification
-steps when they are the lesson.
-Do not include tokens, passwords, cookies, private keys, long raw outputs, or
-large request/response bodies.
+Assess the generalized candidate. A stable user-specific engineering preference,
+default/exception rule, reusable decision, or workflow can be high quality even
+when it contains no command, API, database, or tool keyword. Do not decide
+whether it is saved; a user confirmation is always required.
 
 Required JSON shape:
 {{
-  "topic": "short topic",
   "kind": "one allowed kind",
-  "triggers": ["keyword"],
-  "memory": "1-3 sentence reusable lesson",
+  "memory_rewrite": "a generalized 1-3 sentence rewrite without sensitive details",
   "quality_score": 0.0,
   "quality_label": "keep | revise | reject",
-  "reasons": ["why this is or is not reusable"],
-  "warnings": ["quality or safety warnings"]
+  "reasons": ["short quality reasons"]
 }}
 """.strip()

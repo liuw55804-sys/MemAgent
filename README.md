@@ -118,6 +118,23 @@ See [docs/plan_v0.33.md](docs/plan_v0.33.md) for lifecycle observability and
 [docs/selftest_v0.33_lifecycle.md](docs/selftest_v0.33_lifecycle.md) for the
 next product-use check.
 
+## LLM-Assisted Draft Quality
+
+v0.34 optionally uses an existing OpenAI-compatible local profile only to
+assess selected memory **drafts**. The router stays heuristic by default and
+durable memory still requires confirmation. The request is a short sanitized
+candidate, not a full Codex transcript.
+
+```bash
+export MEMAGENT_DRAFT_PROVIDER=openai-compatible
+export MEMAGENT_DRAFT_LLM_PROFILE=<local-profile-name>
+memagent process "记住这个用户习惯，先给我预览" --recent-text "<short verified lesson>"
+```
+
+See [docs/plan_v0.34.md](docs/plan_v0.34.md) and
+[docs/selftest_v0.34_llm_quality_gate.md](docs/selftest_v0.34_llm_quality_gate.md)
+for the boundary and product self-test.
+
 ## Product Plan
 
 See [docs/product-plan.md](docs/product-plan.md).

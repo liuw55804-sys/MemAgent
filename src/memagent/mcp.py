@@ -233,6 +233,9 @@ class McpServer:
             provider=_optional_str(arguments, "provider") or "heuristic",
             llm_profile=_optional_str(arguments, "llm_profile"),
             llm_config_path=_optional_path(arguments, "llm_config_path"),
+            draft_provider=_optional_str(arguments, "draft_provider"),
+            draft_llm_profile=_optional_str(arguments, "draft_llm_profile"),
+            draft_llm_config_path=_optional_path(arguments, "draft_llm_config_path"),
             allow_writes=_optional_bool(arguments, "allow_writes", True),
             trace_recall=_optional_bool(arguments, "trace_recall", True),
             trace_none=_optional_bool(arguments, "trace_none", False),
@@ -584,6 +587,13 @@ def tool_definitions() -> list[dict[str, Any]]:
                     },
                     "llm_profile": {"type": "string", "description": "Named local LLM provider profile."},
                     "llm_config_path": {"type": "string", "description": "Optional LLM provider profile config path."},
+                    "draft_provider": {
+                        "type": "string",
+                        "description": "Optional provider for memory-draft quality only; routing stays on provider.",
+                        "enum": ["heuristic", "openai-compatible"],
+                    },
+                    "draft_llm_profile": {"type": "string", "description": "Named profile for memory-draft quality only."},
+                    "draft_llm_config_path": {"type": "string", "description": "Optional profile config path for memory-draft quality only."},
                     "allow_writes": {
                         "type": "boolean",
                         "description": "Allow local trace, feedback, handoff, or eval writes.",

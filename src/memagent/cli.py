@@ -192,6 +192,13 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--llm-profile", help="Named LLM provider profile for openai-compatible processing.")
     process.add_argument("--llm-config", help="Optional LLM provider profile config path.")
     process.add_argument(
+        "--draft-provider",
+        choices=["heuristic", "openai-compatible"],
+        help="Optional provider for memory-draft quality only. Router provider remains unchanged.",
+    )
+    process.add_argument("--draft-llm-profile", help="Named profile for memory-draft quality only.")
+    process.add_argument("--draft-llm-config", help="Optional profile config path for memory-draft quality only.")
+    process.add_argument(
         "--no-write",
         action="store_true",
         help="Do not write trace feedback, handoff, trace, or evaluation artifacts.",
@@ -1103,6 +1110,9 @@ def main(argv: list[str] | None = None) -> int:
                 provider=args.provider,
                 llm_profile=args.llm_profile,
                 llm_config_path=Path(args.llm_config) if args.llm_config else None,
+                draft_provider=args.draft_provider,
+                draft_llm_profile=args.draft_llm_profile,
+                draft_llm_config_path=Path(args.draft_llm_config) if args.draft_llm_config else None,
                 allow_writes=not args.no_write,
                 trace_recall=not args.no_trace,
                 trace_none=args.trace_none,

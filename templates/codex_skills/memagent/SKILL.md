@@ -41,6 +41,25 @@ Use `--provider openai-compatible --llm-profile <profile>` only when the user
 asks to use or evaluate the configured LLM-assisted router. The default route
 remains local heuristic routing.
 
+## Optional LLM Draft Quality Gate
+
+The normal `process` command can use an OpenAI-compatible profile only for
+selected memory-draft quality checks while leaving the router heuristic. This
+is opt-in through local environment configuration, never through a business
+repository file:
+
+```bash
+export MEMAGENT_DRAFT_PROVIDER=openai-compatible
+export MEMAGENT_DRAFT_LLM_PROFILE=<local-profile-name>
+```
+
+Use it only after a user has asked to preserve a lesson. The gate receives a
+short sanitized candidate and minimal project context, not the full transcript.
+It may classify a preference, decision, workflow, or ambiguous candidate and
+offer a rewrite, but it never writes durable memory. In the preview, explain
+`quality_gate` briefly when it is `llm_assisted` or `heuristic_fallback`; never
+print a profile credential or raw provider response.
+
 When a user asks to preserve a lesson, include a short, verified description of
 the lesson from the current conversation as `--recent-text`; do not pass a full
 transcript. For a handoff save, use `--recent-text` for a compact summary of

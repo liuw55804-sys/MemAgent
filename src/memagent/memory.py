@@ -348,6 +348,7 @@ class MemoryStore:
                 "triggers": triggers or ["memory"],
                 "text": text,
             },
+            "quality_gate": _minimal_quality_gate_trace(draft.get("quality_gate")),
         }
         self.pending_drafts_dir.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -622,6 +623,24 @@ def _pending_draft_key(context: ProjectContext) -> str:
     root = context.git_root or context.cwd
     digest = hashlib.sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:12]
     return digest
+
+
+def _minimal_quality_gate_trace(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    keys = (
+        "provider",
+        "attempted",
+        "selected",
+        "fallback",
+        "final_source",
+        "heuristic_score",
+        "heuristic_label",
+        "fallback_reason",
+        "llm_score",
+        "llm_label",
+    )
+    return {key: value[key] for key in keys if key in value}
 
 
 def _match_payload(match: MemoryMatch) -> dict[str, object]:

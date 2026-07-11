@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -67,6 +68,14 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertTrue(store.has_pending_memory_draft(context=context))
             self.assertIn("process_trace_path", result.artifacts)
             self.assertEqual(store.count_memory_cards(), 0)
+            trace_payload = store.load_process_trace(result.artifacts["process_trace_id"])
+            traced_draft = trace_payload["process"]["payload"]
+            self.assertNotIn("source_excerpt", traced_draft)
+            self.assertIn("quality_gate", traced_draft)
+            self.assertNotIn("suggested_rewrite", traced_draft["quality_gate"])
+            pending_payload = json.loads(Path(result.artifacts["pending_draft_path"]).read_text(encoding="utf-8"))
+            self.assertIn("quality_gate", pending_payload)
+            self.assertNotIn("suggested_rewrite", pending_payload["quality_gate"] or {})
 
     def test_process_confirmation_saves_pending_memory_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,9 @@ def process_interaction(
     provider: str = "heuristic",
     llm_profile: str | None = None,
     llm_config_path: Path | None = None,
+    draft_provider: str | None = None,
+    draft_llm_profile: str | None = None,
+    draft_llm_config_path: Path | None = None,
     allow_writes: bool = True,
     trace_recall: bool = True,
     limit: int = 5,
@@ -78,6 +82,9 @@ def process_interaction(
         has_recent_trace=_has_recent_trace(store),
         has_pending_draft=store.has_pending_memory_draft(context=context),
     )
+    effective_draft_provider = draft_provider or os.environ.get("MEMAGENT_DRAFT_PROVIDER") or provider
+    effective_draft_profile = draft_llm_profile or os.environ.get("MEMAGENT_DRAFT_LLM_PROFILE") or llm_profile
+    effective_draft_config = draft_llm_config_path or llm_config_path
 
     if route.action == "recall":
         return _with_process_trace(
@@ -107,9 +114,9 @@ def process_interaction(
                 recent_text=recent_text,
                 store=store,
                 allow_writes=allow_writes,
-                provider=provider,
-                llm_profile=llm_profile,
-                llm_config_path=llm_config_path,
+                provider=effective_draft_provider,
+                llm_profile=effective_draft_profile,
+                llm_config_path=effective_draft_config,
             ),
             context=context,
             store=store,
@@ -280,6 +287,13 @@ def _with_process_trace(
     if result.route.action == "none" and not trace_none:
         return result
     process_payload = result.to_payload(context=context)
+    if result.route.action == "draft_memory" and isinstance(process_payload.get("payload"), dict):
+        draft_payload = dict(process_payload["payload"])
+        draft_payload.pop("source_excerpt", None)
+        quality_gate = draft_payload.get("quality_gate")
+        if isinstance(quality_gate, dict):
+            draft_payload["quality_gate"] = _minimal_quality_gate_trace(quality_gate)
+        process_payload["payload"] = draft_payload
     process_payload["input"] = {
         "recent_text_present": bool(recent_text.strip()),
         "recent_text_chars": len(recent_text),
@@ -529,6 +543,22 @@ def _process_developer_eval(
 
 def _has_recent_trace(store: MemoryStore) -> bool:
     return bool(store.list_recall_traces(limit=1))
+
+
+def _minimal_quality_gate_trace(value: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "provider",
+        "attempted",
+        "selected",
+        "fallback",
+        "final_source",
+        "heuristic_score",
+        "heuristic_label",
+        "fallback_reason",
+        "llm_score",
+        "llm_label",
+    )
+    return {key: value[key] for key in keys if key in value}
 
 
 def process_payload_json(result: ProcessResult, *, context: ProjectContext | None = None) -> str:

@@ -104,6 +104,67 @@ class CliTest(unittest.TestCase):
             self.assertIn("process_trace_path", payload["artifacts"])
             self.assertEqual(payload["context"]["repo_name"], "project")
 
+    def test_process_uses_llm_for_draft_quality_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            config_path = root / "llm_profiles.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "profiles": {
+                            "demo": {
+                                "provider": "openai-compatible",
+                                "base_url": "https://api.example.test/v1",
+                                "api_key": "test-key",
+                                "model": "demo-model",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch("memagent.draft.chat_completion") as chat_completion:
+                chat_completion.return_value = json.dumps(
+                    {
+                        "kind": "preference",
+                        "memory_rewrite": "Keep service changes scoped to the requested task.",
+                        "quality_score": 0.88,
+                        "quality_label": "keep",
+                        "reasons": ["stable coding preference"],
+                    }
+                )
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "process",
+                            "记住这个用户习惯，先给我预览",
+                            "--recent-text",
+                            "用户习惯：默认只修改当前需求相关代码；方案放在独立笔记目录。",
+                            "--cwd",
+                            str(project),
+                            "--draft-provider",
+                            "openai-compatible",
+                            "--draft-llm-profile",
+                            "demo",
+                            "--draft-llm-config",
+                            str(config_path),
+                            "--json",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["route"]["provider"], "heuristic")
+            self.assertEqual(payload["payload"]["quality_gate"]["final_source"], "llm_assisted")
+            self.assertEqual(payload["payload"]["quality_label"], "keep")
+            self.assertEqual(payload["writes"], ["pending_memory_draft", "process_trace"])
+
     def test_process_trace_none_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

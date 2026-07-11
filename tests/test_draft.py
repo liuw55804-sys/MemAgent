@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -41,24 +42,23 @@ class MemoryDraftTest(unittest.TestCase):
         self.assertIn("[Suggested remember command]", rendered)
         self.assertIn("memagent remember", rendered)
 
-    def test_openai_compatible_draft_uses_profile_config(self) -> None:
+    def test_openai_compatible_quality_gate_corrects_preference_and_redacts_input(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config_path = _profile_config(Path(tmp))
             with mock.patch("memagent.draft.chat_completion") as chat_completion:
                 chat_completion.return_value = json.dumps(
                     {
-                        "topic": "demo topic",
-                        "kind": "tool_recipe",
-                        "triggers": ["demo"],
-                        "memory": "Use demo command before debugging.",
-                        "quality_score": 0.8,
+                        "kind": "preference",
+                        "memory_rewrite": "Keep changes scoped to the current task and place optional notes outside service code.",
+                        "quality_score": 0.86,
                         "quality_label": "keep",
-                        "reasons": ["reusable"],
-                        "warnings": [],
+                        "reasons": ["stable user working preference"],
                     }
                 )
                 draft = draft_memory(
-                    "这个 demo command 下次别忘了",
+                    "用户习惯：在 audit_rule_lib 只修改当前需求相关代码，默认不新增 docs/tasks。"
+                    "方案优先放 /Users/bytedance/private/lwc_develop，token=sk-secret-123456，"
+                    "表 t_governance_task 的原始样本不发送。",
                     provider="openai-compatible",
                     llm_profile="demo",
                     llm_config_path=config_path,
@@ -68,7 +68,55 @@ class MemoryDraftTest(unittest.TestCase):
         self.assertEqual(config.base_url, "https://api.example.test/v1")
         self.assertEqual(config.model, "demo-model")
         self.assertEqual(draft.provider, "openai-compatible")
+        self.assertEqual(draft.kind, "preference")
         self.assertEqual(draft.quality_label, "keep")
+        self.assertEqual(draft.quality_gate.final_source, "llm_assisted")
+        prompt = chat_completion.call_args.kwargs["messages"][1]["content"]
+        self.assertNotIn("sk-secret-123456", prompt)
+        self.assertNotIn("/Users/bytedance/private", prompt)
+        self.assertNotIn("t_governance_task", prompt)
+        self.assertIn("<secret>", prompt)
+        self.assertIn("<path>", prompt)
+        self.assertIn("<identifier>", prompt)
+
+    def test_openai_quality_gate_falls_back_on_invalid_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = _profile_config(Path(tmp))
+            with mock.patch("memagent.draft.chat_completion", return_value="not-json"):
+                draft = draft_memory(
+                    "用户习惯：默认只修改当前需求相关代码。",
+                    provider="openai-compatible",
+                    llm_profile="demo",
+                    llm_config_path=config_path,
+                )
+
+        self.assertEqual(draft.kind, "preference")
+        self.assertTrue(draft.quality_gate.fallback)
+        self.assertEqual(draft.quality_gate.final_source, "heuristic_fallback")
+        self.assertTrue(any("LLM quality gate unavailable" in warning for warning in draft.warnings))
+
+    def test_openai_quality_gate_falls_back_when_not_configured(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            draft = draft_memory(
+                "用户习惯：默认只修改当前需求相关代码。",
+                provider="openai-compatible",
+            )
+
+        self.assertEqual(draft.provider, "heuristic")
+        self.assertTrue(draft.quality_gate.fallback)
+        self.assertEqual(draft.quality_gate.final_source, "heuristic_fallback")
+
+    def test_openai_quality_gate_skips_obvious_tool_recipe(self) -> None:
+        with mock.patch("memagent.draft.chat_completion") as chat_completion:
+            draft = draft_memory(
+                "bytedcli rds db table schema demo_db demo_table --region cn。"
+                "排查前先执行这个命令，再看 live schema。",
+                provider="openai-compatible",
+            )
+
+        self.assertEqual(draft.quality_gate.final_source, "heuristic_skipped")
+        self.assertFalse(draft.quality_gate.attempted)
+        chat_completion.assert_not_called()
 
 
 def _profile_config(root: Path) -> Path:
