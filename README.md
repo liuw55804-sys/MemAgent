@@ -135,6 +135,13 @@ See [docs/plan_v0.34.md](docs/plan_v0.34.md) and
 [docs/selftest_v0.34_llm_quality_gate.md](docs/selftest_v0.34_llm_quality_gate.md)
 for the boundary and product self-test.
 
+## 中文文档
+
+面向使用者的中文技术实现与使用说明以飞书活文档维护；仓库保留无业务数据的源稿与 Mermaid 图源：
+
+- [技术实现说明](docs/feishu/技术实现说明.md)
+- [用户使用说明](docs/feishu/用户使用说明.md)
+
 ## Product Plan
 
 See [docs/product-plan.md](docs/product-plan.md).
