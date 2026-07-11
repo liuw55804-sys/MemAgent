@@ -25,12 +25,10 @@ corresponding existing Feishu documents through `bytedcli feishu docs update-doc
 
 - The local registry at `~/.memagent/feishu_docs.json` contains the private
   document IDs/URLs and whiteboard tokens. Do not commit it.
-- Keep the existing native whiteboards in the Feishu documents. When a diagram
-  changes, update its Mermaid source under `docs/feishu/`, render it locally,
-  then update that existing whiteboard through `bytedcli lark whiteboard update`.
-- If native whiteboard rendering is unavailable, insert the locally verified PNG
-  through `bytedcli feishu drive doc-media insert` and keep the Mermaid source;
-  do not represent an unverified blank whiteboard as a completed diagram.
+- Render changed Mermaid source under `docs/feishu/` locally and place the
+  verified PNG at its corresponding section in the Feishu document. Use native
+  whiteboards only when the full diagram, including connectors, can be written
+  and verified; never leave a partial or blank whiteboard as the primary chart.
 - The Feishu documents are the Chinese product-facing reading surface; the
   repository Markdown remains the source of truth. Do not store business data,
   credentials, or private URLs in either source document.
