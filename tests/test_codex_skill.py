@@ -21,10 +21,7 @@ class UserCodexSkillTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             target = root / "codex" / "skills" / "memagent" / "SKILL.md"
-            plan = build_user_codex_skill_plan(
-                target=target,
-                command_prefix="PYTHONPATH=/tmp/memagent-source/src python -m memagent.cli",
-            )
+            plan = build_user_codex_skill_plan(target=target)
 
             self.assertEqual(plan.action, "create")
             self.assertFalse(target.exists())
@@ -32,7 +29,8 @@ class UserCodexSkillTest(unittest.TestCase):
 
             content = target.read_text(encoding="utf-8")
             self.assertIn(MANAGED_MARKER, content)
-            self.assertIn("PYTHONPATH=/tmp/memagent-source/src python -m memagent.cli process", content)
+            self.assertIn("memagent process", content)
+            self.assertNotIn("PYTHON" + "PATH=", content)
             self.assertNotIn("AGENTS.md", str(target.parent))
 
     def test_install_blocks_unmanaged_existing_skill(self) -> None:

@@ -198,7 +198,7 @@ def draft_memory_openai_compatible(
         config = (
             OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
             if llm_profile
-            else OpenAICompatibleConfig.from_env()
+            else OpenAICompatibleConfig.from_default_profile()
         )
         completion = chat_completion(
             config=config,
@@ -289,7 +289,7 @@ def _infer_kind(text: str) -> str:
         return "preference"
     if any(value in lower for value in ("schema", "table", "db ", "数据库", "表名", "api", "endpoint", "入口")):
         return "data_entrypoint"
-    if any(value in lower for value in ("bytedcli", "curl", "go test", "pytest", "sql", "mcp", "命令")):
+    if any(value in lower for value in ("curl", "git ", "docker", "kubectl", "go test", "pytest", "sql", "mcp", "命令")):
         return "tool_recipe"
     if any(value in lower for value in ("坑", "绕路", "不要", "避免", "timeout", "failed", "error", "报错")):
         return "pitfall"
@@ -308,10 +308,10 @@ def _quality(text: str, *, kind: str) -> tuple[float, str, list[str], list[str]]
     if kind != "note":
         score += 0.16
         reasons.append(f"specific kind inferred: {kind}")
-    if any(value in lower for value in ("bytedcli", "rds", "bam", "mcp", "curl", "sql", "go test", "pytest")):
+    if any(value in lower for value in ("git ", "docker", "kubectl", "mcp", "curl", "sql", "go test", "pytest")):
         score += 0.18
         reasons.append("contains reusable tool or command signal")
-    if any(value in lower for value in ("schema", "table", "api", "owner", "入口", "数据库", "表")):
+    if any(value in lower for value in ("schema", "table", "api", "maintainer", "入口", "数据库", "表")):
         score += 0.16
         reasons.append("contains reusable engineering entrypoint")
     if any(value in lower for value in ("避免", "不要", "坑", "绕路", "timeout", "failed", "error")):
@@ -403,7 +403,7 @@ def _source_summary(source_text: str) -> str:
         signals.append("explicit user preference or default/exception rule")
     if any(value in lower for value in ("先", "再", "然后", "最后", "流程", "workflow")):
         signals.append("ordered workflow guidance")
-    if any(value in lower for value in ("bytedcli", "sql", "mcp", "curl", "go test", "pytest")):
+    if any(value in lower for value in ("git ", "docker", "kubectl", "sql", "mcp", "curl", "go test", "pytest")):
         signals.append("reusable tool or verification signal")
     if any(value in lower for value in ("避免", "不要", "坑", "绕路", "error", "timeout", "报错")):
         signals.append("pitfall or prohibited path")
@@ -476,10 +476,10 @@ def _tokenize(text: str) -> list[str]:
 def _first_command(text: str) -> str | None:
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith(("bytedcli ", "curl ", "go test", "pytest ", "python ", "memagent ")):
+        if stripped.startswith(("git ", "curl ", "docker ", "kubectl ", "go test", "pytest ", "python ", "memagent ")):
             return stripped[:64]
     match = re.search(
-        r"(bytedcli\s+(?:rds|bam|mcp|db|api|insearch)\b[^。；;]+|"
+        r"((?:git|docker|kubectl)\s+[^。；;]+|"
         r"curl\s+[^。；;]+|go test\s+[^。；;]+|pytest\s+[^。；;]+)",
         text,
     )
@@ -491,7 +491,7 @@ def _first_command(text: str) -> str | None:
 def _is_good_trigger(token: str) -> bool:
     if any(noisy in token for noisy in ("别忘", "这个", "下次", "入口下次")):
         return False
-    if token in {"bytedcli", "rds", "bam", "mcp", "sql", "schema", "owner", "audit_rule_lib"}:
+    if token in {"git", "docker", "kubectl", "mcp", "sql", "schema", "api", "test"}:
         return True
     if re.fullmatch(r"[a-z0-9_./-]+", token) and len(token) >= 4:
         return True

@@ -7,7 +7,13 @@ import re
 from typing import Any
 
 from memagent.context import ProjectContext
-from memagent.llm import OpenAICompatibleConfig, chat_completion, loads_json_object
+from memagent.llm import (
+    OpenAICompatibleConfig,
+    chat_completion,
+    default_semantic_mode,
+    loads_json_object,
+    sanitize_llm_text,
+)
 
 
 ROUTE_SCHEMA_VERSION = "memagent.route.v1"
@@ -40,6 +46,7 @@ class RouteDecision:
     developer_mode: bool = False
     suggested_next: str | None = None
     recent_text_used: bool = False
+    recall_likelihood: float | None = None
 
     def to_payload(self, *, context: ProjectContext | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -58,6 +65,11 @@ class RouteDecision:
             "developer_mode": self.developer_mode,
             "suggested_next": self.suggested_next,
             "recent_text_used": self.recent_text_used,
+            "recall_likelihood": (
+                round(max(min(self.recall_likelihood, 1.0), 0.0), 2)
+                if self.recall_likelihood is not None
+                else None
+            ),
         }
         if context is not None:
             payload["context"] = {
@@ -75,6 +87,7 @@ def route_interaction(
     recent_text: str = "",
     context: ProjectContext | None = None,
     provider: str = "heuristic",
+    semantic_mode: str | None = None,
     llm_profile: str | None = None,
     llm_config_path: Path | None = None,
     has_recent_trace: bool | None = None,
@@ -84,14 +97,37 @@ def route_interaction(
     if not message:
         raise ValueError("route message cannot be empty")
     provider = provider or "heuristic"
-    if provider == "heuristic":
-        return route_with_heuristics(
-            message,
-            recent_text=recent_text,
-            has_recent_trace=has_recent_trace,
-            has_pending_draft=has_pending_draft,
-        )
-    if provider == "openai-compatible":
+    mode = semantic_mode or ("llm" if provider == "openai-compatible" else default_semantic_mode())
+    heuristic = route_with_heuristics(
+        message,
+        recent_text=recent_text,
+        has_recent_trace=has_recent_trace,
+        has_pending_draft=has_pending_draft,
+    )
+    if mode == "heuristic":
+        return heuristic
+    if mode not in {"llm", "hybrid"}:
+        raise ValueError("semantic_mode must be heuristic, llm, or hybrid")
+    if mode == "hybrid":
+        if _should_use_llm_recall_estimator(heuristic):
+            try:
+                return estimate_recall_with_openai_compatible(
+                    message,
+                    context=context,
+                    llm_profile=llm_profile,
+                    llm_config_path=llm_config_path,
+                )
+            except (OSError, ValueError, json.JSONDecodeError):
+                return RouteDecision(
+                    **{
+                        **heuristic.__dict__,
+                        "provider": "heuristic_fallback",
+                        "reason": "Optional LLM recall estimation was unavailable; used local heuristic routing.",
+                    }
+                )
+        if not _should_use_llm_router(heuristic):
+            return heuristic
+    try:
         return route_with_openai_compatible(
             message,
             recent_text=recent_text,
@@ -101,7 +137,10 @@ def route_interaction(
             has_recent_trace=has_recent_trace,
             has_pending_draft=has_pending_draft,
         )
-    raise ValueError("provider must be heuristic or openai-compatible")
+    except (OSError, ValueError, json.JSONDecodeError):
+        return RouteDecision(
+            **{**heuristic.__dict__, "provider": "heuristic_fallback", "reason": "Optional LLM routing was unavailable; used local heuristic routing."}
+        )
 
 
 def route_with_heuristics(
@@ -316,21 +355,16 @@ def route_with_openai_compatible(
     config = (
         OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
         if llm_profile
-        else OpenAICompatibleConfig.from_env()
+        else OpenAICompatibleConfig.from_default_profile(config_path=llm_config_path)
     )
-    context_payload = (
-        {
-            "cwd": str(context.cwd),
-            "git_root": str(context.git_root) if context.git_root else None,
-            "branch": context.branch,
-            "repo_name": context.repo_name,
-        }
-        if context is not None
-        else {}
-    )
+    context_payload = {
+        "has_git_project": bool(context and context.git_root),
+        "has_branch": bool(context and context.branch),
+        "project_scope": "current_project" if context else "unknown_project",
+    }
     prompt_payload = {
-        "user_message": user_message,
-        "recent_text": recent_text[-4000:],
+        "user_message": sanitize_llm_text(user_message, limit=600),
+        "recent_text": sanitize_llm_text(recent_text, limit=800),
         "context": context_payload,
         "has_recent_trace": has_recent_trace,
         "has_pending_memory_draft": has_pending_draft,
@@ -354,6 +388,54 @@ def route_with_openai_compatible(
     return _decision_from_payload(payload, user_message=user_message, provider="openai-compatible")
 
 
+def estimate_recall_with_openai_compatible(
+    user_message: str,
+    *,
+    context: ProjectContext | None,
+    llm_profile: str | None,
+    llm_config_path: Path | None,
+) -> RouteDecision:
+    config = (
+        OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
+        if llm_profile
+        else OpenAICompatibleConfig.from_default_profile(config_path=llm_config_path)
+    )
+    prompt_payload = {
+        "user_message": sanitize_llm_text(user_message, limit=360),
+        "context": {
+            "has_git_project": bool(context and context.git_root),
+            "project_scope": "current_project" if context else "unknown_project",
+        },
+    }
+    completion = chat_completion(
+        config=config,
+        messages=[
+            {"role": "system", "content": _RECALL_ESTIMATOR_SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(prompt_payload, ensure_ascii=False)},
+        ],
+    )
+    payload = loads_json_object(completion)
+    likelihood = _recall_likelihood_from_payload(payload)
+    should_recall = likelihood >= 0.55
+    signals_value = payload.get("signals")
+    signals = tuple(str(item) for item in signals_value if str(item).strip()) if isinstance(signals_value, list) else ()
+    return RouteDecision(
+        action="recall" if should_recall else "none",
+        confidence=likelihood if should_recall else 1 - likelihood,
+        reason=str(payload.get("reason") or "LLM recall estimate."),
+        signals=("llm_recall_estimate", *signals),
+        user_message=user_message,
+        provider="llm_recall_estimator",
+        query=_route_query(user_message) if should_recall else None,
+        suggested_next=(
+            "Recall short project-scoped memory context, then verify against live sources."
+            if should_recall
+            else "Continue normally without recalling project memory."
+        ),
+        recall_likelihood=likelihood,
+    )
+
+
 def render_route_decision(decision: RouteDecision, *, context: ProjectContext | None = None) -> str:
     payload = decision.to_payload(context=context)
     lines = [
@@ -365,6 +447,8 @@ def render_route_decision(decision: RouteDecision, *, context: ProjectContext | 
     ]
     signals = payload["signals"]
     lines.append(f"- signals: {', '.join(signals) if signals else '-'}")
+    if payload.get("recall_likelihood") is not None:
+        lines.append(f"- recall_likelihood: {payload['recall_likelihood']:.2f}")
     if payload.get("query"):
         lines.append(f"- query: {payload['query']}")
     if payload.get("feedback_rating"):
@@ -412,6 +496,17 @@ def _decision_from_payload(payload: dict[str, Any], *, user_message: str, provid
     )
 
 
+def _recall_likelihood_from_payload(payload: dict[str, Any]) -> float:
+    value = payload.get("recall_likelihood")
+    try:
+        likelihood = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("LLM recall estimator response requires recall_likelihood") from exc
+    if not 0 <= likelihood <= 1:
+        raise ValueError("LLM recall estimator recall_likelihood must be between 0 and 1")
+    return likelihood
+
+
 def _feedback_signal(text: str) -> tuple[str | None, tuple[str, ...]]:
     positive = _matched(
         text,
@@ -428,33 +523,52 @@ def _feedback_signal(text: str) -> tuple[str | None, tuple[str, ...]]:
 def _recall_signals(text: str) -> tuple[str, ...]:
     if _matched(text, ("typo", "拼写", "格式化一下", "改个文案", "简单改下")):
         return ()
-    return _matched(
-        text,
-        (
-            "排查",
-            "定位",
-            "debug",
-            "继续查",
-            "继续排查",
-            "以前踩过",
-            "类似上次",
-            "先按你觉得最省时间",
-            "bytedcli",
-            "rds",
-            "bam",
-            "mcp",
-            "owner",
-            "schema",
-            "audit_rule_lib",
-            "governance",
-            "接口",
-            "数据库",
-            "表",
-            "sql",
-            "go test",
-            "pytest",
-        ),
+    signals = list(
+        _matched(
+            text,
+            (
+                "排查",
+                "定位",
+                "debug",
+                "继续查",
+                "继续排查",
+                "以前踩过",
+                "类似上次",
+                "先按你觉得最省时间",
+                "mcp",
+                "service",
+                "maintainer",
+                "task",
+                "schema",
+                "接口",
+                "数据库",
+                "表",
+                "sql",
+                "go test",
+                "pytest",
+            ),
+        )
     )
+    preference_patterns = (
+        r"用户.*(?:习惯|偏好|约束|规则)",
+        r"(?:开发|编码|协作).*(?:习惯|偏好|约束|规则)",
+        r"之前.*(?:习惯|偏好|约束|规则)",
+        r"(?:有什么|知道).*(?:习惯|偏好|约束|规则)",
+        r"(?:user|coding|development).*(?:preference|habit|constraint|convention)",
+    )
+    for pattern in preference_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            signals.append("user_preference")
+            break
+    return tuple(signals)
+
+
+def _should_use_llm_router(decision: RouteDecision) -> bool:
+    return decision.action == "none" or decision.confidence <= 0.64
+
+
+def _should_use_llm_recall_estimator(decision: RouteDecision) -> bool:
+    return decision.action in {"none", "recall"} and decision.confidence <= 0.64
 
 
 def _matched(text: str, phrases: tuple[str, ...]) -> tuple[str, ...]:
@@ -510,4 +624,24 @@ Rules:
 - label_feedback requires a recent recall trace.
 - trace eval/replay are developer_eval, not normal product work.
 - Memories are hints; live code, schema, docs, and command output remain source of truth.
+""".strip()
+
+
+_RECALL_ESTIMATOR_SYSTEM_PROMPT = """
+You estimate whether a coding-agent user message is likely to benefit from
+recalling prior project-local workflow memory. Return only a JSON object.
+
+Use a high score when the user asks about earlier work, established preferences,
+habits, conventions, previous investigations, recurring tools, or known pitfalls.
+Use a low score for a self-contained question or a small mechanical edit.
+
+Do not assume any memory content exists. You receive no memory cards, paths,
+repository names, or conversation transcript.
+
+Required JSON shape:
+{
+  "recall_likelihood": 0.0,
+  "reason": "short reason",
+  "signals": ["short semantic signals"]
+}
 """.strip()

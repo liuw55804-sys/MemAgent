@@ -13,14 +13,14 @@ from memagent.draft import MEMORY_DRAFT_SCHEMA_VERSION, draft_memory, render_mem
 class MemoryDraftTest(unittest.TestCase):
     def test_draft_memory_keeps_tool_entrypoint(self) -> None:
         draft = draft_memory(
-            "这个 bytedcli 查 live schema 的入口下次别忘了："
-            "bytedcli rds db table schema governance_audit_rule t_governance_task --region cn。"
-            "排查 audit_rule_lib 前先以 live schema 为准。"
+            "这个 git 查 live schema 的入口下次别忘了："
+            "git database db table schema example_rule example_task --region cn。"
+            "排查 example_service 前先以 live schema 为准。"
         )
 
         self.assertEqual(draft.kind, "data_entrypoint")
         self.assertEqual(draft.quality_label, "keep")
-        self.assertIn("bytedcli", draft.triggers)
+        self.assertIn("git", draft.triggers)
         self.assertIn("live schema", draft.memory)
 
         payload = draft.to_payload()
@@ -56,9 +56,9 @@ class MemoryDraftTest(unittest.TestCase):
                     }
                 )
                 draft = draft_memory(
-                    "用户习惯：在 audit_rule_lib 只修改当前需求相关代码，默认不新增 docs/tasks。"
-                    "方案优先放 /Users/bytedance/private/lwc_develop，token=sk-secret-123456，"
-                    "表 t_governance_task 的原始样本不发送。",
+                    "用户习惯：在 example_service 只修改当前需求相关代码，默认不新增 docs/tasks。"
+                    "方案优先放 /tmp/example-project，token=example-secret-value，"
+                    "表 example_task 的原始样本不发送。",
                     provider="openai-compatible",
                     llm_profile="demo",
                     llm_config_path=config_path,
@@ -72,9 +72,9 @@ class MemoryDraftTest(unittest.TestCase):
         self.assertEqual(draft.quality_label, "keep")
         self.assertEqual(draft.quality_gate.final_source, "llm_assisted")
         prompt = chat_completion.call_args.kwargs["messages"][1]["content"]
-        self.assertNotIn("sk-secret-123456", prompt)
-        self.assertNotIn("/Users/bytedance/private", prompt)
-        self.assertNotIn("t_governance_task", prompt)
+        self.assertNotIn("example-secret-value", prompt)
+        self.assertNotIn("/tmp/example-project", prompt)
+        self.assertNotIn("example_task", prompt)
         self.assertIn("<secret>", prompt)
         self.assertIn("<path>", prompt)
         self.assertIn("<identifier>", prompt)
@@ -109,7 +109,7 @@ class MemoryDraftTest(unittest.TestCase):
     def test_openai_quality_gate_skips_obvious_tool_recipe(self) -> None:
         with mock.patch("memagent.draft.chat_completion") as chat_completion:
             draft = draft_memory(
-                "bytedcli rds db table schema demo_db demo_table --region cn。"
+                "git database db table schema demo_db demo_table --region cn。"
                 "排查前先执行这个命令，再看 live schema。",
                 provider="openai-compatible",
             )

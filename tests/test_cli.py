@@ -34,6 +34,64 @@ class CliTest(unittest.TestCase):
         self.assertTrue(payload["configured"])
         self.assertNotIn("test-key", stdout.getvalue())
 
+    def test_configure_local_only_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.json"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(["configure", "--mode", "heuristic", "--config", str(config)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("LLM: disabled", stdout.getvalue())
+            self.assertIn('"semantic_mode": "heuristic"', config.read_text(encoding="utf-8"))
+
+    def test_configure_can_activate_existing_profile_without_reentering_provider_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.json"
+            with redirect_stdout(StringIO()):
+                first_code = main(
+                    [
+                        "configure", "--mode", "hybrid", "--profile", "deepseek",
+                        "--base-url", "https://api.example.test/v1", "--model", "demo-model",
+                        "--api-key-env", "DEEPSEEK_API_KEY", "--config", str(config),
+                    ]
+                )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                switch_code = main(
+                    [
+                        "configure", "--mode", "llm", "--profile", "deepseek",
+                        "--use-profile", "--config", str(config),
+                    ]
+                )
+            config_content = config.read_text(encoding="utf-8")
+
+        self.assertEqual(first_code, 0)
+        self.assertEqual(switch_code, 0)
+        self.assertIn("active profile: deepseek", stdout.getvalue())
+        self.assertIn('"semantic_mode": "llm"', config_content)
+
+    def test_default_report_workspace_expands_home_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_result = mock.Mock(
+                workspace=Path(tmp) / ".memagent" / "reports" / "recall_eval",
+                project_dir=Path(tmp) / "project",
+                memory_home=Path(tmp) / ".memagent",
+                report_path=Path(tmp) / ".memagent" / "reports" / "recall_eval" / "report.md",
+                strategy_results=(),
+            )
+            with mock.patch.dict(os.environ, {"HOME": tmp}, clear=False), mock.patch(
+                "memagent.cli.run_recall_eval", return_value=fake_result
+            ) as run_recall_eval:
+                with redirect_stdout(StringIO()):
+                    exit_code = main(["recall-eval"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            run_recall_eval.call_args.kwargs["workspace"],
+            Path(tmp) / ".memagent" / "reports" / "recall_eval",
+        )
+
     def test_llm_doctor_profile_json_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "llm_profiles.json"
@@ -89,7 +147,7 @@ class CliTest(unittest.TestCase):
                         "process",
                         "这个入口下次别忘了",
                         "--recent-text",
-                        "bytedcli rds db table schema demo_db demo_table --region cn",
+                        "git database db table schema demo_db demo_table --region cn",
                         "--cwd",
                         str(project),
                         "--json",
@@ -226,14 +284,14 @@ class CliTest(unittest.TestCase):
                             str(home),
                             "remember",
                             "--topic",
-                            "audit_rule_lib owner entrypoint",
+                            "example_service maintainer entrypoint",
                             "--kind",
                             "data_entrypoint",
                             "--trigger",
-                            "audit_rule_lib",
+                            "example_service",
                             "--trigger",
-                            "owner",
-                            "Before audit_rule_lib owner debugging, check live RDS schema first.",
+                            "maintainer",
+                            "Before example_service maintainer debugging, check live database schema first.",
                         ]
                     )
                 self.assertEqual(remember_code, 0)
@@ -247,7 +305,7 @@ class CliTest(unittest.TestCase):
                             "codex",
                             "--dry-run",
                             "--no-trace",
-                            "帮我排查 audit_rule_lib owner 问题，先按你觉得最省时间的方式来",
+                            "帮我排查 example_service maintainer 问题，先按你觉得最省时间的方式来",
                         ]
                     )
             finally:
@@ -256,7 +314,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(codex_code, 0)
         rendered = stdout.getvalue()
         self.assertIn("[MemAgent recalled context]", rendered)
-        self.assertIn("Before audit_rule_lib owner debugging", rendered)
+        self.assertIn("Before example_service maintainer debugging", rendered)
         self.assertIn("[User task]", rendered)
 
     def test_codex_dry_run_no_memory_keeps_prompt(self) -> None:
@@ -279,7 +337,7 @@ class CliTest(unittest.TestCase):
                     [
                         "draft",
                         "memory",
-                        "这个 bytedcli 查 live schema 的入口下次别忘了：bytedcli rds db table schema demo_db demo_table --region cn。",
+                        "这个 git 查 live schema 的入口下次别忘了：git database db table schema demo_db demo_table --region cn。",
                         "--cwd",
                         str(project),
                         "--json",
@@ -305,7 +363,7 @@ class CliTest(unittest.TestCase):
                 exit_code = main(
                     [
                         "route",
-                        "帮我排查 audit_rule_lib 的 owner 问题，先按你觉得最省时间的方式来。",
+                        "帮我排查 example_service 的 maintainer 问题，先按你觉得最省时间的方式来。",
                         "--cwd",
                         str(project),
                         "--json",
@@ -337,12 +395,12 @@ class CliTest(unittest.TestCase):
                             str(home),
                             "remember",
                             "--topic",
-                            "RDS timeout pitfall",
+                            "database timeout pitfall",
                             "--kind",
                             "pitfall",
                             "--trigger",
-                            "RDS",
-                            "Use id ranges before RDS JSON grouping.",
+                            "database",
+                            "Use id ranges before database JSON grouping.",
                         ]
                     )
                 self.assertEqual(remember_code, 0)
@@ -354,7 +412,7 @@ class CliTest(unittest.TestCase):
                             "--home",
                             str(home),
                             "recall",
-                            "RDS JSON timeout",
+                            "database JSON timeout",
                             "--show-sources",
                             "--show-reasons",
                             "--json",
@@ -366,9 +424,9 @@ class CliTest(unittest.TestCase):
 
             payload = json.loads(recall_stdout.getvalue())
             self.assertEqual(payload["schema_version"], "memagent.recall.v1")
-            self.assertEqual(payload["query"], "RDS JSON timeout")
+            self.assertEqual(payload["query"], "database JSON timeout")
             self.assertEqual(payload["context"]["repo_name"], "project")
-            self.assertEqual(payload["matches"][0]["title"], "RDS timeout pitfall")
+            self.assertEqual(payload["matches"][0]["title"], "database timeout pitfall")
             self.assertEqual(payload["matches"][0]["kind"], "pitfall")
             self.assertIn("Pack:", payload["text"])
             self.assertFalse(payload["pack"]["truncated"])
@@ -395,7 +453,7 @@ class CliTest(unittest.TestCase):
                                 "Owner skill route",
                                 "--kind",
                                 "skill_route",
-                                "Use task-owner-diagnose before manual owner tracing.",
+                                "Use diagnostics helper before manual maintainer tracing.",
                             ]
                         ),
                         0,
@@ -408,7 +466,7 @@ class CliTest(unittest.TestCase):
                             "--home",
                             str(home),
                             "recall",
-                            "owner tracing",
+                            "maintainer tracing",
                             "--trace",
                         ]
                     )

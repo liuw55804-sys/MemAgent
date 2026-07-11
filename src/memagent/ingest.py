@@ -12,7 +12,7 @@ from memagent.memory import quote_yaml
 
 
 DEFAULT_CODEX_SESSIONS_ROOT = "~/.codex/sessions"
-DEFAULT_CODEX_INGEST_WORKSPACE = "local_memory_demo/ingest_codex"
+DEFAULT_CODEX_INGEST_WORKSPACE = "~/.memagent/ingest_codex"
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,7 @@ def render_codex_ingest_report(result: CodexIngestResult) -> str:
 def render_ingest_candidate(candidate: IngestCandidate) -> str:
     trigger_args = " ".join(f"--trigger {quote_yaml(trigger)}" for trigger in candidate.triggers[:5])
     remember_command = (
-        "PYTHONPATH=src python -m memagent.cli remember "
+        "memagent remember "
         f"--kind {quote_yaml(candidate.kind)} "
         f"--topic {quote_yaml(candidate.title)} "
         f"{trigger_args} "
@@ -430,8 +430,8 @@ def _command_memory(command: str, *, payload: dict[str, object], exit_code: int 
         if error_line:
             return f"Command `{command}` failed with `{error_line}`; record the failure before retrying this path."
         return f"Command `{command}` failed; treat this as a pitfall and inspect the failure before repeating it."
-    if "bytedcli" in command.lower():
-        return f"Reusable bytedcli recipe from Codex session: `{command}`."
+    if any(tool in command.lower() for tool in ("git ", "docker", "kubectl", "pytest", "curl")):
+        return f"Reusable command recipe from Codex session: `{command}`."
     if "memagent" in command.lower():
         return f"Reusable MemAgent workflow command from Codex session: `{command}`."
     return f"Reusable command from Codex session: `{command}`."
@@ -461,7 +461,7 @@ def _text_kind(text: str) -> str:
         return "pitfall"
     if any(word in lower for word in ("verify", "verified", "test", "验证", "自测", "通过")):
         return "verification"
-    if any(word in lower for word in ("command", "recipe", "bytedcli", "curl", "命令", "用法")):
+    if any(word in lower for word in ("command", "recipe", "git", "docker", "curl", "命令", "用法")):
         return "tool_recipe"
     return "workflow"
 
@@ -471,7 +471,7 @@ def _interesting_command(command: str) -> bool:
     return any(
         keyword in lower
         for keyword in (
-            "bytedcli",
+            "git",
             "memagent",
             "mcp",
             "agents-install",
@@ -479,8 +479,8 @@ def _interesting_command(command: str) -> bool:
             "trace replay",
             "trace eval",
             "handoff",
-            "rds",
-            "bam",
+            "database",
+            "service-cli",
             "curl",
             "go test",
             "pytest",
@@ -520,11 +520,11 @@ def _has_lesson_signal(text: str) -> bool:
 def _command_score(command: str, exit_code: int | None) -> int:
     score = 40
     lower = command.lower()
-    if "bytedcli" in lower:
+    if "git" in lower or "docker" in lower or "kubectl" in lower:
         score += 35
     if "memagent" in lower:
         score += 25
-    if "rds" in lower or "bam" in lower:
+    if "database" in lower or "service-cli" in lower:
         score += 20
     if exit_code not in (None, 0):
         score += 25

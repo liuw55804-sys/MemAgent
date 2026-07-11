@@ -22,7 +22,7 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
     def test_project_without_agents_md_keeps_git_clean_through_memory_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            project = root / "audit_rule_lib"
+            project = root / "example_service"
             project.mkdir()
             _git(project, "init")
             _git(project, "config", "user.email", "memagent@example.test")
@@ -42,18 +42,18 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
             self.assertFalse((project / "AGENTS.md").exists())
 
             store.remember(
-                text="Check the live RDS schema before tracing an audit_rule_lib owner issue.",
-                topic="audit_rule_lib live schema",
+                text="Check the live database schema before tracing an example_service maintainer issue.",
+                topic="example_service live schema",
                 domain="coding",
                 kind="data_entrypoint",
                 repo=context.repo_name,
                 module=None,
-                triggers=["audit_rule_lib", "owner", "schema"],
+                triggers=["example_service", "maintainer", "schema"],
                 exportable=False,
             )
 
             recalled = process_interaction(
-                message="之前 audit_rule_lib owner 问题怎么查？先按靠谱路径来。",
+                message="之前 example_service maintainer 问题怎么查？先按靠谱路径来。",
                 recent_text="",
                 context=context,
                 store=store,
@@ -74,7 +74,7 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
 
             draft = process_interaction(
                 message="记住这次踩坑，先给我看预览。",
-                recent_text="audit_rule_lib owner 排查前先查 live RDS schema，再看 DAL 和调用链。",
+                recent_text="example_service maintainer 排查前先查 live database schema，再看 DAL 和调用链。",
                 context=context,
                 store=store,
                 handoff_store=handoffs,
@@ -134,7 +134,7 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
     def test_llm_quality_draft_in_temporary_git_project_keeps_project_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            project = root / "audit_rule_lib"
+            project = root / "example_service"
             project.mkdir()
             _git(project, "init")
             _git(project, "config", "user.email", "memagent@example.test")
@@ -176,7 +176,7 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
                 )
                 draft = process_interaction(
                     message="记住这个用户习惯，先给我预览。",
-                    recent_text="用户习惯：在 audit_rule_lib 只改当前需求相关代码；默认不新增 docs 或 tasks；方案放到个人笔记目录。",
+                    recent_text="用户习惯：在 example_service 只改当前需求相关代码；默认不新增 docs 或 tasks；方案放到个人笔记目录。",
                     context=context,
                     store=store,
                     handoff_store=handoffs,

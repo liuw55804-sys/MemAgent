@@ -1,108 +1,26 @@
 # Changelog
 
-All notable MemAgent changes should be recorded here.
+All notable public changes are recorded here.
 
-## Unreleased
+## 0.1.0 - Unreleased
 
-Added:
+First public-release candidate.
 
-- `remember --domain` and `remember --kind` for typed memory cards.
-- `domain` and `kind` fields in newly written memory cards.
-- Recall output now labels matches as `[domain/kind]`.
-- Backward-compatible recall for old cards without `domain` or `kind`.
-- `agents-snippet` command to generate AGENTS.md natural-language trigger rules.
-- `agents-install` command to preview or write the MemAgent AGENTS.md block with managed markers.
-- `recall --show-reasons` and `codex --show-reasons` to display simple recall scores and matched query terms.
-- `agents-doctor` command to inspect whether the current project AGENTS.md has MemAgent recall/remember integration.
-- `demo-run` command to create an isolated mock project and write a shareable AGENTS.md integration transcript.
-- `mcp-stdio` command exposing MemAgent recall, remember, and AGENTS.md doctor as MCP tools over stdio.
-- BM25-style recall scoring as the default strategy, with `--strategy keyword` retained as a baseline.
-- `recall-eval` command to run a mock retrieval benchmark and write a Markdown report.
-- `handoff save/show` commands for per-project cross-session catch-up.
-- `handoff draft --from-file` to generate a reviewable handoff draft from session notes before saving.
-- `handoff promote` command to preview or write handoff memory candidates as durable memory cards.
-- `demo-bundle` command to generate a shareable interview demo entrypoint from mock data.
-- `mcp-demo` command to generate a local MCP JSON-RPC transcript from mock data.
-- MCP tools for saving and showing project handoffs.
-- MCP tool for drafting and optionally saving handoffs from session text.
-- MCP tool for promoting handoff memory candidates.
-- MCP tool annotations for read-only/write-capable, destructive, idempotent, and open-world behavior hints.
-- Context packing in recall output, including memory budget, dedupe count, and truncation status.
-- `recall --json` structured recall output with the `memagent.recall.v1` schema.
-- MCP `memagent_recall` `format=json` output for agent-consumable recall payloads.
-- `recall --trace` and `trace list/show` for opt-in local recall telemetry.
-- `trace label` and `trace report` for real-use recall feedback summaries.
-- `trace eval` command to write a Markdown evaluation report from real labeled recall traces.
-- `trace replay` command to replay saved trace queries against current retrievers.
-- `ingest codex` command to draft review-only memory candidates from local Codex session JSONL files.
-- AGENTS.md natural-language trigger rules for recall trace feedback.
-- MCP trace tools for list/show/label/report/eval/replay over saved recall traces.
-- Expanded competitive scan documentation for positioning MemAgent against related coding-agent memory projects.
-- v0.10 competitive-positioning design note for avoiding an agentmemory-lite roadmap.
-- v0.11 handoff design note for separating recent continuation state from durable workflow memory.
-- v0.12 handoff draft design note for draft-review-save capture.
-- v0.13 handoff promotion design note for memory lifecycle promotion.
-- v0.14 MCP annotations design note for protocol-aware tool safety hints.
-- v0.15 context packing design note for budgeted prompt patches.
-- v0.16 structured recall design note for stable agent-consumable output.
-- v0.17 recall traces design note for real-use recall telemetry.
-- v0.18 trace feedback design note for closing the recall evaluation loop.
-- v0.19 trace feedback integration design note for AGENTS.md and MCP surfaces.
-- v0.20 trace feedback eval design note for generating reviewable real-use eval artifacts.
-- v0.21 demo bundle design note for tying AGENTS.md, RAG, MCP, and trace feedback evidence together.
-- v0.22 MCP demo transcript design note for protocol-level MCP evidence.
-- v0.23 trace replay design note for lightweight retriever regression evaluation.
-- v0.24 landscape refresh comparing agentmemory, ai-memory, Reference, cccmemory, Headroom, Basic Memory, and mind.
-- v0.25 Codex transcript ingest design note for human-in-the-loop memory candidate review.
-- v0.25 Codex thread self-test playbook for product-style acceptance testing.
-- v0.26 Codex-native Memory UX plan and natural-language self-test playbook.
-- v0.27 LLM-assisted router design note for classifying natural Codex interactions.
-- v0.28 memory draft design note for reviewable memory rewriting and quality labels.
-- v0.29 natural interaction processor design note for route-and-handle Codex memory UX.
-- v0.30 LLM provider readiness design note for OpenAI-compatible API checks.
-- v0.30 self-test playbook for config-only and optional live LLM provider checks.
-- v0.31 process-first Codex wrapper design note.
-- Process traces for every `process` action so product self-tests can be reconstructed from local action logs.
-- Reproducible Codex AGENTS.md integration demo using an isolated local memory home.
+- Local-first memory cards, recall, preview-before-save, handoffs, and local
+  activity evidence.
+- Zero-intrusion user-level Codex Skill installed with
+  `memagent install-user-codex --write`.
+- Optional OpenAI-compatible semantic routing with `heuristic`, `llm`, and
+  `hybrid` modes. Local heuristic routing remains the default.
+- `memagent configure` and `memagent llm doctor` keep API keys in environment
+  variables rather than configuration files.
+- Build metadata, CI checks, contributor guidance, security policy, code of
+  conduct, and Apache-2.0 licensing for public distribution.
 
-Changed:
+Fixed:
 
-- Recall now requires user-query matches before applying repo-scope bonus, reducing unrelated same-repo matches.
-- Chinese query tokenization now includes lightweight 2-4 character n-grams for partial phrase matching.
-- v0.3 design now focuses on Codex natural-language integration through AGENTS.md snippets.
-- Generated AGENTS.md recall commands now include `--show-sources --show-reasons` for more transparent demos and debugging.
-- Generated AGENTS.md snippets now include managed Markdown markers for safe replacement by `agents-install`.
-- Demo documentation now points to the generated transcript flow as the fastest presentation path.
-- Generated AGENTS.md recall commands now explicitly use `--strategy bm25`.
-- Generated AGENTS.md snippets now include handoff/catch-up natural-language triggers.
-- Generated AGENTS.md snippets now recommend draft-first handoff capture when a session note file is available.
-- Generated AGENTS.md snippets now include handoff candidate promotion triggers.
-- Generated AGENTS.md snippets now treat MemAgent as a background Codex helper: task-start memory checks use `recall --trace`, ordinary feedback can label traces, and `trace eval/replay` are framed as developer reports.
-- `route` command and `memagent_route` MCP tool classify ordinary Codex messages into recall, memory draft, feedback label, handoff, developer eval, or no-op recommendations.
-- `draft memory` command and `memagent_memory_draft` MCP tool produce reviewable memory previews with keep/revise/reject quality labels.
-- `process` command and `memagent_process` MCP tool route and execute safe interaction actions while keeping durable memory writes behind confirmation.
-- `llm doctor` command and `memagent_llm_doctor` MCP tool check OpenAI-compatible provider readiness without printing API keys.
-- Local LLM provider profiles can be used by `llm doctor`, `route`, `draft memory`, `process`, and `codex`.
-- `codex` command now runs MemAgent process preflight instead of hard-coding recall-first behavior.
-- v0.31 self-test now relies on actionable `process_traces/` plus natural chat feedback instead of manual product scorecards; no-op traces are debug-only.
-
-## v0.1.0-mvp - 2026-06-23
-
-MVP baseline for local Codex workflow memory.
-
-Added:
-
-- Local CLI commands: `remember`, `recall`, and `codex`.
-- YAML memory cards stored under `~/.memagent/memories`.
-- Project context detection for cwd, git root, branch, recent files, and AGENTS files.
-- Keyword-based recall and short context composition.
-- Codex wrapper that prepends recalled context to the user prompt.
-- Product plan, AGENTS integration notes, and technical walkthrough docs.
-- Unit tests for memory storage, prompt wrapping, and CLI remainder handling.
-
-Known limitations:
-
-- `ingest` is not implemented yet.
-- Vector retrieval and rerank are not implemented yet.
-- Memory cards are written as YAML text but not parsed structurally during recall.
-- LLM-assisted extraction, compression, conflict detection, and lifecycle evaluation are future work.
+- Questions about prior user coding preferences, habits, and project
+  conventions now route to recall. Preference intent also adds local retrieval
+  hints so a project-scoped preference can be found across common phrasing.
+- Hybrid mode now uses an optional, sanitized LLM recall-likelihood estimate
+  for low-confidence recall decisions before local retrieval.

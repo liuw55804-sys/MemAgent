@@ -169,8 +169,9 @@ class MemoryStore:
         context: ProjectContext,
         limit: int,
         strategy: str = DEFAULT_RECALL_STRATEGY,
+        semantic_hints: tuple[str, ...] = (),
     ) -> list[MemoryMatch]:
-        terms = _tokenize(query)
+        terms = _tokenize(" ".join(part for part in (query, *semantic_hints) if part))
         if not terms:
             return []
         normalized_strategy = normalize_recall_strategy(strategy)
@@ -590,7 +591,7 @@ def _render_memory_card(
             "triggers:",
             trigger_block or "  - unknown",
             "stable_facts:",
-            "  - Review the original note before turning this into a durable AGENTS.md rule.",
+            "  - Review the original note before turning this into a durable project rule.",
             "tool_recipes: []",
             "pitfalls:",
             f"  - {quote_yaml(text.strip())}",
@@ -599,7 +600,7 @@ def _render_memory_card(
             "agents_md_suggestion:",
             "  - Keep this as MemAgent memory unless it becomes a stable project rule.",
             "sensitivity:",
-            "  level: internal",
+            "  level: private",
             f"  exportable: {'true' if exportable else 'false'}",
             "source_note: |",
             note_block,

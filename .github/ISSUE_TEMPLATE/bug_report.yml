@@ -1,0 +1,19 @@
+name: Bug report
+description: Report a reproducible MemAgent problem
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Do not include secrets, private paths, or full transcripts.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Minimal reproduction
+      description: Include sanitized commands and expected behavior.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: MemAgent version

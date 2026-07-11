@@ -9,6 +9,25 @@ description = "A local workflow memory layer for Codex and other coding agents."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
+license = "Apache-2.0"
+authors = [{ name = "MemAgent contributors" }]
+keywords = ["codex", "agent", "memory", "local-first", "developer-tools"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://github.com/liuw55804-sys/MemAgent"
+Source = "https://github.com/liuw55804-sys/MemAgent"
+Issues = "https://github.com/liuw55804-sys/MemAgent/issues"
 
 [project.scripts]
 memagent = "memagent.cli:main"
@@ -16,3 +35,5 @@ memagent = "memagent.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+memagent = ["resources/*.md"]

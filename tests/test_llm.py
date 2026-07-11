@@ -9,7 +9,14 @@ import threading
 import unittest
 from unittest import mock
 
-from memagent.llm import LLM_DOCTOR_SCHEMA_VERSION, check_llm_provider, render_llm_doctor
+from memagent.llm import (
+    LLM_DOCTOR_SCHEMA_VERSION,
+    check_llm_provider,
+    configure_semantic_mode,
+    load_semantic_config,
+    render_llm_doctor,
+    sanitize_llm_text,
+)
 
 
 class LlmDoctorTest(unittest.TestCase):
@@ -24,7 +31,7 @@ class LlmDoctorTest(unittest.TestCase):
         self.assertIn("MEMAGENT_LLM_BASE_URL", payload["missing_env"])
         self.assertIn("MEMAGENT_LLM_API_KEY", payload["missing_env"])
         self.assertIn("MEMAGENT_LLM_MODEL", payload["missing_env"])
-        self.assertIn("Set these environment variables", render_llm_doctor(result))
+        self.assertIn("next: set MEMAGENT_LLM_BASE_URL", render_llm_doctor(result))
 
     def test_configured_without_live_check_does_not_call_api(self) -> None:
         with mock.patch.dict(
@@ -99,6 +106,94 @@ class LlmDoctorTest(unittest.TestCase):
         self.assertTrue(payload["live_checked"])
         self.assertTrue(payload["live_ok"])
         self.assertEqual(payload["chat_completions_url"], f"{base_url}/chat/completions")
+
+    def test_configure_writes_environment_variable_name_not_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            saved = configure_semantic_mode(
+                mode="hybrid",
+                profile="local",
+                base_url="http://127.0.0.1:1234/v1",
+                model="local-model",
+                api_key_env="LOCAL_MODEL_TOKEN",
+                allow_no_key=True,
+                config_path=path,
+            )
+            raw = saved.read_text(encoding="utf-8")
+            settings = load_semantic_config(config_path=path)
+
+        self.assertEqual(settings["semantic_mode"], "hybrid")
+        self.assertEqual(settings["profiles"]["local"]["api_key_env"], "LOCAL_MODEL_TOKEN")
+        self.assertNotIn("test-key", raw)
+        self.assertNotIn("api_key\"", raw)
+
+    def test_local_compatible_profile_can_run_without_a_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            configure_semantic_mode(
+                mode="llm",
+                base_url="http://127.0.0.1:1234/v1",
+                model="local-model",
+                allow_no_key=True,
+                config_path=path,
+            )
+            with mock.patch.dict(os.environ, {}, clear=True):
+                result = check_llm_provider(config_path=path)
+
+        self.assertTrue(result.configured)
+        self.assertTrue(result.allow_no_key)
+        self.assertFalse(result.api_key_set)
+
+    def test_new_config_named_profile_is_available_to_doctor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            configure_semantic_mode(
+                mode="hybrid",
+                profile="local",
+                base_url="http://127.0.0.1:1234/v1",
+                model="local-model",
+                allow_no_key=True,
+                config_path=path,
+            )
+            result = check_llm_provider(profile="local", config_path=path)
+
+        self.assertTrue(result.configured)
+        self.assertEqual(result.profile, "local")
+        self.assertEqual(result.config_path, str(path))
+
+    def test_doctor_reports_configured_custom_key_environment_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            configure_semantic_mode(
+                mode="hybrid",
+                profile="deepseek",
+                base_url="https://api.example.test/v1",
+                model="demo-model",
+                api_key_env="DEEPSEEK_API_KEY",
+                config_path=path,
+            )
+            with mock.patch.dict(os.environ, {}, clear=True):
+                result = check_llm_provider(config_path=path)
+
+        payload = result.to_payload()
+        self.assertFalse(payload["configured"])
+        self.assertEqual(payload["api_key_env"], "DEEPSEEK_API_KEY")
+        self.assertEqual(payload["missing_env"], ["DEEPSEEK_API_KEY"])
+        self.assertIn("DEEPSEEK_API_KEY", render_llm_doctor(result))
+
+    def test_sanitize_llm_text_redacts_paths_urls_secrets_and_identifiers(self) -> None:
+        sanitized = sanitize_llm_text(
+            "inspect /tmp/example-project and https://example.test/x with token=example-secret-value for example_identifier_42"
+        )
+
+        self.assertNotIn("/tmp/example-project", sanitized)
+        self.assertNotIn("https://example.test", sanitized)
+        self.assertNotIn("example-secret-value", sanitized)
+        self.assertNotIn("example_identifier_42", sanitized)
+        self.assertIn("<path>", sanitized)
+        self.assertIn("<url>", sanitized)
+        self.assertIn("<secret>", sanitized)
+        self.assertIn("<identifier>", sanitized)
 
 
 class _FakeOpenAIHandler(BaseHTTPRequestHandler):

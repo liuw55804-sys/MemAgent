@@ -53,9 +53,7 @@ def default_memagent_root() -> Path:
 
 
 def build_agents_snippet(memagent_root: Path | None = None) -> str:
-    root = (memagent_root or default_memagent_root()).expanduser().resolve()
-    src_path = root / "src"
-    command_prefix = f"PYTHONPATH={src_path} python -m memagent.cli"
+    command_prefix = "memagent"
     body = textwrap.dedent(
         f"""
         ## MemAgent Natural Language Signals
@@ -118,8 +116,8 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
 
         - `有没有以前踩过类似坑`
         - `之前是不是查过这个`
-        - `又要查 bytedcli / RDS / owner`
-        - `继续排查 audit_rule_lib`
+        - `又要运行类似的命令`
+        - `继续排查这个项目`
         - `类似上次那个问题`
         - `先按你觉得最省时间的方式来`
 
@@ -175,7 +173,7 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
 
         Kind guide:
 
-        - `tool_recipe`: reusable CLI/MCP/bytedcli command or tool usage
+        - `tool_recipe`: reusable CLI, MCP, or tool usage
         - `skill_route`: use an existing skill for a task family
         - `data_entrypoint`: database, table, API, config, or doc entrypoint
         - `pitfall`: failed path or repeated mistake to avoid
@@ -260,8 +258,8 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} ingest codex --limit 5 --project-only
         ```
 
-        This writes Markdown candidates under `local_memory_demo/ingest_codex`
-        by default. Review and edit candidates before saving any durable memory
+        This writes Markdown candidates under the local MemAgent home by
+        default. Review and edit candidates before saving any durable memory
         with `remember`.
 
         ### Promote Handoff Candidates
@@ -349,7 +347,7 @@ def build_agents_doctor_report(
     memagent_root: Path | None = None,
 ) -> str:
     root = (memagent_root or default_memagent_root()).expanduser().resolve()
-    command_prefix = f"PYTHONPATH={root / 'src'} python -m memagent.cli"
+    command_prefix = "memagent"
     checks = [_check_agents_file(path) for path in context.agents_files]
     ready = any(check.is_ready for check in checks)
 
@@ -384,7 +382,7 @@ def build_agents_doctor_report(
                 "- Status: ready",
                 (
                     '- Next step: in Codex, ask a normal project question like '
-                    '"继续排查 audit_rule_lib 的 owner 问题" or "上次做到哪"; '
+                    '"继续排查这个问题" or "上次做到哪"; '
                     "MemAgent should stay in the background unless it helps."
                 ),
             ]
@@ -519,10 +517,10 @@ def _check_agents_file(path: Path) -> AgentsFileCheck:
             "Natural Language Signals" in raw
             or "Natural Language Triggers" in raw
         ),
-        has_recall_command="memagent.cli recall" in raw,
-        has_remember_command="memagent.cli remember" in raw,
-        has_handoff_command="memagent.cli handoff" in raw,
-        has_trace_command="memagent.cli trace" in raw,
+        has_recall_command="memagent recall" in raw,
+        has_remember_command="memagent remember" in raw,
+        has_handoff_command="memagent handoff" in raw,
+        has_trace_command="memagent trace" in raw,
         has_explainable_recall="--show-reasons" in raw,
         has_bm25_strategy="--strategy bm25" in raw,
     )

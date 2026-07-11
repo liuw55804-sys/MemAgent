@@ -10,6 +10,7 @@ from memagent.context import ProjectContext
 from memagent.draft import draft_memory, render_memory_draft
 from memagent.eval import run_trace_eval, run_trace_replay
 from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
+from memagent.llm import default_semantic_mode
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.router import RouteDecision, route_interaction
 
@@ -56,6 +57,7 @@ def process_interaction(
     store: MemoryStore,
     handoff_store: HandoffStore,
     provider: str = "heuristic",
+    semantic_mode: str | None = None,
     llm_profile: str | None = None,
     llm_config_path: Path | None = None,
     draft_provider: str | None = None,
@@ -77,12 +79,16 @@ def process_interaction(
         recent_text=recent_text,
         context=context,
         provider=provider,
+        semantic_mode=semantic_mode,
         llm_profile=llm_profile,
         llm_config_path=llm_config_path,
         has_recent_trace=_has_recent_trace(store),
         has_pending_draft=store.has_pending_memory_draft(context=context),
     )
-    effective_draft_provider = draft_provider or os.environ.get("MEMAGENT_DRAFT_PROVIDER") or provider
+    active_mode = semantic_mode or default_semantic_mode()
+    effective_draft_provider = draft_provider or os.environ.get("MEMAGENT_DRAFT_PROVIDER") or (
+        "openai-compatible" if active_mode in {"llm", "hybrid"} else provider
+    )
     effective_draft_profile = draft_llm_profile or os.environ.get("MEMAGENT_DRAFT_LLM_PROFILE") or llm_profile
     effective_draft_config = draft_llm_config_path or llm_config_path
 
@@ -233,7 +239,14 @@ def _process_recall(
     strategy: str,
 ) -> ProcessResult:
     query = route.query or route.user_message
-    matches = store.recall(query, context=context, limit=limit, strategy=strategy)
+    semantic_hints = _semantic_recall_hints(route)
+    matches = store.recall(
+        query,
+        context=context,
+        limit=limit,
+        strategy=strategy,
+        semantic_hints=semantic_hints,
+    )
     payload = store.build_recall_payload(
         query=query,
         context=context,
@@ -244,6 +257,9 @@ def _process_recall(
     )
     writes: list[str] = []
     artifacts: dict[str, Any] = {"matches": len(matches)}
+    if semantic_hints:
+        payload["retrieval_hints"] = list(semantic_hints)
+        artifacts["retrieval_hints"] = list(semantic_hints)
     output_payload = payload
     if allow_writes and trace_recall:
         saved = store.save_recall_trace(payload, source="process")
@@ -270,6 +286,20 @@ def _process_recall(
         writes=tuple(writes),
         warnings=(),
         payload=output_payload,
+    )
+
+
+def _semantic_recall_hints(route: RouteDecision) -> tuple[str, ...]:
+    if "user_preference" not in route.signals:
+        return ()
+    return (
+        "preference",
+        "habit",
+        "convention",
+        "用户偏好",
+        "用户习惯",
+        "开发习惯",
+        "协作约束",
     )
 
 

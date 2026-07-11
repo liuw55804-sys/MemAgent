@@ -25,7 +25,7 @@ class DemoRunTest(unittest.TestCase):
             self.assertIn(MEMAGENT_BLOCK_START, (result.project_dir / "AGENTS.md").read_text(encoding="utf-8"))
             self.assertEqual(len(list((result.memory_home / "memories").glob("*.memory.yaml"))), 2)
             self.assertIn("Status: ready", result.transcript)
-            self.assertIn("Demo attribution accuracy entrypoint", result.transcript)
+            self.assertIn("Demo validation accuracy entrypoint", result.transcript)
             self.assertIn("Demo continuation handoff", result.transcript)
             self.assertIn("[MemAgent codex ingest]", result.transcript)
             self.assertIn("Promote handoff memory candidate", result.transcript)

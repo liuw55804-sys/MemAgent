@@ -28,15 +28,15 @@ from memagent.mcp import MCP_PROTOCOL_VERSION, McpServer, tool_definitions
 from memagent.wrapper import build_augmented_prompt
 
 
-DEMO_QUERY = "先看看之前有没有 attribution accuracy 的相关经验"
-DEMO_CODEX_PROMPT = "我要继续排查 demo 服务 attribution accuracy，先给我一个排查计划"
+DEMO_QUERY = "先看看之前有没有 validation accuracy 的相关经验"
+DEMO_CODEX_PROMPT = "我要继续排查 demo 服务 validation accuracy，先给我一个排查计划"
 DEMO_MEMORY = (
-    "For demo attribution accuracy checks, start from the audit_label snapshot "
+    "For demo validation accuracy checks, start from the audit_label snapshot "
     "table, sample by primary-key ranges, then compare model output with "
     "human-reviewed labels. Avoid full-table JSON aggregation before sampling."
 )
 DEMO_HANDOFF = (
-    "Demo session wired AGENTS.md, saved one attribution accuracy memory, and "
+    "Demo session wired AGENTS.md, saved one validation accuracy memory, and "
     "verified recall plus Codex prompt patch. Next session should extend the "
     "demo with handoff/catch-up before adding automatic hooks."
 )
@@ -47,7 +47,7 @@ DEMO_SESSION_NOTES = "\n".join(
         "",
         "## Done",
         "- Installed MemAgent AGENTS.md block.",
-        "- Saved one mock attribution accuracy memory.",
+        "- Saved one mock validation accuracy memory.",
         "- Verified recall with sources and reasons.",
         "",
         "## Next Steps",
@@ -78,7 +78,7 @@ DEMO_CODEX_SESSION_RECORDS = (
         "payload": {
             "type": "exec_command",
             "cwd": "{project_dir}",
-            "command": "bytedcli rds query --db demo_attribution --sql 'select case_id, owner from audit_owner_snapshot limit 20'",
+            "command": "git database query --db demo_project --sql 'select case_id, maintainer from example_snapshot limit 20'",
             "exit_code": 0,
         },
     },
@@ -91,7 +91,7 @@ DEMO_CODEX_SESSION_RECORDS = (
             "content": [
                 {
                     "type": "text",
-                    "text": "沉淀一下：下次做 attribution accuracy demo 时，先展示 Codex transcript ingest 生成候选记忆，再由用户决定是否 remember。",
+                    "text": "沉淀一下：下次做 validation accuracy demo 时，先展示 Codex transcript ingest 生成候选记忆，再由用户决定是否 remember。",
                 }
             ],
         },
@@ -102,7 +102,7 @@ DEMO_CODEX_SESSION_RECORDS = (
         "payload": {
             "type": "exec_command",
             "cwd": "{project_dir}",
-            "command": "PYTHONPATH=src python -m memagent.cli trace replay --limit 10",
+            "command": "memagent trace replay --limit 10",
             "exit_code": 0,
         },
     },
@@ -211,12 +211,12 @@ def run_demo(
 
     saved = store.remember(
         text=DEMO_MEMORY,
-        topic="Demo attribution accuracy entrypoint",
+        topic="Demo validation accuracy entrypoint",
         domain="coding",
         kind="data_entrypoint",
         repo="demo_service",
-        module="attribution",
-        triggers=["attribution", "accuracy", "audit_label"],
+        module="validation",
+        triggers=["validation", "accuracy", "audit_label"],
         exportable=True,
     )
     steps.append(
@@ -224,9 +224,9 @@ def run_demo(
             title="Remember a workflow memory",
             command=(
                 f"{command_prefix} remember --domain coding --kind data_entrypoint "
-                '--repo demo_service --module attribution '
-                '--topic "Demo attribution accuracy entrypoint" '
-                "--trigger attribution --trigger accuracy --trigger audit_label "
+                '--repo demo_service --module validation '
+                '--topic "Demo validation accuracy entrypoint" '
+                "--trigger validation --trigger accuracy --trigger audit_label "
                 f"{_quote(DEMO_MEMORY)}"
             ),
             output=f"Saved memory: {saved.path}",
@@ -313,12 +313,12 @@ def run_demo(
     labeled_trace = store.label_recall_trace(
         structured_trace.identifier,
         rating="useful",
-        note="Demo recall found the intended attribution memory.",
+        note="Demo recall found the intended validation memory.",
     )
     steps.append(
         DemoStep(
             title="Label recall trace feedback",
-            command=f"{command_prefix} trace label {structured_trace.identifier} --rating useful --note {_quote('Demo recall found the intended attribution memory.')}",
+            command=f"{command_prefix} trace label {structured_trace.identifier} --rating useful --note {_quote('Demo recall found the intended validation memory.')}",
             output="\n".join(
                 [
                     "[MemAgent recall trace labeled]",
@@ -595,12 +595,12 @@ def run_mcp_demo(
                 "name": "memagent_remember",
                 "arguments": {
                     "text": DEMO_MEMORY,
-                    "topic": "MCP demo attribution accuracy entrypoint",
+                    "topic": "MCP demo validation accuracy entrypoint",
                     "domain": "coding",
                     "kind": "data_entrypoint",
                     "repo": "demo_service",
-                    "module": "attribution",
-                    "triggers": ["attribution", "accuracy", "audit_label"],
+                    "module": "validation",
+                    "triggers": ["validation", "accuracy", "audit_label"],
                     "exportable": True,
                     "cwd": str(project_dir),
                 },
@@ -941,7 +941,7 @@ def render_demo_bundle_report(
             "## Regenerate",
             "",
             "```bash",
-            f"PYTHONPATH=src python -m memagent.cli demo-bundle --workspace {_quote(regenerate_workspace)} --reset",
+            f"memagent demo-bundle --workspace {_quote(regenerate_workspace)} --reset",
             "```",
             "",
         ]
@@ -1061,10 +1061,8 @@ def _write_demo_codex_session(*, codex_sessions_root: Path, project_dir: Path) -
 
 
 def _command_prefix(*, root: Path, memory_home: Path) -> str:
-    return (
-        f"MEMAGENT_HOME={_quote(memory_home)} "
-        f"PYTHONPATH={_quote(root / 'src')} python -m memagent.cli"
-    )
+    del root
+    return f"MEMAGENT_HOME={_quote(memory_home)} memagent"
 
 
 def _quote(value: str | Path) -> str:

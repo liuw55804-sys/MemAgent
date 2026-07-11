@@ -17,6 +17,7 @@ from memagent.agents import (
 from memagent.activity import build_activity_report, render_activity_report
 from memagent.codex_skill import (
     build_user_codex_skill_plan,
+    render_user_codex_doctor,
     render_user_codex_skill_report,
     uninstall_user_codex_skill,
     write_user_codex_skill_plan,
@@ -38,7 +39,7 @@ from memagent.ingest import (
     run_codex_ingest,
 )
 from memagent.interaction import process_interaction, process_payload_json, render_process_result
-from memagent.llm import check_llm_provider, render_llm_doctor
+from memagent.llm import activate_semantic_profile, check_llm_provider, configure_semantic_mode, render_llm_doctor
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
 from memagent.router import render_route_decision, route_interaction
@@ -133,6 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Project directory for routing context. Defaults to the current working directory.",
     )
     route.add_argument(
+        "--semantic-mode",
+        choices=["heuristic", "llm", "hybrid"],
+        help="Semantic mode. Defaults to local config or heuristic.",
+    )
+    route.add_argument(
         "--recent-text",
         default="",
         help="Optional recent conversation excerpt for memory drafting decisions.",
@@ -173,6 +179,11 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument(
         "--cwd",
         help="Project directory for interaction context. Defaults to the current working directory.",
+    )
+    process.add_argument(
+        "--semantic-mode",
+        choices=["heuristic", "llm", "hybrid"],
+        help="Semantic mode. Defaults to local config or heuristic.",
     )
     process.add_argument(
         "--recent-text",
@@ -255,12 +266,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM provider to check. Default: openai-compatible.",
     )
     llm_doctor.add_argument(
-        "--profile",
-        help="Named provider profile from ~/.memagent/llm_providers.local.json.",
+        "--mode",
+        choices=["heuristic", "llm", "hybrid"],
+        help="Override the configured semantic mode for this report.",
     )
     llm_doctor.add_argument(
+        "--profile",
+        help="Named provider profile from ~/.memagent/config.json (legacy local profiles remain readable).",
+    )
+
+    configure = subparsers.add_parser(
+        "configure",
+        help="Configure local-only, optional LLM, or hybrid semantic routing without storing an API key.",
+    )
+    configure.add_argument("--mode", choices=["heuristic", "llm", "hybrid"], help="Semantic mode to save.")
+    configure.add_argument("--profile", default="default", help="Profile name for an OpenAI-compatible service.")
+    configure.add_argument(
+        "--use-profile",
+        action="store_true",
+        help="Activate an existing profile without asking for base URL, model, or API key.",
+    )
+    configure.add_argument("--base-url", help="OpenAI-compatible base URL.")
+    configure.add_argument("--model", help="Model name.")
+    configure.add_argument("--api-key-env", default="MEMAGENT_LLM_API_KEY", help="Environment variable that holds the API key.")
+    configure.add_argument("--no-api-key", action="store_true", help="Allow a local compatible service without an API key.")
+    configure.add_argument("--config", help="Config path. Defaults to ~/.memagent/config.json.")
+    llm_doctor.add_argument(
         "--config",
-        help="Provider profile config path. Defaults to ~/.memagent/llm_providers.local.json.",
+        help="Optional MemAgent config path. Defaults to ~/.memagent/config.json.",
     )
     llm_doctor.add_argument(
         "--check-live",
@@ -544,8 +577,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     demo.add_argument(
         "--workspace",
-        default="local_memory_demo/demo_run",
-        help="Demo workspace directory. Default: local_memory_demo/demo_run.",
+        default="~/.memagent/demos/demo_run",
+        help="Demo workspace directory. Default: ~/.memagent/demos/demo_run.",
     )
     demo.add_argument(
         "--memagent-root",
@@ -563,8 +596,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     demo_bundle.add_argument(
         "--workspace",
-        default="local_memory_demo/demo_bundle",
-        help="Demo bundle workspace directory. Default: local_memory_demo/demo_bundle.",
+        default="~/.memagent/demos/demo_bundle",
+        help="Demo bundle workspace directory. Default: ~/.memagent/demos/demo_bundle.",
     )
     demo_bundle.add_argument(
         "--memagent-root",
@@ -582,8 +615,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mcp_demo.add_argument(
         "--workspace",
-        default="local_memory_demo/mcp_demo",
-        help="MCP demo workspace directory. Default: local_memory_demo/mcp_demo.",
+        default="~/.memagent/demos/mcp_demo",
+        help="MCP demo workspace directory. Default: ~/.memagent/demos/mcp_demo.",
     )
     mcp_demo.add_argument(
         "--memagent-root",
@@ -610,8 +643,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     eval_parser.add_argument(
         "--workspace",
-        default="local_memory_demo/recall_eval",
-        help="Evaluation workspace directory. Default: local_memory_demo/recall_eval.",
+        default="~/.memagent/reports/recall_eval",
+        help="Evaluation workspace directory. Default: ~/.memagent/reports/recall_eval.",
     )
 
     ingest = subparsers.add_parser(
@@ -719,8 +752,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trace_eval.add_argument(
         "--workspace",
-        default="local_memory_demo/trace_eval",
-        help="Trace evaluation workspace directory. Default: local_memory_demo/trace_eval.",
+        default="~/.memagent/reports/trace_eval",
+        help="Trace evaluation workspace directory. Default: ~/.memagent/reports/trace_eval.",
     )
     trace_eval.add_argument(
         "--limit",
@@ -734,8 +767,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trace_replay.add_argument(
         "--workspace",
-        default="local_memory_demo/trace_replay",
-        help="Trace replay workspace directory. Default: local_memory_demo/trace_replay.",
+        default="~/.memagent/reports/trace_replay",
+        help="Trace replay workspace directory. Default: ~/.memagent/reports/trace_replay.",
     )
     trace_replay.add_argument(
         "--limit",
@@ -887,8 +920,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "demo-run":
         result = run_demo(
-            workspace=Path(args.workspace),
-            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            workspace=Path(args.workspace).expanduser(),
+            memagent_root=Path(args.memagent_root).expanduser() if args.memagent_root else None,
             reset=args.reset,
         )
         print("[MemAgent demo-run]")
@@ -901,8 +934,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "demo-bundle":
         result = run_demo_bundle(
-            workspace=Path(args.workspace),
-            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            workspace=Path(args.workspace).expanduser(),
+            memagent_root=Path(args.memagent_root).expanduser() if args.memagent_root else None,
             reset=args.reset,
         )
         print("[MemAgent demo-bundle]")
@@ -919,8 +952,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "mcp-demo":
         result = run_mcp_demo(
-            workspace=Path(args.workspace),
-            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
+            workspace=Path(args.workspace).expanduser(),
+            memagent_root=Path(args.memagent_root).expanduser() if args.memagent_root else None,
             reset=args.reset,
         )
         print("[MemAgent mcp-demo]")
@@ -937,7 +970,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_stdio_server(McpServer.from_home_arg(args.home, args.memagent_root))
 
     if args.command == "recall-eval":
-        result = run_recall_eval(workspace=Path(args.workspace))
+        result = run_recall_eval(workspace=Path(args.workspace).expanduser())
         print("[MemAgent recall-eval]")
         print(f"- workspace: {result.workspace}")
         print(f"- project: {result.project_dir}")
@@ -954,8 +987,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.ingest_command == "codex":
             context = detect_context(Path(args.cwd) if args.cwd else None)
             result = run_codex_ingest(
-                sessions_root=Path(args.sessions_root),
-                workspace=Path(args.workspace),
+                sessions_root=Path(args.sessions_root).expanduser(),
+                workspace=Path(args.workspace).expanduser(),
                 context=context,
                 limit=args.limit,
                 max_candidates=args.max_candidates,
@@ -980,12 +1013,46 @@ def main(argv: list[str] | None = None) -> int:
                 config_path=Path(args.config) if args.config else None,
                 check_live=args.check_live,
                 timeout_seconds=args.timeout,
+                mode=args.mode,
             )
             if args.json:
                 print(json.dumps(result.to_payload(), ensure_ascii=False, indent=2))
             else:
                 print(render_llm_doctor(result))
             return 0
+
+    if args.command == "configure":
+        mode = args.mode or input("Semantic mode [heuristic/llm/hybrid] (default heuristic): ").strip() or "heuristic"
+        if args.use_profile:
+            try:
+                config_path = activate_semantic_profile(
+                    mode=mode,
+                    profile=args.profile,
+                    config_path=Path(args.config) if args.config else None,
+                )
+            except ValueError as exc:
+                parser.error(str(exc))
+            print("[MemAgent configure]\n- semantic mode: " + mode + "\n- active profile: " + args.profile + "\n- API key: read from the configured environment variable\n- config: " + str(config_path))
+            return 0
+        if mode == "heuristic":
+            config_path = configure_semantic_mode(mode=mode, config_path=Path(args.config) if args.config else None)
+            print("[MemAgent configure]\n- semantic mode: heuristic\n- LLM: disabled\n- API key: not stored\n- config: " + str(config_path))
+            return 0
+        base_url = args.base_url or input("OpenAI-compatible base URL: ").strip()
+        model = args.model or input("Model name: ").strip()
+        api_key_env = args.api_key_env or "MEMAGENT_LLM_API_KEY"
+        config_path = configure_semantic_mode(
+            mode=mode,
+            profile=args.profile,
+            base_url=base_url,
+            model=model,
+            api_key_env=api_key_env,
+            allow_no_key=args.no_api_key,
+            config_path=Path(args.config) if args.config else None,
+        )
+        key_note = "no key required for this local service" if args.no_api_key else f"set {api_key_env} in your shell before use"
+        print("[MemAgent configure]\n- semantic mode: " + mode + "\n- provider: openai-compatible\n- profile: " + args.profile + "\n- API key: " + key_note + "\n- config: " + str(config_path))
+        return 0
 
     store = MemoryStore.from_home_arg(args.home)
     if args.command == "install-user-codex":
@@ -1001,11 +1068,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if plan.blocked and args.write else 0
 
     if args.command == "user-codex-doctor":
-        plan = build_user_codex_skill_plan(
-            target=Path(args.target) if args.target else None,
-            memagent_root=Path(args.memagent_root) if args.memagent_root else None,
-        )
-        print(render_user_codex_skill_report(plan, write=False))
+        print(render_user_codex_doctor(target=Path(args.target) if args.target else None))
         return 0
 
     if args.command == "uninstall-user-codex":
@@ -1079,6 +1142,7 @@ def main(argv: list[str] | None = None) -> int:
                 recent_text=recent_text,
                 context=context,
                 provider=args.provider,
+                semantic_mode=args.semantic_mode,
                 llm_profile=args.llm_profile,
                 llm_config_path=Path(args.llm_config) if args.llm_config else None,
                 has_recent_trace=True if args.recent_trace else None,
@@ -1108,6 +1172,7 @@ def main(argv: list[str] | None = None) -> int:
                 store=store,
                 handoff_store=handoff_store,
                 provider=args.provider,
+                semantic_mode=args.semantic_mode,
                 llm_profile=args.llm_profile,
                 llm_config_path=Path(args.llm_config) if args.llm_config else None,
                 draft_provider=args.draft_provider,
@@ -1119,8 +1184,8 @@ def main(argv: list[str] | None = None) -> int:
                 limit=args.limit,
                 max_lines=args.max_lines,
                 strategy=args.strategy,
-                eval_workspace=Path(args.eval_workspace) if args.eval_workspace else None,
-                replay_workspace=Path(args.replay_workspace) if args.replay_workspace else None,
+                eval_workspace=Path(args.eval_workspace).expanduser() if args.eval_workspace else None,
+                replay_workspace=Path(args.replay_workspace).expanduser() if args.replay_workspace else None,
             )
         except ValueError as exc:
             parser.error(str(exc))
@@ -1190,7 +1255,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.trace_command == "eval":
                 result = run_trace_eval(
                     store=store,
-                    workspace=Path(args.workspace),
+                    workspace=Path(args.workspace).expanduser(),
                     limit=args.limit,
                 )
                 print("[MemAgent trace-eval]")
@@ -1204,7 +1269,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.trace_command == "replay":
                 result = run_trace_replay(
                     store=store,
-                    workspace=Path(args.workspace),
+                    workspace=Path(args.workspace).expanduser(),
                     limit=args.limit,
                 )
                 print("[MemAgent trace-replay]")

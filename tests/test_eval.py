@@ -43,17 +43,17 @@ class RecallEvalTest(unittest.TestCase):
             saved = store.save_recall_trace(
                 {
                     "schema_version": "memagent.recall.v1",
-                    "query": "attribution accuracy",
+                    "query": "validation accuracy",
                     "context": {"repo_name": "demo", "cwd": str(root / "project")},
                     "total_matches": 1,
                     "matches": [
                         {
-                            "title": "Demo attribution memory",
-                            "matched_terms": ["attribution", "accuracy"],
+                            "title": "Demo validation memory",
+                            "matched_terms": ["validation", "accuracy"],
                         }
                     ],
                     "pack": {"emitted_matches": 1},
-                    "text": "[MemAgent recalled context]\n- Memory: Demo attribution memory",
+                    "text": "[MemAgent recalled context]\n- Memory: Demo validation memory",
                 },
                 source="test",
             )
@@ -62,7 +62,7 @@ class RecallEvalTest(unittest.TestCase):
             result = run_trace_eval(store=store, workspace=root / "trace_eval", limit=10)
             self.assertTrue(result.report_path.exists())
             self.assertIn("# MemAgent Trace Feedback Evaluation", result.report)
-            self.assertIn("Demo attribution memory", result.report)
+            self.assertIn("Demo validation memory", result.report)
             self.assertIn("| useful | 1 |", result.report)
             self.assertEqual(result.labeled, 1)
             self.assertEqual(result.useful_rate, 1.0)
@@ -75,10 +75,10 @@ class RecallEvalTest(unittest.TestCase):
             saved = store.save_recall_trace(
                 {
                     "schema_version": "memagent.recall.v1",
-                    "query": "owner skill",
+                    "query": "maintainer skill",
                     "context": {"repo_name": "demo", "cwd": str(root / "project")},
                     "total_matches": 1,
-                    "matches": [{"title": "Owner skill route", "matched_terms": ["owner"]}],
+                    "matches": [{"title": "Owner skill route", "matched_terms": ["maintainer"]}],
                     "pack": {"emitted_matches": 1},
                     "text": "[MemAgent recalled context]\n- Memory: Owner skill route",
                 },
@@ -111,23 +111,23 @@ class RecallEvalTest(unittest.TestCase):
             root = Path(tmp)
             store = MemoryStore(root / "home")
             store.remember(
-                text="Use the owner diagnosis skill before manual owner tracing.",
+                text="Use the maintainer diagnosis skill before manual maintainer tracing.",
                 topic="Owner skill route",
                 domain="coding",
                 kind="skill_route",
                 repo="demo",
                 module=None,
-                triggers=["owner", "skill"],
+                triggers=["maintainer", "skill"],
                 exportable=True,
             )
             context = {"repo_name": "demo", "cwd": str(root / "project")}
             saved = store.save_recall_trace(
                 {
                     "schema_version": "memagent.recall.v1",
-                    "query": "owner skill",
+                    "query": "maintainer skill",
                     "context": context,
                     "total_matches": 1,
-                    "matches": [{"title": "Owner skill route", "matched_terms": ["owner", "skill"]}],
+                    "matches": [{"title": "Owner skill route", "matched_terms": ["maintainer", "skill"]}],
                     "pack": {"emitted_matches": 1},
                     "text": "[MemAgent recalled context]\n- Memory: Owner skill route",
                 },
@@ -150,24 +150,24 @@ class RecallEvalTest(unittest.TestCase):
             home = root / "home"
             store = MemoryStore(home)
             store.remember(
-                text="Use id ranges before RDS JSON grouping.",
-                topic="RDS timeout pitfall",
+                text="Use id ranges before database JSON grouping.",
+                topic="database timeout pitfall",
                 domain="coding",
                 kind="pitfall",
                 repo="demo",
                 module=None,
-                triggers=["RDS", "JSON"],
+                triggers=["database", "JSON"],
                 exportable=True,
             )
             saved = store.save_recall_trace(
                 {
                     "schema_version": "memagent.recall.v1",
-                    "query": "RDS JSON timeout",
+                    "query": "database JSON timeout",
                     "context": {"repo_name": "demo", "cwd": str(root / "project")},
                     "total_matches": 1,
-                    "matches": [{"title": "RDS timeout pitfall", "matched_terms": ["rds", "json"]}],
+                    "matches": [{"title": "database timeout pitfall", "matched_terms": ["database", "json"]}],
                     "pack": {"emitted_matches": 1},
-                    "text": "[MemAgent recalled context]\n- Memory: RDS timeout pitfall",
+                    "text": "[MemAgent recalled context]\n- Memory: database timeout pitfall",
                 },
                 source="test",
             )

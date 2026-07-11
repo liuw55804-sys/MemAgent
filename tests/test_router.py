@@ -6,23 +6,30 @@ import tempfile
 import unittest
 from unittest import mock
 
+from memagent.llm import configure_semantic_mode
 from memagent.router import ROUTE_SCHEMA_VERSION, route_interaction
 
 
 class RouterTest(unittest.TestCase):
     def test_routes_task_start_recall(self) -> None:
-        decision = route_interaction("帮我排查 audit_rule_lib 里 governance task owner 相关问题，先按你觉得最省时间的方式来。")
+        decision = route_interaction("帮我排查 example_service 里 workflow task maintainer 相关问题，先按你觉得最省时间的方式来。")
 
         self.assertEqual(decision.action, "recall")
         self.assertGreaterEqual(decision.confidence, 0.7)
-        self.assertIn("audit_rule_lib", decision.signals)
-        self.assertIn("owner", decision.signals)
-        self.assertIn("audit_rule_lib", decision.query or "")
+        self.assertIn("maintainer", decision.signals)
+        self.assertIn("example_service", decision.query or "")
+
+    def test_routes_question_about_prior_user_development_habits_to_recall(self) -> None:
+        decision = route_interaction("你知道用户之前的开发习惯吗")
+
+        self.assertEqual(decision.action, "recall")
+        self.assertIn("user_preference", decision.signals)
+        self.assertEqual(decision.query, "你知道用户之前的开发习惯吗")
 
     def test_routes_memory_draft_with_confirmation(self) -> None:
         decision = route_interaction(
-            "这个 bytedcli 查 live schema 的入口下次别忘了。",
-            recent_text="bytedcli rds db table schema demo_db demo_table --region cn",
+            "这个 git 查 live schema 的入口下次别忘了。",
+            recent_text="git database db table schema demo_db demo_table --region cn",
         )
 
         self.assertEqual(decision.action, "draft_memory")
@@ -104,6 +111,120 @@ class RouterTest(unittest.TestCase):
         self.assertEqual(config.base_url, "https://api.example.test/v1")
         self.assertEqual(config.model, "demo-model")
         self.assertEqual(decision.provider, "openai-compatible")
+
+    def test_hybrid_falls_back_when_provider_is_not_configured(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=True):
+            decision = route_interaction("Can you continue the investigation from last time?", semantic_mode="hybrid")
+
+        self.assertEqual(decision.action, "none")
+        self.assertEqual(decision.provider, "heuristic_fallback")
+
+    def test_hybrid_uses_llm_recall_estimator_for_ambiguous_preference_question(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = _profile_config(Path(tmp))
+            with mock.patch("memagent.router.chat_completion") as chat_completion:
+                chat_completion.return_value = json.dumps(
+                    {
+                        "recall_likelihood": 0.91,
+                        "reason": "The question asks about a prior working preference.",
+                        "signals": ["prior_preference"],
+                    }
+                )
+                decision = route_interaction(
+                    "Do you know the user's previous coding preferences for /tmp/private-project token=example-secret-value?",
+                    semantic_mode="hybrid",
+                    llm_profile="demo",
+                    llm_config_path=config_path,
+                )
+
+        self.assertEqual(decision.action, "recall")
+        self.assertEqual(decision.provider, "llm_recall_estimator")
+        self.assertEqual(decision.recall_likelihood, 0.91)
+        prompt = json.loads(chat_completion.call_args.kwargs["messages"][1]["content"])
+        self.assertEqual(set(prompt), {"user_message", "context"})
+        self.assertNotIn("recent_text", prompt)
+        self.assertNotIn("memory", json.dumps(prompt))
+        self.assertNotIn("/tmp/private-project", prompt["user_message"])
+        self.assertNotIn("example-secret-value", prompt["user_message"])
+        self.assertIn("<path>", prompt["user_message"])
+        self.assertIn("<secret>", prompt["user_message"])
+
+    def test_hybrid_llm_recall_estimator_can_decline_recall(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = _profile_config(Path(tmp))
+            with mock.patch("memagent.router.chat_completion") as chat_completion:
+                chat_completion.return_value = json.dumps(
+                    {
+                        "recall_likelihood": 0.08,
+                        "reason": "This is a self-contained request.",
+                        "signals": ["self_contained"],
+                    }
+                )
+                decision = route_interaction(
+                    "Explain this function's return value.",
+                    semantic_mode="hybrid",
+                    llm_profile="demo",
+                    llm_config_path=config_path,
+                )
+
+        self.assertEqual(decision.action, "none")
+        self.assertEqual(decision.provider, "llm_recall_estimator")
+        self.assertEqual(decision.recall_likelihood, 0.08)
+
+    def test_hybrid_estimator_uses_configured_default_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            configure_semantic_mode(
+                mode="hybrid",
+                base_url="http://127.0.0.1:1234/v1",
+                model="local-model",
+                allow_no_key=True,
+                config_path=config_path,
+            )
+            with mock.patch("memagent.router.chat_completion") as chat_completion:
+                chat_completion.return_value = json.dumps(
+                    {
+                        "recall_likelihood": 0.75,
+                        "reason": "Prior workflow context may help.",
+                        "signals": ["prior_workflow"],
+                    }
+                )
+                decision = route_interaction(
+                    "Can you continue from the previous investigation?",
+                    semantic_mode="hybrid",
+                    llm_config_path=config_path,
+                )
+
+        self.assertEqual(decision.provider, "llm_recall_estimator")
+        self.assertEqual(chat_completion.call_args.kwargs["config"].model, "local-model")
+
+    def test_llm_router_payload_is_sanitized(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = _profile_config(Path(tmp))
+            with mock.patch("memagent.router.chat_completion") as chat_completion:
+                chat_completion.return_value = json.dumps(
+                    {
+                        "action": "none", "confidence": 0.2, "reason": "No memory action.",
+                        "signals": [], "query": None, "feedback_rating": None,
+                        "requires_confirmation": False, "requires_recent_trace": False,
+                        "developer_mode": False, "suggested_next": "Continue.", "recent_text_used": False,
+                    }
+                )
+                route_interaction(
+                    "inspect /tmp/private-work token=example-secret-value for example_identifier_42",
+                    recent_text="https://example.test/private payload",
+                    provider="openai-compatible",
+                    llm_profile="demo",
+                    llm_config_path=config_path,
+                )
+
+        prompt = chat_completion.call_args.kwargs["messages"][1]["content"]
+        self.assertNotIn("/tmp/private-work", prompt)
+        self.assertNotIn("example-secret-value", prompt)
+        self.assertNotIn("example_identifier_42", prompt)
+        self.assertNotIn("https://example.test", prompt)
+        self.assertIn("<secret>", prompt)
+        self.assertIn("<path>", prompt)
 
 
 def _profile_config(root: Path) -> Path:

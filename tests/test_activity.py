@@ -67,7 +67,7 @@ class ActivityTest(unittest.TestCase):
                 source="test",
             )
             store.remember(
-                text="Check the live schema before tracing an owner issue.",
+                text="Check the live schema before tracing an maintainer issue.",
                 topic="Live schema entrypoint",
                 domain="coding",
                 kind="data_entrypoint",
@@ -79,7 +79,7 @@ class ActivityTest(unittest.TestCase):
             handoffs.save(
                 context=context,
                 topic="Owner diagnosis",
-                summary="Recorded the current owner-diagnosis state.",
+                summary="Recorded the current maintainer-diagnosis state.",
                 done=["Checked the live schema."],
                 next_steps=["Trace the call path."],
                 open_questions=[],
@@ -152,7 +152,7 @@ class ActivityTest(unittest.TestCase):
             handoffs = HandoffStore(store.home)
             first = process_interaction(
                 message="记住这次踩坑，先给预览。",
-                recent_text="Before debugging owner assignment, inspect the live schema.",
+                recent_text="Before debugging maintainer assignment, inspect the live schema.",
                 context=context,
                 store=store,
                 handoff_store=handoffs,

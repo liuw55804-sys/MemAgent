@@ -18,18 +18,18 @@ class InteractionProcessTest(unittest.TestCase):
             store = MemoryStore(root / "home")
             context = _context(root / "project")
             store.remember(
-                text="Use live RDS schema before audit_rule_lib owner debugging.",
-                topic="audit_rule_lib live schema",
+                text="Use live database schema before example_service maintainer debugging.",
+                topic="example_service live schema",
                 domain="coding",
                 kind="data_entrypoint",
                 repo=context.repo_name,
                 module=None,
-                triggers=["audit_rule_lib", "owner", "RDS"],
+                triggers=["example_service", "maintainer", "database"],
                 exportable=False,
             )
 
             result = process_interaction(
-                message="帮我排查 audit_rule_lib 的 owner 问题，先按你觉得最省时间的方式来。",
+                message="帮我排查 example_service 的 maintainer 问题，先按你觉得最省时间的方式来。",
                 recent_text="",
                 context=context,
                 store=store,
@@ -47,6 +47,37 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertEqual(trace_payload["process"]["route"]["action"], "recall")
             self.assertEqual(result.to_payload(context=context)["schema_version"], PROCESS_SCHEMA_VERSION)
 
+    def test_process_recalls_project_scoped_user_preference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            preference = "Only edit files needed for the request; do not add project documentation unless asked."
+            store.remember(
+                text=preference,
+                topic="Project editing preference",
+                domain="coding",
+                kind="preference",
+                repo=context.repo_name,
+                module=None,
+                triggers=["user preference", "documentation"],
+                exportable=False,
+            )
+
+            result = process_interaction(
+                message="你知道用户之前的开发习惯吗",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+            )
+
+            self.assertEqual(result.route.action, "recall")
+            self.assertTrue(result.executed)
+            self.assertIn(preference, result.result_text)
+            self.assertIn("recall_trace", result.writes)
+            self.assertIn("preference", result.artifacts["retrieval_hints"])
+
     def test_process_draft_memory_does_not_write_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -55,7 +86,7 @@ class InteractionProcessTest(unittest.TestCase):
 
             result = process_interaction(
                 message="这个入口下次别忘了",
-                recent_text="bytedcli rds db table schema demo_db demo_table --region cn",
+                recent_text="git database db table schema demo_db demo_table --region cn",
                 context=context,
                 store=store,
                 handoff_store=HandoffStore(store.home),
@@ -85,7 +116,7 @@ class InteractionProcessTest(unittest.TestCase):
             handoffs = HandoffStore(store.home)
             draft = process_interaction(
                 message="这个入口下次别忘了",
-                recent_text="Before owner diagnosis, check the live RDS schema first.",
+                recent_text="Before maintainer diagnosis, check the live database schema first.",
                 context=context,
                 store=store,
                 handoff_store=handoffs,
@@ -115,7 +146,7 @@ class InteractionProcessTest(unittest.TestCase):
             saved = store.save_recall_trace(
                 {
                     "schema_version": "memagent.recall.v1",
-                    "query": "owner",
+                    "query": "maintainer",
                     "context": {"repo_name": context.repo_name},
                     "total_matches": 1,
                     "matches": [{"title": "Owner memory"}],

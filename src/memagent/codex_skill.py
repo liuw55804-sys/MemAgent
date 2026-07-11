@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import resources
 import os
 from pathlib import Path
-import shlex
+import shutil
 
 
 MANAGED_MARKER = "<!-- memagent:user-codex-skill -->"
@@ -129,10 +130,9 @@ def render_user_codex_skill(
     memagent_root: Path | None = None,
     command_prefix: str | None = None,
 ) -> str:
-    root = (memagent_root or default_memagent_root()).expanduser().resolve()
-    prefix = command_prefix or _source_command_prefix(root)
-    template_path = root / "templates" / "codex_skills" / "memagent" / "SKILL.md"
-    template = template_path.read_text(encoding="utf-8")
+    del memagent_root
+    prefix = command_prefix or "memagent"
+    template = resources.files("memagent").joinpath("resources", "codex_skill.md").read_text(encoding="utf-8")
     return template.replace(_COMMAND_TOKEN, prefix)
 
 
@@ -161,6 +161,28 @@ def render_user_codex_skill_report(plan: UserCodexSkillPlan, *, write: bool) -> 
     return "\n".join(lines)
 
 
-def _source_command_prefix(root: Path) -> str:
-    src = shlex.quote(str(root / "src"))
-    return f"PYTHONPATH={src} python -m memagent.cli"
+def render_user_codex_doctor(*, target: Path | None = None) -> str:
+    resolved_target = (target or default_user_skill_target()).expanduser().resolve()
+    command = shutil.which("memagent")
+    memory_home = Path(os.environ.get("MEMAGENT_HOME", "~/.memagent")).expanduser()
+    plan = build_user_codex_skill_plan(target=resolved_target)
+    lines = [
+        "[MemAgent user-level Codex doctor]",
+        f"- memagent command: {command or 'not found'}",
+        f"- user skill: {resolved_target if resolved_target.exists() else 'not installed'}",
+        f"- skill status: {plan.action}",
+        f"- local storage: {memory_home}",
+        f"- local storage ready: {'yes' if memory_home.exists() else 'no (created on first use)'}",
+        "- business repo changes: none",
+    ]
+    if not command:
+        lines.append("- fix: install with `pipx install memagent` (or `python -m pip install memagent`).")
+    if not resolved_target.exists() and command:
+        lines.append("- fix: run `memagent install-user-codex --write`.")
+    elif plan.action == "replace":
+        lines.append("- fix: run `memagent install-user-codex --write` to refresh the managed skill.")
+    elif plan.blocked:
+        lines.append("- fix: review the existing skill, then rerun `memagent install-user-codex --write --force` if replacement is intended.")
+    elif command and resolved_target.exists() and plan.action == "unchanged":
+        lines.append("- ready: start a new Codex session; natural-language memory requests can use MemAgent.")
+    return "\n".join(lines)

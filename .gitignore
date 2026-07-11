@@ -9,3 +9,7 @@ build/
 *.egg-info/
 .DS_Store
 local_memory_demo/
+*.whl
+*.tar.gz
+.pipx/
+.memagent/

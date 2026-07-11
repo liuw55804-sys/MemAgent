@@ -42,7 +42,7 @@ class CodexIngestTest(unittest.TestCase):
             self.assertIn("# MemAgent Codex Transcript Ingest", report)
             self.assertIn("review-only", report)
             joined = "\n".join(candidate.memory for candidate in result.candidates)
-            self.assertIn("bytedcli", joined)
+            self.assertIn("git", joined)
             self.assertIn("trace replay", joined)
             self.assertIn("<redacted>", joined)
 
@@ -100,7 +100,7 @@ def _write_mock_codex_session(path: Path, project: Path) -> None:
             "payload": {
                 "type": "exec_command",
                 "cwd": str(project),
-                "command": "bytedcli rds query --db demo_owner --sql 'select owner from task_owner' --token=abc123",
+                "command": "git database query --db demo_maintainer --sql 'select maintainer from example_task' --token=abc123",
                 "exit_code": 0,
             },
         },
@@ -110,7 +110,7 @@ def _write_mock_codex_session(path: Path, project: Path) -> None:
             "payload": {
                 "type": "exec_command",
                 "cwd": str(project),
-                "command": "PYTHONPATH=src python -m memagent.cli trace replay --limit 10",
+                "command": "memagent trace replay --limit 10",
                 "exit_code": 0,
             },
         },
@@ -123,7 +123,7 @@ def _write_mock_codex_session(path: Path, project: Path) -> None:
                 "content": [
                     {
                         "type": "text",
-                        "text": "沉淀一下：下次查 owner 问题先看 task-owner-diagnose skill，再决定是否手查 RDS。",
+                        "text": "沉淀一下：下次查 maintainer 问题先看 diagnostics helper skill，再决定是否手查 database。",
                     }
                 ],
             },
@@ -135,7 +135,7 @@ def _write_mock_codex_session(path: Path, project: Path) -> None:
                 "type": "exec_command",
                 "cwd": str(project),
                 "command": "curl https://example.invalid/api",
-                "stderr": "error: missing Authorization: Bearer secret-token",
+                "stderr": "error: missing authorization=example-secret",
                 "exit_code": 7,
             },
         },

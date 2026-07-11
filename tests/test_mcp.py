@@ -125,10 +125,10 @@ class McpServerTest(unittest.TestCase):
                     "params": {
                         "name": "memagent_remember",
                         "arguments": {
-                            "text": "Use id ranges before attribution accuracy aggregation.",
+                            "text": "Use id ranges before validation accuracy aggregation.",
                             "topic": "Attribution accuracy pitfall",
                             "kind": "pitfall",
-                            "triggers": ["attribution", "accuracy"],
+                            "triggers": ["validation", "accuracy"],
                             "cwd": str(project),
                         },
                     },
@@ -145,7 +145,7 @@ class McpServerTest(unittest.TestCase):
                     "params": {
                         "name": "memagent_recall",
                         "arguments": {
-                            "query": "attribution accuracy",
+                            "query": "validation accuracy",
                             "cwd": str(project),
                             "strategy": "bm25",
                         },
@@ -155,7 +155,7 @@ class McpServerTest(unittest.TestCase):
             text = recall_response["result"]["content"][0]["text"]
             self.assertIn("Attribution accuracy pitfall", text)
             self.assertIn("strategy=bm25", text)
-            self.assertIn("matched=attribution, accuracy", text)
+            self.assertIn("matched=validation, accuracy", text)
 
             json_recall_response = server.handle(
                 {
@@ -165,7 +165,7 @@ class McpServerTest(unittest.TestCase):
                     "params": {
                         "name": "memagent_recall",
                         "arguments": {
-                            "query": "attribution accuracy",
+                            "query": "validation accuracy",
                             "cwd": str(project),
                             "strategy": "bm25",
                             "format": "json",
@@ -223,7 +223,7 @@ class McpServerTest(unittest.TestCase):
                     "params": {
                         "name": "memagent_memory_draft",
                         "arguments": {
-                            "text": "这个 bytedcli 查 live schema 的入口下次别忘了：bytedcli rds db table schema demo_db demo_table --region cn。",
+                            "text": "这个 git 查 live schema 的入口下次别忘了：git database db table schema demo_db demo_table --region cn。",
                             "cwd": str(project),
                             "format": "json",
                         },
@@ -253,7 +253,7 @@ class McpServerTest(unittest.TestCase):
                         "name": "memagent_process",
                         "arguments": {
                             "message": "这个入口下次别忘了",
-                            "recent_text": "bytedcli rds db table schema demo_db demo_table --region cn",
+                            "recent_text": "git database db table schema demo_db demo_table --region cn",
                             "cwd": str(project),
                             "format": "json",
                         },

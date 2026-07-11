@@ -1,479 +1,152 @@
 # MemAgent
 
-MemAgent is a local workflow memory layer for Codex and other coding agents.
+MemAgent is a local-first workflow memory layer for Codex and other coding
+agents. It keeps small, explicit lessons on your machine so a new task can
+recall a proven workflow, a pitfall, or a useful handoff without uploading your
+history to a service.
 
-It stores small, explicit memory cards from past coding-agent sessions so a new
-session can quickly recall proven commands, failed paths, and next-step hints.
+**No model, API key, or account is required.** The default route is local
+heuristics and all state lives under `~/.memagent/`.
 
-## MVP Commands
+## Quick Start (5 minutes)
 
-```bash
-python -m memagent.cli remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
-python -m memagent.cli recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
-python -m memagent.cli recall "continue checking attribution accuracy" --json
-python -m memagent.cli recall "continue checking attribution accuracy" --trace
-python -m memagent.cli trace list
-python -m memagent.cli trace label --rating useful
-python -m memagent.cli trace report
-python -m memagent.cli trace eval
-python -m memagent.cli trace replay
-python -m memagent.cli agents-install
-python -m memagent.cli agents-doctor
-python -m memagent.cli ingest codex --limit 5 --project-only
-python -m memagent.cli handoff show
-python -m memagent.cli handoff draft --from-file ./session_notes.md
-python -m memagent.cli handoff promote --index 1
-python -m memagent.cli demo-run --reset
-python -m memagent.cli demo-bundle --reset
-python -m memagent.cli mcp-demo --reset
-python -m memagent.cli mcp-stdio
-python -m memagent.cli recall-eval
-python -m memagent.cli codex --dry-run "continue checking attribution accuracy"
-```
-
-After installing the project in editable mode, the shorter form is available:
+Install with pipx:
 
 ```bash
-python -m pip install -e .
-memagent remember --domain coding --kind pitfall "RDS big-table JSON aggregation timed out; use id ranges first."
-memagent recall "continue checking attribution accuracy" --show-sources --show-reasons --strategy bm25
-memagent recall "continue checking attribution accuracy" --json
-memagent recall "continue checking attribution accuracy" --trace
-memagent trace list
-memagent trace label --rating useful
-memagent trace report
-memagent trace eval
-memagent trace replay
-memagent agents-install
-memagent agents-doctor
-memagent ingest codex --limit 5 --project-only
-memagent handoff show
-memagent handoff draft --from-file ./session_notes.md
-memagent handoff promote --index 1
-memagent demo-run --reset
-memagent demo-bundle --reset
-memagent mcp-demo --reset
-memagent mcp-stdio
-memagent recall-eval
-memagent codex "continue checking attribution accuracy"
+pipx install memagent
 ```
 
-By default, memories are stored under:
+Install the zero-intrusion Codex skill. It writes only to your user-level Codex
+directory, never to the current repository:
+
+```bash
+memagent install-user-codex --write
+memagent user-codex-doctor
+```
+
+Start a new Codex task and use normal language such as “remember this
+workaround” or “what did we learn last time?” The Skill invokes MemAgent from
+the project directory, so memories are scoped to the current project.
+
+You can also use the CLI directly:
+
+```bash
+memagent remember --kind pitfall --topic "test isolation" \
+  "Run the focused test before the full suite to isolate failures."
+memagent recall "how should I validate this change?"
+memagent handoff save --topic "parser cleanup" --done "Added tests" \
+  --next-step "Run the package smoke test" "Parser cleanup is ready for verification."
+```
+
+## How It Works
 
 ```text
-~/.memagent/memories/
+natural-language task
+        |
+        v
+local router -> recall | draft preview | feedback | handoff | none
+        |
+        v
+~/.memagent/ (memory cards, pending drafts, local traces)
 ```
 
-Set `MEMAGENT_HOME` to use a different local store.
+- **Recall** provides a short project-scoped hint. Verify it against live code,
+  tests, and documentation before acting.
+- **Drafts** are previewed first. Durable memory requires explicit confirmation.
+- **Feedback** from ordinary language helps evaluate whether a recalled hint was
+  useful.
+- **Handoffs** keep recent project state separate from durable lessons.
 
-`remember` defaults to `--domain coding --kind note`. Use explicit types when a
-memory has a clear shape, for example `tool_recipe`, `skill_route`, `pitfall`,
-`verification`, `preference`, or `checklist`.
+## Optional LLM Semantics
 
-## Codex Wrapper
-
-`memagent codex` recalls relevant memory cards, prepends a short context block,
-and starts Codex with the augmented prompt.
-
-Preview the prompt without launching Codex:
+Local heuristics remain the default. To configure optional OpenAI-compatible
+semantic routing, run:
 
 ```bash
-memagent codex --dry-run "continue checking attribution accuracy"
+memagent configure
+memagent llm doctor
 ```
 
-Pass extra Codex options after `--`:
+For a non-interactive setup, keep the key in your shell and store only its
+environment-variable name in MemAgent's local configuration:
 
 ```bash
-memagent codex "continue checking attribution accuracy" -- --model gpt-5.4
+export MEMAGENT_LLM_API_KEY="..."
+memagent configure --mode hybrid --profile default \
+  --base-url https://api.example.com/v1 --model example-model
 ```
 
-Skip memory recall for one run:
+Choose one of three modes:
+
+- `heuristic`: fully local, default.
+- `llm`: use the optional provider for semantic routing and fall back locally
+  if it is unavailable.
+- `hybrid`: use local rules when confident and ask the provider only for
+  ambiguous routing. In particular, it uses a short LLM recall-likelihood
+  estimate before retrieving memory for low-confidence cases.
+
+`configure` stores an endpoint, model, and API-key **environment variable
+name** in `~/.memagent/config.json`; it never writes the API key itself. A
+local OpenAI-compatible server can be configured with `--no-api-key`.
+
+Only short, sanitized task summaries and candidate drafts are eligible for an
+LLM request. MemAgent never intentionally sends full conversations, existing
+memory cards, passwords, cookies, private keys, or raw request/response bodies.
+
+## Commands
 
 ```bash
-memagent codex --no-memory "continue checking attribution accuracy"
+memagent process "remember this workaround and show me a preview"
+memagent activity --today
+memagent llm doctor --check-live
+memagent uninstall-user-codex --write
 ```
 
-## Zero-Intrusion Codex Integration
+Run `memagent --help` for the complete command reference.
 
-Install MemAgent as a user-level Codex Skill instead of editing each business
-repository's `AGENTS.md`:
+## Privacy and Scope
+
+- Local state defaults to `~/.memagent/`; set `MEMAGENT_HOME` to use another
+  directory.
+- The user-level Codex Skill is installed under `~/.codex/skills/memagent/`.
+- MemAgent does not modify project code, project `AGENTS.md`, documentation, or
+  Git state as part of normal use.
+- Do not save secrets or raw sensitive samples in memory. Generalize examples
+  before sharing them.
+
+## Uninstall
 
 ```bash
-PYTHONPATH=src python -m memagent.cli install-user-codex --write
-PYTHONPATH=src python -m memagent.cli user-codex-doctor
+memagent uninstall-user-codex --write
+pipx uninstall memagent
 ```
 
-The Skill lives at `~/.codex/skills/memagent/SKILL.md`; memories and traces stay
-under `~/.memagent/`. Review one project's local MemAgent activity with:
+This leaves `~/.memagent/` intact so you can decide whether to retain or remove
+your local memories.
 
-```bash
-PYTHONPATH=src python -m memagent.cli activity --cwd /path/to/project --today
-```
+## FAQ
 
-See [docs/plan_v0.32.md](docs/plan_v0.32.md) for the product boundary and
-verification flow.
-Use [docs/selftest_v0.32_zero_intrusion.md](docs/selftest_v0.32_zero_intrusion.md)
-for the short product self-test in a real service repository.
-See [docs/plan_v0.33.md](docs/plan_v0.33.md) for lifecycle observability and
-[docs/selftest_v0.33_lifecycle.md](docs/selftest_v0.33_lifecycle.md) for the
-next product-use check.
+**Does it require an LLM?** No. The default behavior is fully local.
 
-## LLM-Assisted Draft Quality
+**Does it write memory automatically?** No. Long-term memory always requires a
+preview and explicit confirmation.
 
-v0.34 optionally uses an existing OpenAI-compatible local profile only to
-assess selected memory **drafts**. The router stays heuristic by default and
-durable memory still requires confirmation. The request is a short sanitized
-candidate, not a full Codex transcript.
+**Does it change my repository?** No. The default integration is user-level
+and does not touch the repository.
 
-```bash
-export MEMAGENT_DRAFT_PROVIDER=openai-compatible
-export MEMAGENT_DRAFT_LLM_PROFILE=<local-profile-name>
-memagent process "记住这个用户习惯，先给我预览" --recent-text "<short verified lesson>"
-```
-
-See [docs/plan_v0.34.md](docs/plan_v0.34.md) and
-[docs/selftest_v0.34_llm_quality_gate.md](docs/selftest_v0.34_llm_quality_gate.md)
-for the boundary and product self-test.
-
-## 中文文档
-
-面向使用者的中文技术实现与使用说明以飞书活文档维护；仓库保留无业务数据的源稿与 Mermaid 图源：
-
-- [技术实现说明](docs/feishu/技术实现说明.md)
-- [用户使用说明](docs/feishu/用户使用说明.md)
-
-## Product Plan
-
-See [docs/product-plan.md](docs/product-plan.md).
-
-## Competitive Scan
-
-See [docs/competitive-scan.md](docs/competitive-scan.md) for similar projects and
-MemAgent's current differentiation.
-
-## Code Walkthrough
-
-See [docs/technical-walkthrough.md](docs/technical-walkthrough.md) for a
-module-by-module explanation of the current MVP code.
-
-## Development Workflow
-
-See [docs/development-workflow.md](docs/development-workflow.md) for the local
-Git/versioning rhythm. Current baseline: `v0.1.0-mvp`.
-
-## Self-Test Plan
-
-For the current Codex-thread product self-test, use
-[docs/selftest_v0.25_codex_thread.md](docs/selftest_v0.25_codex_thread.md).
-The older [docs/self-test-plan.md](docs/self-test-plan.md) remains as the v0.1
-manual `remember/recall` baseline.
-
-## v2 Plan
-
-See [docs/plan_v2.md](docs/plan_v2.md) for the stable v2 direction: coding-first
-MemAgent with a generic memory substrate underneath.
-
-## v0.2 Design
-
-See [docs/design_v0.2_typed_memory.md](docs/design_v0.2_typed_memory.md) for the
-implementation design for `domain` and `kind` typed memories.
-
-## v0.3 Design
-
-See [docs/design_v0.3_codex_integration.md](docs/design_v0.3_codex_integration.md)
-for the Codex natural-language integration design.
-
-Generate a copyable `AGENTS.md` snippet:
-
-```bash
-memagent agents-snippet
-```
-
-Preview installing the snippet into the current project's `AGENTS.md`:
-
-```bash
-memagent agents-install
-```
-
-Apply the planned change explicitly:
-
-```bash
-memagent agents-install --write
-```
-
-Check whether the current project has usable MemAgent AGENTS.md integration:
-
-```bash
-memagent agents-doctor
-```
-
-## v0.4 Design
-
-See [docs/design_v0.4_agents_doctor.md](docs/design_v0.4_agents_doctor.md) for
-the AGENTS.md integration self-check design.
-
-## v0.5 Design
-
-See [docs/design_v0.5_agents_install.md](docs/design_v0.5_agents_install.md) for
-the safe AGENTS.md installer design.
-
-## v0.6 Design
-
-See [docs/design_v0.6_demo_run.md](docs/design_v0.6_demo_run.md) for the
-reproducible demo transcript design.
-
-## v0.7 Design
-
-See [docs/design_v0.7_mcp_stdio.md](docs/design_v0.7_mcp_stdio.md) for the
-minimal MCP stdio adapter design.
-
-## v0.8 Design
-
-See [docs/design_v0.8_rag_recall.md](docs/design_v0.8_rag_recall.md) for the
-BM25-style RAG recall design.
-
-## v0.9 Design
-
-See [docs/design_v0.9_recall_eval.md](docs/design_v0.9_recall_eval.md) for the
-mock recall evaluation design.
-
-Generate a mock recall evaluation report:
-
-```bash
-memagent recall-eval
-```
-
-The report is written to:
-
-```text
-local_memory_demo/recall_eval/report.md
-```
-
-## v0.10 Design
-
-See [docs/design_v0.10_competitive_positioning.md](docs/design_v0.10_competitive_positioning.md)
-for the competitive-scan driven positioning update.
-
-## v0.11 Design
-
-See [docs/design_v0.11_handoff.md](docs/design_v0.11_handoff.md) for the
-cross-session handoff and catch-up design.
-
-Save a handoff for the current project:
-
-```bash
-memagent handoff save --topic "demo handoff" --done "wired AGENTS.md" --next-step "run demo" "short summary"
-```
-
-Show the latest handoff:
-
-```bash
-memagent handoff show
-```
-
-## v0.12 Design
-
-See [docs/design_v0.12_handoff_draft.md](docs/design_v0.12_handoff_draft.md)
-for the reviewable handoff draft design.
-
-Draft a handoff from session notes:
-
-```bash
-memagent handoff draft --from-file ./session_notes.md
-```
-
-Save the accepted draft:
-
-```bash
-memagent handoff draft --from-file ./session_notes.md --save
-```
-
-## v0.13 Design
-
-See [docs/design_v0.13_handoff_promotion.md](docs/design_v0.13_handoff_promotion.md)
-for the handoff candidate promotion design.
-
-Preview promoting the first handoff memory candidate:
-
-```bash
-memagent handoff promote --index 1
-```
-
-Save the selected candidate as a durable memory card:
-
-```bash
-memagent handoff promote --index 1 --write
-```
-
-## v0.14 Design
-
-See [docs/design_v0.14_mcp_annotations.md](docs/design_v0.14_mcp_annotations.md)
-for the MCP tool annotation design. Every MCP tool now declares whether it is
-read-only, write-capable, destructive, idempotent, and closed-world.
-
-## v0.15 Design
-
-See [docs/design_v0.15_context_packing.md](docs/design_v0.15_context_packing.md)
-for the context-packing design. Recall output now includes a small pack summary
-showing memory budget, dedupe count, and truncation status.
-
-## v0.16 Design
-
-See [docs/design_v0.16_structured_recall.md](docs/design_v0.16_structured_recall.md)
-for the structured recall contract. `memagent recall --json` emits a versioned
-payload for other agents, MCP clients, evaluations, or future UI surfaces.
-
-## v0.17 Design
-
-See [docs/design_v0.17_recall_traces.md](docs/design_v0.17_recall_traces.md)
-for the opt-in recall trace design. `memagent recall --trace` saves a local
-`memagent.recall.v1` payload for later review or evaluation.
-
-## v0.18 Design
-
-See [docs/design_v0.18_trace_feedback.md](docs/design_v0.18_trace_feedback.md)
-for trace feedback. `memagent trace label` and `memagent trace report` turn
-saved recall traces into a small real-use evaluation loop.
-
-## v0.19 Design
-
-See [docs/design_v0.19_trace_feedback_integration.md](docs/design_v0.19_trace_feedback_integration.md)
-for AGENTS.md and MCP integration of trace feedback.
-
-## v0.20 Design
-
-See [docs/design_v0.20_trace_eval.md](docs/design_v0.20_trace_eval.md) for the
-trace feedback evaluation report design. `memagent trace eval` writes a Markdown
-report from real labeled recall traces, complementing the mock `recall-eval`
-benchmark.
-
-## v0.21 Design
-
-See [docs/design_v0.21_demo_bundle.md](docs/design_v0.21_demo_bundle.md) for the
-interview demo bundle design. `memagent demo-bundle --reset` generates one
-shareable Markdown entrypoint that links the AGENTS.md flow transcript, mock RAG
-benchmark, real trace-feedback report, and MCP tool surface.
-
-## v0.22 Design
-
-See [docs/design_v0.22_mcp_demo.md](docs/design_v0.22_mcp_demo.md) for the MCP
-JSON-RPC transcript design. `memagent mcp-demo --reset` generates a concrete
-protocol transcript covering initialize, tools/list, and tools/call flows.
-
-## v0.23 Design
-
-See [docs/design_v0.23_trace_replay.md](docs/design_v0.23_trace_replay.md) for
-trace replay evaluation. `memagent trace replay` reruns saved trace queries
-against current retrievers and writes a top-stability report.
-
-## v0.24 Design
-
-See [docs/design_v0.24_landscape_refresh.md](docs/design_v0.24_landscape_refresh.md)
-for the refreshed GitHub landscape scan and the positioning update that led to
-Codex transcript ingest.
-
-## v0.25 Design
-
-See [docs/design_v0.25_codex_ingest.md](docs/design_v0.25_codex_ingest.md) for
-Codex transcript ingest. `memagent ingest codex` scans local Codex session JSONL
-files and writes review-only memory candidate drafts. It does not write durable
-memory cards until the user edits and saves a candidate with `remember`.
-
-## v0.26 Plan
-
-See [docs/plan_v0.26.md](docs/plan_v0.26.md) for the Codex-native Memory UX
-plan. v0.26 shifts the product from command-oriented triggers toward normal
-conversation: Codex decides when to check memory, draft a memory preview, label
-feedback, or save a handoff while the user talks in ordinary task language.
-
-## v0.27 Design
-
-See [docs/design_v0.27_llm_router.md](docs/design_v0.27_llm_router.md) for the
-LLM-assisted router contract. `memagent route` classifies ordinary Codex
-messages into suggested memory actions with a deterministic baseline and an
-optional OpenAI-compatible provider.
-
-## v0.28 Design
-
-See [docs/design_v0.28_memory_draft.md](docs/design_v0.28_memory_draft.md) for
-reviewable memory drafting. `memagent draft memory` rewrites a conversation
-snippet into topic/kind/triggers/memory plus a quality label, but never writes a
-durable memory card without user confirmation.
-
-## v0.29 Design
-
-See [docs/design_v0.29_process_interaction.md](docs/design_v0.29_process_interaction.md)
-for the natural interaction processor. `memagent process` routes ordinary Codex
-language and executes safe memory-layer actions while keeping durable memory
-writes behind explicit user confirmation.
-
-## v0.30 Design
-
-See [docs/design_v0.30_llm_provider_readiness.md](docs/design_v0.30_llm_provider_readiness.md)
-for LLM provider readiness. `memagent llm doctor` checks OpenAI-compatible
-provider configuration, and `--check-live` explicitly verifies the API call.
-See [docs/selftest_v0.30_llm_provider.md](docs/selftest_v0.30_llm_provider.md)
-for a short config-only and optional live-check playbook.
-
-## v0.31 Design
-
-See [docs/design_v0.31_process_first_wrapper.md](docs/design_v0.31_process_first_wrapper.md)
-for the process-first Codex wrapper. `memagent codex` now uses the same
-natural interaction processor as AGENTS.md and MCP before launching Codex.
-
-## Codex Natural Language Signals
-
-See [docs/agents-integration.md](docs/agents-integration.md) for the `AGENTS.md`
-integration that lets Codex call MemAgent from ordinary task language such as
-`继续排查 audit_rule_lib`, `这个入口下次别忘了`, `刚刚那条提醒有用`, or
-`上次做到哪`.
-These examples are semantic signals for Codex or an LLM-assisted router, not a
-hard trigger-word list for the user.
-
-## Demo
-
-See [docs/demo_codex_agents_flow.md](docs/demo_codex_agents_flow.md) for a
-reproducible local demo of the AGENTS.md recall/remember flow.
-
-Generate a fresh mock transcript:
-
-```bash
-memagent demo-run --reset
-```
-
-The transcript is written to:
-
-```text
-local_memory_demo/demo_run/transcript.md
-```
-
-Generate a complete interview demo bundle:
-
-```bash
-memagent demo-bundle --reset
-```
-
-The entry report is written to:
-
-```text
-local_memory_demo/demo_bundle/interview_demo.md
-```
-
-Generate a standalone MCP JSON-RPC transcript:
-
-```bash
-memagent mcp-demo --reset
-```
-
-The transcript is written to:
-
-```text
-local_memory_demo/mcp_demo/mcp_transcript.md
-```
+**Can I use a local model server?** Yes. Run `memagent configure --mode hybrid
+--base-url http://localhost:1234/v1 --model <model> --no-api-key`.
 
 ## Development
 
 ```bash
-PYTHONPATH=src python -m compileall src tests
-PYTHONPATH=src python -m unittest discover -s tests
+python -m unittest discover -s tests
+python -m compileall src tests
+python -m build
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip build pipx
+      - run: python -m pip install .
+      - run: python -m unittest discover -s tests
+      - run: python -m compileall src tests
+      - run: python -m build
+      - run: python -m pipx install . --force
+        env:
+          PIPX_HOME: ${{ runner.temp }}/memagent-pipx
+          PIPX_BIN_DIR: ${{ runner.temp }}/memagent-bin
+      - run: ${{ runner.temp }}/memagent-bin/memagent install-user-codex --write
+        env:
+          CODEX_HOME: ${{ runner.temp }}/codex
+          MEMAGENT_HOME: ${{ runner.temp }}/memagent-home
+      - run: ${{ runner.temp }}/memagent-bin/memagent user-codex-doctor
+        env:
+          CODEX_HOME: ${{ runner.temp }}/codex
+          MEMAGENT_HOME: ${{ runner.temp }}/memagent-home

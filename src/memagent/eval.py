@@ -272,9 +272,9 @@ def memory_fixtures() -> tuple[MemoryFixture, ...]:
         MemoryFixture(
             topic="Attribution accuracy workflow",
             kind="workflow",
-            triggers=("attribution", "accuracy", "labels"),
+            triggers=("validation", "accuracy", "labels"),
             text=(
-                "For attribution accuracy checks, compare model labels with human-reviewed labels, "
+                "For validation accuracy checks, compare model labels with human-reviewed labels, "
                 "then sample mismatches by primary-key ranges."
             ),
         ),
@@ -285,16 +285,16 @@ def memory_fixtures() -> tuple[MemoryFixture, ...]:
             text="accuracy " * 40,
         ),
         MemoryFixture(
-            topic="RDS JSON aggregation pitfall",
+            topic="database JSON aggregation pitfall",
             kind="pitfall",
-            triggers=("RDS", "JSON", "aggregation"),
-            text="RDS JSON aggregation can time out; sample first and split by primary-key ranges.",
+            triggers=("database", "JSON", "aggregation"),
+            text="database JSON aggregation can time out; sample first and split by primary-key ranges.",
         ),
         MemoryFixture(
-            topic="Skill route for owner diagnosis",
+            topic="Skill route for maintainer diagnosis",
             kind="skill_route",
-            triggers=("owner", "diagnosis", "skill"),
-            text="For owner diagnosis tasks, use the existing task-owner-diagnose skill before manual searching.",
+            triggers=("maintainer", "diagnosis", "skill"),
+            text="For maintainer diagnosis tasks, use the existing diagnostics helper skill before manual searching.",
         ),
         MemoryFixture(
             topic="AGENTS install workflow",
@@ -308,16 +308,16 @@ def memory_fixtures() -> tuple[MemoryFixture, ...]:
 def eval_cases() -> tuple[EvalCase, ...]:
     return (
         EvalCase(
-            query="attribution accuracy label mismatch",
+            query="validation accuracy label mismatch",
             expected_topic="Attribution accuracy workflow",
         ),
         EvalCase(
-            query="RDS JSON aggregation timeout",
-            expected_topic="RDS JSON aggregation pitfall",
+            query="database JSON aggregation timeout",
+            expected_topic="database JSON aggregation pitfall",
         ),
         EvalCase(
-            query="owner diagnosis skill route",
-            expected_topic="Skill route for owner diagnosis",
+            query="maintainer diagnosis skill route",
+            expected_topic="Skill route for maintainer diagnosis",
         ),
         EvalCase(
             query="AGENTS install doctor ready",

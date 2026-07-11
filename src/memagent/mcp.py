@@ -190,6 +190,7 @@ class McpServer:
             recent_text=_optional_str(arguments, "recent_text") or "",
             context=context,
             provider=_optional_str(arguments, "provider") or "heuristic",
+            semantic_mode=_optional_str(arguments, "semantic_mode"),
             llm_profile=_optional_str(arguments, "llm_profile"),
             llm_config_path=_optional_path(arguments, "llm_config_path"),
             has_recent_trace=_optional_bool(arguments, "recent_trace", False)
@@ -231,6 +232,7 @@ class McpServer:
             store=self.store,
             handoff_store=self.handoff_store,
             provider=_optional_str(arguments, "provider") or "heuristic",
+            semantic_mode=_optional_str(arguments, "semantic_mode"),
             llm_profile=_optional_str(arguments, "llm_profile"),
             llm_config_path=_optional_path(arguments, "llm_config_path"),
             draft_provider=_optional_str(arguments, "draft_provider"),
@@ -393,7 +395,7 @@ class McpServer:
         )
 
     def _tool_trace_eval(self, arguments: dict[str, Any]) -> str:
-        workspace = _optional_path(arguments, "workspace") or Path("local_memory_demo/trace_eval").resolve()
+        workspace = _optional_path(arguments, "workspace") or (self.store.home / "reports" / "trace_eval")
         result = run_trace_eval(
             store=self.store,
             workspace=workspace,
@@ -412,7 +414,7 @@ class McpServer:
         )
 
     def _tool_trace_replay(self, arguments: dict[str, Any]) -> str:
-        workspace = _optional_path(arguments, "workspace") or Path("local_memory_demo/trace_replay").resolve()
+        workspace = _optional_path(arguments, "workspace") or (self.store.home / "reports" / "trace_replay")
         result = run_trace_replay(
             store=self.store,
             workspace=workspace,
@@ -554,6 +556,11 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Drafting provider.",
                         "enum": ["heuristic", "openai-compatible"],
                     },
+                    "semantic_mode": {
+                        "type": "string",
+                        "description": "Semantic decision mode. Defaults to local configuration.",
+                        "enum": ["heuristic", "llm", "hybrid"],
+                    },
                     "llm_profile": {"type": "string", "description": "Named local LLM provider profile."},
                     "llm_config_path": {"type": "string", "description": "Optional LLM provider profile config path."},
                     "topic": {"type": "string", "description": "Optional topic override."},
@@ -584,6 +591,11 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "type": "string",
                         "description": "Routing/drafting provider.",
                         "enum": ["heuristic", "openai-compatible"],
+                    },
+                    "semantic_mode": {
+                        "type": "string",
+                        "description": "Semantic decision mode. Defaults to local configuration.",
+                        "enum": ["heuristic", "llm", "hybrid"],
                     },
                     "llm_profile": {"type": "string", "description": "Named local LLM provider profile."},
                     "llm_config_path": {"type": "string", "description": "Optional LLM provider profile config path."},

@@ -8,7 +8,7 @@ from memagent.context import ProjectContext
 from memagent.memory import MemoryMatch, MemoryStore
 
 
-def project_context(repo_name: str = "walle") -> ProjectContext:
+def project_context(repo_name: str = "sample_repo") -> ProjectContext:
     return ProjectContext(
         cwd=Path(f"/tmp/{repo_name}"),
         git_root=Path(f"/tmp/{repo_name}"),
@@ -24,13 +24,13 @@ class MemoryStoreTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = MemoryStore(Path(tmp))
             saved = store.remember(
-                text="RDS JSON aggregation timed out; split by id ranges before grouping.",
-                topic="RDS query pitfall",
+                text="database JSON aggregation timed out; split by id ranges before grouping.",
+                topic="database query pitfall",
                 domain=None,
                 kind=None,
-                repo="walle",
-                module="machine_attribution",
-                triggers=["RDS", "JSON", "accuracy"],
+                repo="sample_repo",
+                module="machine_validation",
+                triggers=["database", "JSON", "accuracy"],
                 exportable=False,
             )
             self.assertTrue(saved.path.exists())
@@ -39,27 +39,27 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertIn('kind: "note"', raw)
 
             context = project_context()
-            matches = store.recall("how to avoid RDS JSON timeout", context=context, limit=3)
+            matches = store.recall("how to avoid database JSON timeout", context=context, limit=3)
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].domain, "coding")
             self.assertEqual(matches[0].kind, "note")
-            self.assertIn("rds", matches[0].matched_terms)
+            self.assertIn("database", matches[0].matched_terms)
             self.assertIn("json", matches[0].matched_terms)
             rendered = store.compose_context(
-                query="how to avoid RDS JSON timeout",
+                query="how to avoid database JSON timeout",
                 context=context,
                 matches=matches,
                 max_lines=8,
                 show_sources=True,
                 show_reasons=True,
             )
-            self.assertIn("RDS query pitfall [coding/note]", rendered)
+            self.assertIn("database query pitfall [coding/note]", rendered)
             self.assertIn("score=", rendered)
             self.assertIn("matched=", rendered)
             self.assertIn("- Pack:", rendered)
             self.assertIn("split by id ranges", rendered)
             payload = store.build_recall_payload(
-                query="how to avoid RDS JSON timeout",
+                query="how to avoid database JSON timeout",
                 context=context,
                 matches=matches,
                 max_lines=8,
@@ -69,8 +69,8 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "memagent.recall.v1")
             self.assertEqual(payload["total_matches"], 1)
             self.assertIn("text", payload)
-            self.assertEqual(payload["context"]["repo_name"], "walle")
-            self.assertEqual(payload["matches"][0]["title"], "RDS query pitfall")
+            self.assertEqual(payload["context"]["repo_name"], "sample_repo")
+            self.assertEqual(payload["matches"][0]["title"], "database query pitfall")
             self.assertEqual(payload["pack"]["emitted_matches"], 1)
             self.assertFalse(payload["pack"]["truncated"])
 
@@ -95,7 +95,7 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertEqual(len(summaries), 1)
             self.assertEqual(summaries[0].identifier, saved.identifier)
             self.assertEqual(summaries[0].query, "no matching memory")
-            self.assertEqual(summaries[0].repo_name, "walle")
+            self.assertEqual(summaries[0].repo_name, "sample_repo")
             self.assertEqual(summaries[0].total_matches, 0)
 
             loaded_latest = store.load_recall_trace()
@@ -145,7 +145,7 @@ class MemoryStoreTest(unittest.TestCase):
                 topic="Skill route",
                 domain=" Coding ",
                 kind="Skill-Route",
-                repo="walle",
+                repo="sample_repo",
                 module=None,
                 triggers=["skill"],
                 exportable=False,
@@ -163,7 +163,7 @@ class MemoryStoreTest(unittest.TestCase):
                     topic=None,
                     domain="unknown-domain",
                     kind=None,
-                    repo="walle",
+                    repo="sample_repo",
                     module=None,
                     triggers=[],
                     exportable=False,
@@ -174,7 +174,7 @@ class MemoryStoreTest(unittest.TestCase):
                     topic=None,
                     domain=None,
                     kind="unknown-kind",
-                    repo="walle",
+                    repo="sample_repo",
                     module=None,
                     triggers=[],
                     exportable=False,
@@ -188,11 +188,11 @@ class MemoryStoreTest(unittest.TestCase):
                 "\n".join(
                     [
                         'id: "old"',
-                        'topic: "Legacy RDS note"',
+                        'topic: "Legacy database note"',
                         "scope:",
-                        '  repo: "walle"',
+                        '  repo: "sample_repo"',
                         "triggers:",
-                        '  - "RDS"',
+                        '  - "database"',
                         "pitfalls:",
                         '  - "Legacy cards should still recall."',
                         "",
@@ -200,7 +200,7 @@ class MemoryStoreTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            matches = store.recall("RDS legacy", context=project_context(), limit=3)
+            matches = store.recall("database legacy", context=project_context(), limit=3)
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].domain, "coding")
             self.assertEqual(matches[0].kind, "note")
@@ -238,16 +238,16 @@ class MemoryStoreTest(unittest.TestCase):
                 exportable=False,
             )
             store.remember(
-                text="For attribution accuracy checks, compare model labels with reviewed labels.",
+                text="For validation accuracy checks, compare model labels with reviewed labels.",
                 topic="Attribution accuracy workflow",
                 domain="coding",
                 kind="workflow",
                 repo="demo",
                 module=None,
-                triggers=["attribution", "accuracy"],
+                triggers=["validation", "accuracy"],
                 exportable=False,
             )
-            matches = store.recall("attribution accuracy", context=project_context("demo"), limit=2, strategy="bm25")
+            matches = store.recall("validation accuracy", context=project_context("demo"), limit=2, strategy="bm25")
             self.assertGreaterEqual(len(matches), 2)
             self.assertEqual(matches[0].title, "Attribution accuracy workflow")
             self.assertEqual(matches[0].strategy, "bm25")
@@ -269,8 +269,8 @@ class MemoryStoreTest(unittest.TestCase):
                     domain="coding",
                     kind="tool_recipe",
                     strategy="bm25",
-                    matched_terms=("rds",),
-                    lines=("Use id ranges before grouping.", "Check owner config first."),
+                    matched_terms=("database",),
+                    lines=("Use id ranges before grouping.", "Check maintainer config first."),
                 ),
                 MemoryMatch(
                     path=Path(tmp) / "two.memory.yaml",
@@ -279,12 +279,12 @@ class MemoryStoreTest(unittest.TestCase):
                     domain="coding",
                     kind="pitfall",
                     strategy="bm25",
-                    matched_terms=("rds",),
+                    matched_terms=("database",),
                     lines=("Use id ranges before grouping.", "Avoid full-table aggregation."),
                 ),
             ]
             rendered = store.compose_context(
-                query="RDS owner query",
+                query="database maintainer query",
                 context=project_context(),
                 matches=matches,
                 max_lines=10,
