@@ -22,6 +22,7 @@ Follow the result without making MemAgent the focus of ordinary work:
 - `recall`: use the short context as a hint, then verify against live code,
   tests, documentation, and command output.
 - `draft_memory`: show the preview and wait for explicit confirmation.
+- `reject_memory`: acknowledge that the pending preview was discarded.
 - `label_feedback`: acknowledge the natural-language feedback.
 - `handoff_show` / `handoff_save`: use the project continuation state.
 - `none`: continue normally.
@@ -32,6 +33,7 @@ Natural requests are intent, not a rigid keyword list:
   recall or handoff.
 - “Remember this workaround” or “save this lesson” drafts a memory preview.
 - “Save it” saves only the already previewed draft.
+- “Don't save this” discards only the pending preview.
 - “That was helpful” or “not relevant” labels the latest recall when present.
 - “How has MemAgent been doing?” shows local project activity.
 
@@ -54,6 +56,27 @@ The default semantic mode is fully local heuristic routing. Optional LLM or
 hybrid routing is configured explicitly with `memagent configure`. It only uses
 short sanitized task summaries and draft candidates; never send a full
 conversation, secrets, or raw request/response bodies.
+
+At the end of a non-trivial task, proactively suggest at most one memory only
+when the work produced concrete evidence of a reusable lesson:
+
+- a meaningful detour or repeated failed path;
+- a user correction that changes the workflow;
+- a verified entrypoint, command, schema, or validation step;
+- a costly investigation with a shorter repeatable path;
+- a stable project boundary or multi-step workflow.
+
+Do not suggest memories for routine edits, generic advice, unverified guesses,
+or facts already captured. Pass only a short actionable lesson, never the full
+transcript:
+
+```bash
+__MEMAGENT_COMMAND__ suggest "<one short reusable lesson>" --evidence <detour|correction|verified_entrypoint|costly_investigation|workflow|project_boundary>
+```
+
+Show the returned preview as an optional suggestion and wait. A duplicate or an
+already-pending preview is skipped automatically. The user can confirm in
+ordinary language or reject it; neither path changes the project repository.
 
 Never save tokens, cookies, passwords, private keys, or raw sensitive samples.
 Do not automatically create durable memories: a preview and explicit user

@@ -13,6 +13,35 @@ from memagent.cli import main
 
 
 class CliTest(unittest.TestCase):
+    def test_suggest_cli_creates_agent_pending_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--home",
+                        str(home),
+                        "suggest",
+                        "Verify the live interface before changing a generated client.",
+                        "--evidence",
+                        "correction",
+                        "--cwd",
+                        str(project),
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["route"]["action"], "draft_memory")
+            self.assertTrue(payload["artifacts"]["agent_suggested"])
+            pending = list((home / "pending_memory_drafts").glob("*.json"))
+            self.assertEqual(len(pending), 1)
+
     def test_llm_doctor_json_cli(self) -> None:
         with mock.patch.dict(
             os.environ,
@@ -423,7 +452,7 @@ class CliTest(unittest.TestCase):
                 os.chdir(previous_cwd)
 
             payload = json.loads(recall_stdout.getvalue())
-            self.assertEqual(payload["schema_version"], "memagent.recall.v1")
+            self.assertEqual(payload["schema_version"], "memagent.recall.v2")
             self.assertEqual(payload["query"], "database JSON timeout")
             self.assertEqual(payload["context"]["repo_name"], "project")
             self.assertEqual(payload["matches"][0]["title"], "database timeout pitfall")
@@ -544,7 +573,7 @@ class CliTest(unittest.TestCase):
                 os.chdir(previous_cwd)
 
             payload = json.loads(show_stdout.getvalue())
-            self.assertEqual(payload["schema_version"], "memagent.recall.v1")
+            self.assertEqual(payload["schema_version"], "memagent.recall.v2")
             self.assertEqual(payload["trace"]["source"], "cli")
             self.assertEqual(payload["matches"][0]["title"], "Owner skill route")
 

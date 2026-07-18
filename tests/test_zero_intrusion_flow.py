@@ -203,6 +203,46 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
             self.assertEqual(store.count_memory_cards(), 1)
             self.assertEqual(_git(project, "status", "--porcelain"), "")
 
+    def test_agent_suggestion_in_temporary_git_project_keeps_project_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "example_service"
+            project.mkdir()
+            _git(project, "init")
+            _git(project, "config", "user.email", "memagent@example.test")
+            _git(project, "config", "user.name", "MemAgent Test")
+            (project / "README.md").write_text("# demo\n", encoding="utf-8")
+            _git(project, "add", "README.md")
+            _git(project, "commit", "-m", "initial")
+            home = root / "memagent-home"
+            context = detect_context(project)
+            store = MemoryStore(home)
+            handoffs = HandoffStore(home)
+
+            draft = process_interaction(
+                message="The agent found a reusable lesson.",
+                recent_text="Verify the live interface before changing a generated client.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                agent_suggested=True,
+                suggestion_evidence="correction",
+            )
+            self.assertEqual(draft.route.action, "draft_memory")
+            self.assertEqual(store.count_memory_cards(), 0)
+            self.assertEqual(_git(project, "status", "--porcelain"), "")
+
+            rejected = process_interaction(
+                message="Don't save this one.",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+            self.assertEqual(rejected.route.action, "reject_memory")
+            self.assertFalse(store.has_pending_memory_draft(context=context))
+            self.assertEqual(_git(project, "status", "--porcelain"), "")
+
 
 def _git(project: Path, *args: str) -> str:
     completed = subprocess.run(

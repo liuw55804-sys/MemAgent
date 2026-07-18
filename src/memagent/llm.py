@@ -107,7 +107,7 @@ class LlmDoctorResult:
             "profile": self.profile,
             "config_path": self.config_path,
             "allow_no_key": self.allow_no_key,
-            "privacy": "Only short sanitized task summaries and draft candidates are eligible for LLM requests; API keys are never printed or stored by configure.",
+            "privacy": "Only short sanitized task summaries, draft candidates, and ambiguous candidate-memory summaries are eligible for LLM requests; API keys are never printed or stored by configure.",
         }
 
 

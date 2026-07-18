@@ -37,6 +37,19 @@ class RouterTest(unittest.TestCase):
         self.assertTrue(decision.recent_text_used)
         self.assertIn("下次别忘", decision.signals)
 
+    def test_explicit_memory_capture_outranks_recall_signals(self) -> None:
+        decision = route_interaction(
+            "请记住：以后排查接口问题先查 live schema。",
+            recent_text="For interface debugging, inspect the live schema first.",
+        )
+
+        self.assertEqual(decision.action, "draft_memory")
+
+    def test_natural_reusable_constraint_draft_routes_to_memory(self) -> None:
+        decision = route_interaction("请生成一条可复用的协作约束草稿。")
+
+        self.assertEqual(decision.action, "draft_memory")
+
     def test_routes_feedback_label(self) -> None:
         decision = route_interaction("刚刚那条没帮上忙。", has_recent_trace=True)
 
@@ -56,6 +69,13 @@ class RouterTest(unittest.TestCase):
         self.assertEqual(decision.action, "save_memory")
         self.assertTrue(decision.requires_pending_draft)
         self.assertEqual(route_interaction("确认保存", has_pending_draft=False).action, "none")
+
+    def test_routes_memory_rejection_only_with_pending_draft(self) -> None:
+        decision = route_interaction("这条不用记了", has_pending_draft=True)
+
+        self.assertEqual(decision.action, "reject_memory")
+        self.assertTrue(decision.requires_pending_draft)
+        self.assertEqual(route_interaction("这条不用记了", has_pending_draft=False).action, "none")
 
     def test_routes_handoff_save(self) -> None:
         decision = route_interaction("先到这，下次继续时帮我接上。")

@@ -141,8 +141,102 @@ class ActivityTest(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
-            self.assertEqual(payload["schema_version"], "memagent.activity.v1")
+            self.assertEqual(payload["schema_version"], "memagent.activity.v2")
             self.assertEqual(payload["summary"]["actions"], {"draft_memory": 1})
+
+    def test_activity_reports_precision_and_proactive_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            context = _context(root / "project")
+            store = MemoryStore(root / "home")
+            handoffs = HandoffStore(store.home)
+            store.save_process_trace(
+                {
+                    "context": {
+                        "cwd": str(context.cwd),
+                        "git_root": str(context.git_root),
+                        "repo_name": context.repo_name,
+                    },
+                    "route": {"action": "none"},
+                    "artifacts": {
+                        "recall_considered": True,
+                        "candidates": 3,
+                        "emitted": 0,
+                        "abstained": True,
+                        "candidate_generation_ms": 2,
+                        "local_relevance_ms": 1,
+                        "relevance_gate_ms": 0,
+                    },
+                },
+                source="test",
+            )
+            draft = process_interaction(
+                message="The agent found a reusable lesson.",
+                recent_text="Verify the live interface before changing a generated client.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                agent_suggested=True,
+                suggestion_evidence="correction",
+            )
+            self.assertEqual(draft.route.action, "draft_memory")
+
+            report = build_activity_report(store=store, handoff_store=handoffs, context=context)
+
+            self.assertEqual(report.retrieval["considered"], 1)
+            self.assertEqual(report.retrieval["abstained"], 1)
+            self.assertEqual(report.retrieval["avg_candidate_generation_ms"], 2.0)
+            self.assertEqual(report.suggestions["suggested"], 1)
+            self.assertEqual(report.suggestions["pending"], 1)
+            rendered = render_activity_report(report)
+            self.assertIn("Recall precision", rendered)
+            self.assertIn("Proactive memory", rendered)
+
+    def test_activity_links_agent_suggestion_acceptance_and_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            context = _context(root / "project")
+            store = MemoryStore(root / "home")
+            handoffs = HandoffStore(store.home)
+            process_interaction(
+                message="The agent found a reusable lesson.",
+                recent_text="Verify the live interface before changing generated code.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                agent_suggested=True,
+                suggestion_evidence="correction",
+            )
+            process_interaction(
+                message="确认保存",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+            process_interaction(
+                message="The agent found another reusable lesson.",
+                recent_text="Run the focused parser test before the full test suite.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                agent_suggested=True,
+                suggestion_evidence="workflow",
+            )
+            process_interaction(
+                message="这条不用记了",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+
+            report = build_activity_report(store=store, handoff_store=handoffs, context=context)
+
+            self.assertEqual(report.suggestions["suggested"], 2)
+            self.assertEqual(report.suggestions["accepted"], 1)
+            self.assertEqual(report.suggestions["rejected"], 1)
+            self.assertNotIn("pending", report.suggestions)
 
     def test_activity_distinguishes_pending_and_unconfirmed_drafts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

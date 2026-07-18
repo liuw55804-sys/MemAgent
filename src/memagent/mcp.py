@@ -6,6 +6,7 @@ import json
 import sys
 from typing import Any, TextIO
 
+from memagent import __version__
 from memagent.agents import build_agents_doctor_report, default_memagent_root
 from memagent.context import detect_context
 from memagent.draft import draft_memory, render_memory_draft
@@ -17,8 +18,9 @@ from memagent.handoff import (
     render_promotion_preview,
 )
 from memagent.interaction import process_interaction, process_payload_json, render_process_result
-from memagent.llm import check_llm_provider, render_llm_doctor
+from memagent.llm import check_llm_provider, default_semantic_mode, render_llm_doctor
 from memagent.memory import MemoryStore
+from memagent.relevance import select_relevant_memories
 from memagent.router import render_route_decision, route_interaction
 
 
@@ -90,7 +92,7 @@ class McpServer:
             "serverInfo": {
                 "name": "memagent",
                 "title": "MemAgent",
-                "version": "0.1.0",
+                "version": __version__,
                 "description": "Local workflow memory layer for Codex and other coding agents.",
             },
             "instructions": (
@@ -147,12 +149,22 @@ class McpServer:
         query = _required_str(arguments, "query")
         context = detect_context(_optional_path(arguments, "cwd"))
         strategy = _optional_str(arguments, "strategy") or "bm25"
-        matches = self.store.recall(
+        candidates = self.store.recall(
             query,
             context=context,
             limit=_optional_int(arguments, "limit", 5),
             strategy=strategy,
         )
+        selection = select_relevant_memories(
+            query,
+            matches=candidates,
+            context=context,
+            semantic_mode=_optional_str(arguments, "semantic_mode") or default_semantic_mode(),
+            llm_profile=_optional_str(arguments, "llm_profile"),
+            llm_config_path=_optional_path(arguments, "llm_config_path"),
+            max_emitted=_optional_int(arguments, "max_emitted", 1),
+        )
+        matches = list(selection.emitted)
         payload = self.store.build_recall_payload(
             query=query,
             context=context,
@@ -160,6 +172,8 @@ class McpServer:
             max_lines=_optional_int(arguments, "max_lines", 12),
             show_sources=_optional_bool(arguments, "show_sources", True),
             show_reasons=_optional_bool(arguments, "show_reasons", True),
+            candidates=candidates,
+            retrieval=selection.to_payload(),
         )
         response_format = _optional_str(arguments, "format") or "text"
         if response_format not in {"text", "json"}:
@@ -242,6 +256,7 @@ class McpServer:
             trace_recall=_optional_bool(arguments, "trace_recall", True),
             trace_none=_optional_bool(arguments, "trace_none", False),
             limit=_optional_int(arguments, "limit", 5),
+            max_emitted=_optional_int(arguments, "max_emitted", 1),
             max_lines=_optional_int(arguments, "max_lines", 12),
             strategy=_optional_str(arguments, "strategy") or "bm25",
             eval_workspace=_optional_path(arguments, "eval_workspace"),
@@ -449,6 +464,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                     "query": {"type": "string", "description": "Natural-language task or question."},
                     "cwd": {"type": "string", "description": "Optional project directory."},
                     "limit": {"type": "integer", "description": "Maximum memory cards to inspect."},
+                    "max_emitted": {"type": "integer", "description": "Maximum memories returned after relevance filtering."},
                     "max_lines": {"type": "integer", "description": "Maximum lines in the composed context."},
                     "show_sources": {"type": "boolean", "description": "Include memory file names."},
                     "show_reasons": {"type": "boolean", "description": "Include score and matched query terms."},
@@ -457,6 +473,13 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Recall scoring strategy: bm25 or keyword.",
                         "enum": ["bm25", "keyword"],
                     },
+                    "semantic_mode": {
+                        "type": "string",
+                        "description": "Relevance mode. Defaults to local configuration.",
+                        "enum": ["heuristic", "llm", "hybrid"],
+                    },
+                    "llm_profile": {"type": "string", "description": "Named optional LLM profile for ambiguous relevance."},
+                    "llm_config_path": {"type": "string", "description": "Optional provider profile config path."},
                     "format": {
                         "type": "string",
                         "description": "Return format: text or json.",
@@ -616,6 +639,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "description": "Also save process traces for no-op actions during self-tests or debugging.",
                     },
                     "limit": {"type": "integer", "description": "Maximum memory cards to inspect for recall."},
+                    "max_emitted": {"type": "integer", "description": "Maximum memories returned after relevance filtering."},
                     "max_lines": {"type": "integer", "description": "Maximum lines in recalled context."},
                     "strategy": {
                         "type": "string",

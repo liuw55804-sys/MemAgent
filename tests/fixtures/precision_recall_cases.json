@@ -1,0 +1,44 @@
+{
+  "memories": [
+    {
+      "topic": "Verify live interface before generated client edits",
+      "kind": "verification",
+      "triggers": ["interface", "generated client"],
+      "text": "Verify the live interface definition before changing a generated client."
+    },
+    {
+      "topic": "Focused merge conflict workflow",
+      "kind": "tool_recipe",
+      "triggers": ["merge", "conflict", "git"],
+      "text": "For a merge conflict, inspect both changed call paths and run focused tests before continuing."
+    },
+    {
+      "topic": "Project documentation preference",
+      "kind": "preference",
+      "triggers": ["docs", "tasks", "preference"],
+      "text": "Do not create docs or task notes unless the user explicitly requests them."
+    }
+  ],
+  "cases": [
+    {
+      "query": "The generated client disagrees with the interface definition; how should I verify it?",
+      "expected_topic": "Verify live interface before generated client edits"
+    },
+    {
+      "query": "Resolve this git merge conflict and verify both changed call paths.",
+      "expected_topic": "Focused merge conflict workflow"
+    },
+    {
+      "query": "Only change implementation code; do not add docs or tasks.",
+      "expected_topic": "Project documentation preference"
+    },
+    {
+      "query": "Please investigate task 987654321012345678 and fix the code.",
+      "expected_topic": null
+    },
+    {
+      "query": "Explain this small function.",
+      "expected_topic": null
+    }
+  ]
+}

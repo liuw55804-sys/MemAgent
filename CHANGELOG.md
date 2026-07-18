@@ -2,6 +2,21 @@
 
 All notable public changes are recorded here.
 
+## 0.2.0 - Unreleased
+
+- Precision-first recall now separates BM25 candidate generation from local
+  relevance decisions, emits at most one memory, and abstains on weak evidence.
+- Generic task words and unstable numeric identifiers no longer create recall
+  relevance by themselves.
+- Optional `hybrid` and `llm` modes can use a sanitized LLM relevance gate for
+  ambiguous candidates, with local abstention on provider failure.
+- The user-level Codex Skill can proactively suggest one memory preview after a
+  meaningful detour, correction, verified entrypoint, or reusable workflow.
+- Agent suggestions support confirmation, rejection, duplicate suppression,
+  pending-preview limits, and local lifecycle metrics.
+- `activity` distinguishes recall considered/emitted/abstained events and
+  reports local/LLM latency plus proactive suggestion outcomes.
+
 ## 0.1.0 - Unreleased
 
 First public-release candidate.

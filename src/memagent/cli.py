@@ -39,9 +39,10 @@ from memagent.ingest import (
     run_codex_ingest,
 )
 from memagent.interaction import process_interaction, process_payload_json, render_process_result
-from memagent.llm import activate_semantic_profile, check_llm_provider, configure_semantic_mode, render_llm_doctor
+from memagent.llm import activate_semantic_profile, check_llm_provider, configure_semantic_mode, default_semantic_mode, render_llm_doctor
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
+from memagent.relevance import select_relevant_memories
 from memagent.router import render_route_decision, route_interaction
 from memagent.wrapper import build_augmented_prompt, process_result_context_for_prompt
 
@@ -112,6 +113,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RECALL_STRATEGY,
         choices=["bm25", "keyword"],
         help="Recall scoring strategy. Default: bm25.",
+    )
+    recall.add_argument(
+        "--semantic-mode",
+        choices=["heuristic", "llm", "hybrid"],
+        help="Optional relevance-gate mode. Defaults to local config or heuristic.",
+    )
+    recall.add_argument("--llm-profile", help="Named profile for optional candidate relevance decisions.")
+    recall.add_argument("--llm-config", help="Optional provider profile config path for relevance decisions.")
+    recall.add_argument(
+        "--max-emitted",
+        type=int,
+        default=1,
+        help="Maximum memories returned after relevance filtering. Default: 1.",
     )
     recall.add_argument(
         "--json",
@@ -229,6 +243,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="Maximum memory cards to inspect for recall actions. Default: 5.",
+    )
+    process.add_argument(
+        "--max-emitted",
+        type=int,
+        default=1,
+        help="Maximum memories returned after relevance filtering. Default: 1.",
     )
     process.add_argument(
         "--max-lines",
@@ -389,6 +409,35 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["bm25", "keyword"],
         help="Recall scoring strategy. Default: bm25.",
     )
+
+    suggest = subparsers.add_parser(
+        "suggest",
+        help="Create one agent-suggested memory preview at a meaningful task boundary.",
+    )
+    suggest.add_argument("lesson", help="Short reusable lesson; do not pass a full transcript.")
+    suggest.add_argument(
+        "--evidence",
+        required=True,
+        choices=[
+            "detour",
+            "correction",
+            "verified_entrypoint",
+            "costly_investigation",
+            "workflow",
+            "project_boundary",
+        ],
+        help="Why the coding agent believes this lesson is worth previewing.",
+    )
+    suggest.add_argument("--cwd", help="Project directory. Defaults to the current working directory.")
+    suggest.add_argument(
+        "--draft-provider",
+        choices=["heuristic", "openai-compatible"],
+        help="Optional provider for draft quality. Defaults to local configuration.",
+    )
+    suggest.add_argument("--llm-profile", help="Named optional LLM profile for draft quality.")
+    suggest.add_argument("--llm-config", help="Optional provider profile config path.")
+    suggest.add_argument("--no-write", action="store_true", help="Preview without saving a pending draft.")
+    suggest.add_argument("--json", action="store_true", help="Print structured JSON output.")
     codex.add_argument(
         "--provider",
         default="heuristic",
@@ -1182,10 +1231,35 @@ def main(argv: list[str] | None = None) -> int:
                 trace_recall=not args.no_trace,
                 trace_none=args.trace_none,
                 limit=args.limit,
+                max_emitted=args.max_emitted,
                 max_lines=args.max_lines,
                 strategy=args.strategy,
                 eval_workspace=Path(args.eval_workspace).expanduser() if args.eval_workspace else None,
                 replay_workspace=Path(args.replay_workspace).expanduser() if args.replay_workspace else None,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.json:
+            print(process_payload_json(result, context=context))
+        else:
+            print(render_process_result(result, context=context))
+        return 0
+
+    if args.command == "suggest":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        try:
+            result = process_interaction(
+                message="The coding agent found one reusable workflow lesson.",
+                recent_text=args.lesson,
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+                draft_provider=args.draft_provider,
+                draft_llm_profile=args.llm_profile,
+                draft_llm_config_path=Path(args.llm_config) if args.llm_config else None,
+                allow_writes=not args.no_write,
+                agent_suggested=True,
+                suggestion_evidence=args.evidence,
             )
         except ValueError as exc:
             parser.error(str(exc))
@@ -1383,7 +1457,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "recall":
         context = detect_context()
-        matches = store.recall(args.query, context=context, limit=args.limit, strategy=args.strategy)
+        candidates = store.recall(args.query, context=context, limit=args.limit, strategy=args.strategy)
+        selection = select_relevant_memories(
+            args.query,
+            matches=candidates,
+            context=context,
+            semantic_mode=args.semantic_mode or default_semantic_mode(),
+            llm_profile=args.llm_profile,
+            llm_config_path=Path(args.llm_config) if args.llm_config else None,
+            max_emitted=args.max_emitted,
+        )
+        matches = list(selection.emitted)
         payload = store.build_recall_payload(
             query=args.query,
             context=context,
@@ -1391,6 +1475,8 @@ def main(argv: list[str] | None = None) -> int:
             max_lines=args.max_lines,
             show_sources=args.show_sources,
             show_reasons=args.show_reasons,
+            candidates=candidates,
+            retrieval=selection.to_payload(),
         )
         saved_trace = store.save_recall_trace(payload, source="cli") if args.trace else None
         output_payload = saved_trace.payload if saved_trace else payload

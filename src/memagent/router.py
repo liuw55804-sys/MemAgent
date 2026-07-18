@@ -21,6 +21,7 @@ ROUTE_ACTIONS = {
     "recall",
     "draft_memory",
     "save_memory",
+    "reject_memory",
     "label_feedback",
     "handoff_show",
     "handoff_save",
@@ -259,6 +260,35 @@ def route_with_heuristics(
             )
         )
 
+    rejection_signals = _matched(
+        lower,
+        (
+            "不用记",
+            "不需要记",
+            "这不值得存",
+            "不值得记录",
+            "别保存",
+            "取消保存",
+            "discard this memory",
+            "do not save this",
+            "don't save",
+            "dont save",
+        ),
+    )
+    if rejection_signals and has_pending_draft is True:
+        candidates.append(
+            RouteDecision(
+                action="reject_memory",
+                confidence=_confidence(rejection_signals, base=0.9),
+                reason="The user rejected the pending memory preview.",
+                signals=rejection_signals,
+                user_message=text,
+                provider="heuristic",
+                requires_pending_draft=True,
+                suggested_next="Discard the pending memory draft for the current project.",
+            )
+        )
+
     feedback_rating, feedback_signals = _feedback_signal(lower)
     if feedback_signals:
         confidence = _confidence(feedback_signals, base=0.7)
@@ -282,6 +312,9 @@ def route_with_heuristics(
         lower,
         (
             "记住这个",
+            "记住",
+            "请记住",
+            "记住并",
             "把这个习惯记住",
             "把这个偏好记住",
             "这个习惯以后保持",
@@ -296,8 +329,13 @@ def route_with_heuristics(
             "这个入口",
             "这个命令",
             "踩坑",
+            "生成草稿",
+            "remember this",
+            "save this lesson",
         ),
     )
+    if "草稿" in lower and any(value in lower for value in ("记忆", "约束", "经验", "习惯", "偏好", "可复用")):
+        memory_signals = (*memory_signals, "memory_draft")
     if memory_signals:
         candidates.append(
             RouteDecision(
@@ -339,7 +377,17 @@ def route_with_heuristics(
             suggested_next="Continue normally without MemAgent.",
         )
 
-    return max(candidates, key=lambda decision: decision.confidence)
+    action_priority = {
+        "save_memory": 90,
+        "reject_memory": 90,
+        "label_feedback": 80,
+        "handoff_save": 75,
+        "handoff_show": 75,
+        "developer_eval": 70,
+        "draft_memory": 60,
+        "recall": 50,
+    }
+    return max(candidates, key=lambda decision: (action_priority.get(decision.action, 0), decision.confidence))
 
 
 def route_with_openai_compatible(
@@ -595,6 +643,7 @@ Allowed actions:
 - recall: task start may benefit from prior coding workflow memory.
 - draft_memory: current interaction contains a reusable lesson; preview before saving.
 - save_memory: user confirmed the pending memory preview for the current project.
+- reject_memory: user rejected the pending memory preview for the current project.
 - label_feedback: user gave feedback on a recalled memory.
 - handoff_show: user wants to resume previous project state.
 - handoff_save: user wants to stop or continue in another session.
@@ -621,6 +670,7 @@ Rules:
 - Never choose draft_memory for ordinary summaries unless there is a reusable workflow lesson.
 - draft_memory always requires confirmation before durable saving.
 - Only choose save_memory when has_pending_memory_draft is true and the user explicitly confirms saving.
+- Only choose reject_memory when has_pending_memory_draft is true and the user explicitly declines saving.
 - label_feedback requires a recent recall trace.
 - trace eval/replay are developer_eval, not normal product work.
 - Memories are hints; live code, schema, docs, and command output remain source of truth.

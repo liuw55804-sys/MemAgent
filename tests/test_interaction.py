@@ -138,6 +138,125 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertFalse(store.has_pending_memory_draft(context=context))
             self.assertEqual(store.count_memory_cards(), 1)
 
+    def test_agent_suggestion_requires_confirmation_and_records_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+
+            draft = process_interaction(
+                message="The agent found a reusable lesson.",
+                recent_text="When the generated client disagrees with old notes, verify the live interface definition first.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                agent_suggested=True,
+                suggestion_evidence="correction",
+            )
+
+            self.assertEqual(draft.route.action, "draft_memory")
+            self.assertTrue(store.has_pending_memory_draft(context=context))
+            self.assertEqual(store.count_memory_cards(), 0)
+            pending = store.load_pending_memory_draft(context=context)
+            self.assertEqual(pending["pending"]["source"], "agent_suggested")
+            self.assertEqual(pending["pending"]["evidence"], "correction")
+            self.assertIn("process_trace", draft.writes)
+
+            saved = process_interaction(
+                message="确认保存",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+
+            self.assertEqual(saved.artifacts["source"], "agent_suggested")
+            self.assertTrue(saved.artifacts["user_confirmed"])
+            self.assertEqual(store.count_memory_cards(), 1)
+
+    def test_agent_suggestion_can_be_rejected_and_cleared(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+            process_interaction(
+                message="The agent found a reusable lesson.",
+                recent_text="Inspect the live interface definition before changing the generated client.",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                agent_suggested=True,
+                suggestion_evidence="verified_entrypoint",
+            )
+
+            rejected = process_interaction(
+                message="这条不用记了",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+
+            self.assertEqual(rejected.route.action, "reject_memory")
+            self.assertTrue(rejected.artifacts["user_rejected"])
+            self.assertEqual(rejected.artifacts["source"], "agent_suggested")
+            self.assertFalse(store.has_pending_memory_draft(context=context))
+            self.assertEqual(store.count_memory_cards(), 0)
+
+    def test_agent_suggestion_skips_when_preview_is_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+            kwargs = {
+                "message": "The agent found a reusable lesson.",
+                "context": context,
+                "store": store,
+                "handoff_store": handoffs,
+                "agent_suggested": True,
+                "suggestion_evidence": "detour",
+            }
+            process_interaction(recent_text="Verify the live schema before debugging generated queries.", **kwargs)
+            second = process_interaction(recent_text="Start from the interface definition before tracing the handler.", **kwargs)
+
+            self.assertEqual(second.route.action, "none")
+            self.assertEqual(second.artifacts["status"], "pending_exists")
+            self.assertIn("process_trace", second.writes)
+
+    def test_agent_suggestion_deduplicates_highly_similar_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            store.remember(
+                text="Verify the live interface definition before changing the generated client.",
+                topic="Generated client interface verification",
+                domain="coding",
+                kind="verification",
+                repo=context.repo_name,
+                module=None,
+                triggers=["generated client", "interface definition"],
+                exportable=False,
+            )
+
+            result = process_interaction(
+                message="The agent found a reusable lesson.",
+                recent_text="Verify the live interface definition before changing the generated client.",
+                context=context,
+                store=store,
+                handoff_store=HandoffStore(store.home),
+                agent_suggested=True,
+                suggestion_evidence="verified_entrypoint",
+            )
+
+            self.assertEqual(result.route.action, "none")
+            self.assertEqual(result.artifacts["status"], "duplicate")
+            self.assertFalse(store.has_pending_memory_draft(context=context))
+            self.assertEqual(store.count_memory_cards(), 1)
+
     def test_process_feedback_labels_latest_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

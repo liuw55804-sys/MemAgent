@@ -41,6 +41,6 @@ rg -n "(sk|rk|pk)-[A-Za-z0-9_-]{8,}|BEGIN [A-Z ]*PRIVATE KEY" .
 
 ## First release recommendation
 
-Use **v0.1.0** for the first public release. The package has a stable local
-core and an intentionally opt-in LLM surface, while broader compatibility and
-retrieval-quality evidence can mature in later minor releases.
+Use **v0.2.0** for the next public release candidate. It adds precision-first
+recall, optional candidate relevance gating, proactive preview suggestions, and
+product-facing quality evidence while retaining the local-first contract.

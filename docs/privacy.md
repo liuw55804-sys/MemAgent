@@ -5,12 +5,15 @@ and does not require a model provider or account.
 
 When optional LLM semantics are enabled, MemAgent minimizes requests:
 
-- short task summaries and draft candidates only;
+- short task summaries, draft candidates, and up to three candidate-memory
+  summaries only;
 - recall estimation receives no existing memory cards, full transcript, path,
   repository name, or raw project content;
 - absolute paths, URLs, token-like values, compound identifiers, and long
   numbers are generalized before the request;
-- no full conversation export, existing memory library, API key, cookie,
+- candidate summaries are sanitized and sent only for ambiguous relevance
+  decisions in `hybrid` or `llm` mode;
+- no full conversation export, full memory library, API key, cookie,
   password, private key, or raw request/response body is intentionally sent.
 
 `memagent configure` writes only endpoint metadata, model name, semantic mode,

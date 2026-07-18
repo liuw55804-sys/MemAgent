@@ -44,15 +44,23 @@ memagent handoff save --topic "parser cleanup" --done "Added tests" \
 natural-language task
         |
         v
-local router -> recall | draft preview | feedback | handoff | none
+local router -> recall candidates | draft preview | feedback | handoff | none
+        |
+        v
+BM25 candidates -> local relevance -> one memory or abstain
         |
         v
 ~/.memagent/ (memory cards, pending drafts, local traces)
 ```
 
-- **Recall** provides a short project-scoped hint. Verify it against live code,
-  tests, and documentation before acting.
+- **Recall** uses BM25 to generate local candidates, then applies a precision
+  relevance policy. It returns at most one project-scoped hint and otherwise
+  abstains. Verify any hint against live sources before acting.
 - **Drafts** are previewed first. Durable memory requires explicit confirmation.
+- **Proactive capture** lets the Codex Skill suggest one preview after a
+  meaningful detour, correction, verified entrypoint, or reusable workflow.
+  Routine work is skipped, duplicates are suppressed, and nothing is saved
+  durably without confirmation.
 - **Feedback** from ordinary language helps evaluate whether a recalled hint was
   useful.
 - **Handoffs** keep recent project state separate from durable lessons.
@@ -79,24 +87,27 @@ memagent configure --mode hybrid --profile default \
 Choose one of three modes:
 
 - `heuristic`: fully local, default.
-- `llm`: use the optional provider for semantic routing and fall back locally
-  if it is unavailable.
-- `hybrid`: use local rules when confident and ask the provider only for
-  ambiguous routing. In particular, it uses a short LLM recall-likelihood
-  estimate before retrieving memory for low-confidence cases.
+- `llm`: use the optional provider for semantic routing and draft quality;
+  ambiguous recall candidates may also use the relevance gate. Failures fall
+  back to local behavior.
+- `hybrid`: keep confident routing and relevance decisions local. Use a short
+  recall-likelihood estimate for uncertain recall intent and an LLM relevance
+  gate only when BM25 candidates remain ambiguous.
 
 `configure` stores an endpoint, model, and API-key **environment variable
 name** in `~/.memagent/config.json`; it never writes the API key itself. A
 local OpenAI-compatible server can be configured with `--no-api-key`.
 
-Only short, sanitized task summaries and candidate drafts are eligible for an
-LLM request. MemAgent never intentionally sends full conversations, existing
-memory cards, passwords, cookies, private keys, or raw request/response bodies.
+Only short, sanitized task summaries, draft candidates, and up to three
+sanitized candidate-memory summaries are eligible for an LLM request. MemAgent
+never intentionally sends full conversations, the full memory library,
+passwords, cookies, private keys, or raw request/response bodies.
 
 ## Commands
 
 ```bash
 memagent process "remember this workaround and show me a preview"
+memagent suggest "Verify the live schema before editing generated queries." --evidence correction
 memagent activity --today
 memagent llm doctor --check-live
 memagent uninstall-user-codex --write
@@ -130,6 +141,10 @@ your local memories.
 
 **Does it write memory automatically?** No. Long-term memory always requires a
 preview and explicit confirmation.
+
+**Will it recall something on every task?** No. Generic terms, business IDs,
+and same-project overlap are insufficient. Precision-first recall returns one
+memory or abstains.
 
 **Does it change my repository?** No. The default integration is user-level
 and does not touch the repository.

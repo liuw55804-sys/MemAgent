@@ -17,6 +17,95 @@ from memagent.context import ProjectContext
 DEFAULT_DOMAIN = "coding"
 DEFAULT_KIND = "note"
 DEFAULT_RECALL_STRATEGY = "bm25"
+GENERIC_RECALL_TERMS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "be",
+    "before",
+    "id",
+    "code",
+    "for",
+    "how",
+    "in",
+    "issue",
+    "is",
+    "live",
+    "of",
+    "on",
+    "or",
+    "please",
+    "problem",
+    "project",
+    "rule",
+    "service",
+    "should",
+    "task",
+    "that",
+    "the",
+    "this",
+    "to",
+    "what",
+    "why",
+    "with",
+    "排查",
+    "定位",
+    "问题",
+    "需求",
+    "代码",
+    "文档",
+    "任务",
+    "相关",
+    "当前",
+    "之前",
+    "上次",
+    "类似",
+    "这个",
+    "那个",
+    "一下",
+    "为什么",
+    "怎么",
+    "如何",
+    "帮我",
+    "进行",
+    "处理",
+    "解决",
+    "补齐",
+    "开发",
+    "修改",
+    "更新",
+    "新增",
+    "完成",
+    "开始",
+    "没有",
+    "可以",
+    "是否",
+    "这次",
+    "方式",
+    "实现",
+    "生成",
+    "确认",
+    "保存",
+    "历史",
+}
+DISCRIMINATIVE_SHORT_CJK_TERMS = {
+    "线上",
+    "紧急",
+    "合并",
+    "冲突",
+    "接口",
+    "测试",
+    "构建",
+    "验证",
+    "偏好",
+    "习惯",
+    "驳回",
+    "交付",
+    "分支",
+    "工具",
+    "数据库",
+}
 RECALL_FEEDBACK_RATINGS = {
     "useful",
     "not_useful",
@@ -171,7 +260,10 @@ class MemoryStore:
         strategy: str = DEFAULT_RECALL_STRATEGY,
         semantic_hints: tuple[str, ...] = (),
     ) -> list[MemoryMatch]:
-        terms = _tokenize(" ".join(part for part in (query, *semantic_hints) if part))
+        terms = retrieval_terms(
+            " ".join(part for part in (query, *semantic_hints) if part),
+            repo_name=context.repo_name,
+        )
         if not terms:
             return []
         normalized_strategy = normalize_recall_strategy(strategy)
@@ -235,6 +327,8 @@ class MemoryStore:
         max_lines: int,
         show_sources: bool,
         show_reasons: bool = False,
+        candidates: list[MemoryMatch] | None = None,
+        retrieval: dict[str, object] | None = None,
     ) -> dict[str, object]:
         header = "[MemAgent recalled context]"
         context_bits = [
@@ -245,13 +339,19 @@ class MemoryStore:
             context_bits.append(f"branch: {context.branch}")
 
         lines = [header, f"- Task: {query}", f"- Context: {'; '.join(context_bits)}"]
+        candidate_matches = candidates if candidates is not None else matches
         payload: dict[str, object] = {
-            "schema_version": "memagent.recall.v1",
+            "schema_version": "memagent.recall.v2" if candidates is not None or retrieval is not None else "memagent.recall.v1",
             "query": query,
             "context": _context_payload(context),
-            "total_matches": len(matches),
+            "total_matches": len(candidate_matches),
+            "emitted_matches": len(matches),
             "matches": [_match_payload(match) for match in matches],
         }
+        if candidates is not None:
+            payload["candidates"] = [_match_payload(match) for match in candidate_matches]
+        if retrieval is not None:
+            payload["retrieval"] = retrieval
         if not matches:
             lines.append("- No related memories found.")
             payload["pack"] = {
@@ -275,7 +375,7 @@ class MemoryStore:
             show_sources=show_sources,
             show_reasons=show_reasons,
         )
-        lines.append(_render_pack_summary(packed=packed, total_matches=len(matches)))
+        lines.append(_render_pack_summary(packed=packed, total_matches=len(candidate_matches)))
         lines.extend(packed.lines)
         payload["pack"] = _pack_payload(packed)
         payload["text"] = "\n".join(lines)
@@ -319,6 +419,8 @@ class MemoryStore:
         *,
         draft: dict[str, object],
         context: ProjectContext,
+        source: str = "user_requested",
+        evidence: str | None = None,
     ) -> SavedPendingMemoryDraft:
         suggested = draft.get("suggested_remember") if isinstance(draft.get("suggested_remember"), dict) else draft
         text = str(suggested.get("text") or suggested.get("memory") or "").strip()
@@ -340,6 +442,8 @@ class MemoryStore:
                 "id": identifier,
                 "created_at": now.isoformat(),
                 "path": str(path),
+                "source": source,
+                "evidence": evidence,
             },
             "context": _context_payload(context),
             "draft": {
@@ -370,7 +474,7 @@ class MemoryStore:
         identifier = pending.get("id")
         return str(identifier) if identifier else None
 
-    def remember_pending_memory_draft(self, *, context: ProjectContext) -> SavedMemory:
+    def load_pending_memory_draft(self, *, context: ProjectContext) -> dict[str, object]:
         path = self._pending_memory_draft_path(context)
         if not path.exists():
             raise ValueError("no pending memory draft found for this project")
@@ -378,6 +482,18 @@ class MemoryStore:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ValueError(f"invalid pending memory draft JSON: {path}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"invalid pending memory draft payload: {path}")
+        return payload
+
+    def discard_pending_memory_draft(self, *, context: ProjectContext) -> dict[str, object]:
+        payload = self.load_pending_memory_draft(context=context)
+        self._pending_memory_draft_path(context).unlink()
+        return payload
+
+    def remember_pending_memory_draft(self, *, context: ProjectContext) -> SavedMemory:
+        path = self._pending_memory_draft_path(context)
+        payload = self.load_pending_memory_draft(context=context)
         draft = payload.get("draft") if isinstance(payload, dict) and isinstance(payload.get("draft"), dict) else {}
         text = str(draft.get("text") or "").strip()
         topic = str(draft.get("topic") or "").strip()
@@ -782,6 +898,37 @@ def _tokenize(text: str) -> list[str]:
             seen.add(candidate)
             tokens.append(candidate)
     return tokens
+
+
+def retrieval_terms(text: str, *, repo_name: str | None = None) -> list[str]:
+    repo_token = (repo_name or "").strip().lower()
+    terms: list[str] = []
+    for term in _tokenize(text):
+        if term in GENERIC_RECALL_TERMS:
+            continue
+        if repo_token and term == repo_token:
+            continue
+        if _is_unstable_identifier(term):
+            continue
+        terms.append(term)
+    return terms
+
+
+def is_discriminative_recall_term(term: str) -> bool:
+    normalized = term.strip().lower()
+    if not normalized or normalized in GENERIC_RECALL_TERMS or _is_unstable_identifier(normalized):
+        return False
+    if _contains_cjk(normalized) and len(normalized) <= 2:
+        return normalized in DISCRIMINATIVE_SHORT_CJK_TERMS
+    return True
+
+
+def _is_unstable_identifier(term: str) -> bool:
+    if re.fullmatch(r"\d+", term):
+        return True
+    if re.fullmatch(r"[0-9a-f]{12,}", term, flags=re.IGNORECASE):
+        return True
+    return False
 
 
 def _tokenize_all(text: str) -> list[str]:

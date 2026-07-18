@@ -30,6 +30,8 @@ class UserCodexSkillTest(unittest.TestCase):
             content = target.read_text(encoding="utf-8")
             self.assertIn(MANAGED_MARKER, content)
             self.assertIn("memagent process", content)
+            self.assertIn("memagent suggest", content)
+            self.assertIn("at most one memory", content)
             self.assertNotIn("PYTHON" + "PATH=", content)
             self.assertNotIn("AGENTS.md", str(target.parent))
 

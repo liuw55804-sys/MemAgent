@@ -174,7 +174,7 @@ class McpServerTest(unittest.TestCase):
                 }
             )
             payload = json.loads(json_recall_response["result"]["content"][0]["text"])
-            self.assertEqual(payload["schema_version"], "memagent.recall.v1")
+            self.assertEqual(payload["schema_version"], "memagent.recall.v2")
             self.assertEqual(payload["matches"][0]["title"], "Attribution accuracy pitfall")
             self.assertIn("text", payload)
 

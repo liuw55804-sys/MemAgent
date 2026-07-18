@@ -42,10 +42,12 @@ class ActivityReport:
     memory_count: int
     handoff_count: int
     lifecycle: LifecycleSummary
+    retrieval: dict[str, int | float]
+    suggestions: dict[str, int]
 
     def to_payload(self) -> dict[str, object]:
         return {
-            "schema_version": "memagent.activity.v1",
+            "schema_version": "memagent.activity.v2",
             "window": self.window_label,
             "context": {
                 "cwd": str(self.context.cwd),
@@ -58,6 +60,8 @@ class ActivityReport:
                 "feedback": self.feedback_counts,
                 "memories_created": self.memory_count,
                 "handoffs_saved": self.handoff_count,
+                "retrieval": self.retrieval,
+                "suggestions": self.suggestions,
             },
             "events": [event.to_payload() for event in self.events],
             "lifecycle": self.lifecycle.to_payload(),
@@ -76,6 +80,13 @@ def build_activity_report(
     action_counts: Counter[str] = Counter()
     recall_total = 0
     feedback_counts: Counter[str] = Counter()
+    retrieval_counts: Counter[str] = Counter()
+    suggestion_counts: Counter[str] = Counter()
+    retrieval_latencies: dict[str, list[int]] = {
+        "candidate_generation_ms": [],
+        "local_relevance_ms": [],
+        "relevance_gate_ms": [],
+    }
 
     for path in _json_paths(store.process_traces_dir, "process_trace_*.json"):
         payload = _read_json(path)
@@ -90,6 +101,29 @@ def build_activity_report(
         action = _text(route.get("action")) or "unknown"
         action_counts[action] += 1
         artifacts = process.get("artifacts") if isinstance(process.get("artifacts"), dict) else {}
+        if artifacts.get("recall_considered"):
+            retrieval_counts["considered"] += 1
+            retrieval_counts["candidates"] += _integer(artifacts.get("candidates"))
+            retrieval_counts["emitted"] += _integer(artifacts.get("emitted"))
+            if artifacts.get("abstained"):
+                retrieval_counts["abstained"] += 1
+            if artifacts.get("relevance_gate_attempted"):
+                retrieval_counts["llm_gate_attempted"] += 1
+            if artifacts.get("relevance_gate_fallback"):
+                retrieval_counts["llm_gate_fallback"] += 1
+            for key in retrieval_latencies:
+                value = artifacts.get(key)
+                if isinstance(value, (int, float)):
+                    retrieval_latencies[key].append(max(int(value), 0))
+        if artifacts.get("agent_suggested"):
+            suggestion_counts["suggested"] += 1
+            status = _text(artifacts.get("status"))
+            if status in {"duplicate", "pending_exists"}:
+                suggestion_counts[status] += 1
+        if artifacts.get("source") == "agent_suggested" and artifacts.get("user_confirmed"):
+            suggestion_counts["accepted"] += 1
+        if artifacts.get("source") == "agent_suggested" and artifacts.get("user_rejected"):
+            suggestion_counts["rejected"] += 1
         detail = _event_detail(action, artifacts)
         events.append(
             ActivityEvent(
@@ -154,6 +188,18 @@ def build_activity_report(
 
     events.sort(key=lambda event: event.created_at, reverse=True)
     lifecycle = build_lifecycle_summary(store=store, context=context, since=since)
+    if store.has_pending_memory_draft(context=context):
+        try:
+            pending = store.load_pending_memory_draft(context=context)
+            pending_meta = pending.get("pending") if isinstance(pending.get("pending"), dict) else {}
+            if pending_meta.get("source") == "agent_suggested":
+                suggestion_counts["pending"] = 1
+        except ValueError:
+            pass
+    retrieval = dict(sorted(retrieval_counts.items()))
+    for key, values in retrieval_latencies.items():
+        if values:
+            retrieval[f"avg_{key}"] = round(sum(values) / len(values), 1)
     return ActivityReport(
         context=context,
         window_label=_window_label(since),
@@ -164,6 +210,8 @@ def build_activity_report(
         memory_count=memory_count,
         handoff_count=handoff_count,
         lifecycle=lifecycle,
+        retrieval=retrieval,
+        suggestions=dict(sorted(suggestion_counts.items())),
     )
 
 
@@ -187,6 +235,8 @@ def render_activity_report(report: ActivityReport) -> str:
         f"- Recall feedback: {_render_counts(report.feedback_counts)}",
         f"- Memory cards saved: {report.memory_count}",
         f"- Handoffs saved: {report.handoff_count}",
+        f"- Recall precision: {_render_retrieval(report.retrieval)}",
+        f"- Proactive memory: {_render_counts(report.suggestions)}",
         (
             "- Draft lifecycle: "
             f"total={report.lifecycle.draft_total}, "
@@ -234,6 +284,29 @@ def _read_json(path: Path) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _integer(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return max(int(value), 0)
+    return 0
+
+
+def _render_retrieval(values: dict[str, int | float]) -> str:
+    if not values:
+        return "-"
+    primary = ("considered", "emitted", "abstained", "llm_gate_attempted", "llm_gate_fallback")
+    parts = [f"{key}={values.get(key, 0)}" for key in primary]
+    if "avg_candidate_generation_ms" in values or "avg_local_relevance_ms" in values:
+        local_ms = float(values.get("avg_candidate_generation_ms", 0)) + float(
+            values.get("avg_local_relevance_ms", 0)
+        )
+        parts.append(f"avg_local_ms={local_ms:.1f}")
+    if "avg_relevance_gate_ms" in values:
+        parts.append(f"avg_llm_ms={float(values['avg_relevance_gate_ms']):.1f}")
+    return ", ".join(parts)
 
 
 def _matches_context(payload: dict[str, Any], context: ProjectContext) -> bool:
