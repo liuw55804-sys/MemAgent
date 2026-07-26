@@ -49,8 +49,11 @@ is three seconds.
 
 Task memories and project constraints are evaluated separately. A concrete task
 memory is preferred; a general preference requires explicit constraint intent.
-Implicit recall of the same memory is cooled down for six hours unless the next
-task adds new discriminative terms. Explicit CLI recall bypasses that cooldown.
+In Codex, implicit recall of the same memory is suppressed after its first
+injection in the current task. A new task has a different session identity and
+can receive the memory immediately. When no session identity is available,
+MemAgent falls back to a six-hour cooldown unless the next task adds new
+discriminative terms. Explicit CLI recall bypasses both policies.
 
 Proactive capture is initiated by the coding agent only at a meaningful task
 boundary. It passes one short lesson and an evidence category to `memagent

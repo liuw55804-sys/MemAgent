@@ -10,8 +10,8 @@ no repeated LLM waiting, and lifecycle evidence that reflects actual use.
 1. Fail fast when the optional LLM relevance gate is unhealthy, then cool down
    repeated attempts locally.
 2. Rank concrete task memory ahead of broad project preferences and constraints.
-3. Suppress repeated implicit recall of the same memory unless a later task adds
-   specific evidence.
+3. Suppress repeated implicit recall of the same memory within one Codex task.
+   Without a session identity, use the six-hour new-signal-aware fallback.
 4. Expire or replace unattended agent-suggested drafts without overwriting a
    user-requested preview.
 5. Aggregate activity across Git worktrees with one canonical local identity.
@@ -23,7 +23,8 @@ no repeated LLM waiting, and lifecycle evidence that reflects actual use.
 All new state remains under `~/.memagent/`:
 
 - `runtime/llm_gate_health.json`: provider failure count and cooldown only.
-- `runtime/recall_cooldown.json`: project, memory ID, terms, and last emission.
+- `runtime/recall_cooldown.json`: hashed project/session identity, memory ID,
+  terms, and last emission.
 - `pending_memory_drafts/archive/`: expired, replaced, confirmed, and rejected
   preview outcomes.
 - `recall_traces/*.json`: optional explicit feedback and lightweight adoption.

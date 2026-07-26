@@ -41,7 +41,7 @@ rg -n "(sk|rk|pk)-[A-Za-z0-9_-]{8,}|BEGIN [A-Z ]*PRIVATE KEY" .
 
 ## First release recommendation
 
-Use **v0.3.0** for the next public release candidate. It adds reliable hybrid
+Use **v0.3.1** for the next public release candidate. It adds reliable hybrid
 failure handling, preference/task separation, repeated-recall cooldown, pending
-draft lifecycle, worktree aggregation, and adoption evidence while retaining
-the local-first contract.
+draft lifecycle, worktree aggregation, adoption evidence, and session-aware
+recall suppression while retaining the local-first contract.

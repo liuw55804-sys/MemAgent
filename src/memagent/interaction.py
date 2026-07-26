@@ -327,6 +327,7 @@ def _process_recall(
         "relevance_gate_skipped_cooldown": selection.gate.skipped_due_to_cooldown,
         "relevance_gate_failure_kind": selection.gate.failure_kind,
         "suppressed_by_cooldown": len(selection.suppressed_memory_ids),
+        "recall_cooldown_scope": selection.cooldown_scope,
     }
     if semantic_hints:
         payload["retrieval_hints"] = list(semantic_hints)

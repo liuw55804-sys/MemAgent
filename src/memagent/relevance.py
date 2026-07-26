@@ -16,7 +16,7 @@ from memagent.llm import (
     sanitize_llm_text,
 )
 from memagent.memory import GENERIC_RECALL_TERMS, MemoryMatch, is_discriminative_recall_term
-from memagent.recall_cooldown import RecallCooldownStore
+from memagent.recall_cooldown import RecallCooldownStore, current_session_id
 
 
 RELEVANCE_SCHEMA_VERSION = "memagent.relevance.v1"
@@ -95,6 +95,7 @@ class RecallSelection:
     total_latency_ms: int
     gate: RelevanceGateTrace
     suppressed_memory_ids: tuple[str, ...] = ()
+    cooldown_scope: str = "disabled"
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -110,6 +111,7 @@ class RecallSelection:
             "gate": self.gate.to_payload(),
             "suppressed_memory_ids": list(self.suppressed_memory_ids),
             "suppressed_count": len(self.suppressed_memory_ids),
+            "cooldown_scope": self.cooldown_scope,
         }
 
 
@@ -124,6 +126,7 @@ def select_relevant_memories(
     max_emitted: int = 1,
     state_home: Path | None = None,
     apply_recall_cooldown: bool = False,
+    session_id: str | None = None,
 ) -> RecallSelection:
     started = time.perf_counter()
     local_started = time.perf_counter()
@@ -135,6 +138,8 @@ def select_relevant_memories(
         if state_home is not None and apply_recall_cooldown
         else None
     )
+    active_session_id = current_session_id(session_id) if cooldown_store else None
+    cooldown_scope = "session" if active_session_id else "time" if cooldown_store else "disabled"
     assessment_by_id = {item.memory_id: item for item in assessments}
 
     high_pairs = sorted(
@@ -159,11 +164,13 @@ def select_relevant_memories(
         high_pairs,
         store=cooldown_store,
         context=context,
+        session_id=active_session_id,
     )
     ambiguous_pairs, ambiguous_suppressed = _filter_recall_cooldown(
         ambiguous_pairs,
         store=cooldown_store,
         context=context,
+        session_id=active_session_id,
     )
     suppressed_ids = tuple(high_suppressed + ambiguous_suppressed)
     high = [item[0] for item in high_pairs]
@@ -184,6 +191,7 @@ def select_relevant_memories(
             assessments=assessment_by_id,
             store=cooldown_store,
             context=context,
+            session_id=active_session_id,
         )
         return RecallSelection(
             candidates=tuple(matches),
@@ -195,6 +203,7 @@ def select_relevant_memories(
             total_latency_ms=_elapsed_ms(started),
             gate=skipped_gate,
             suppressed_memory_ids=suppressed_ids,
+            cooldown_scope=cooldown_scope,
         )
 
     if not ambiguous or not emit_limit:
@@ -214,6 +223,7 @@ def select_relevant_memories(
             total_latency_ms=_elapsed_ms(started),
             gate=skipped_gate,
             suppressed_memory_ids=suppressed_ids,
+            cooldown_scope=cooldown_scope,
         )
 
     if semantic_mode not in {"hybrid", "llm"}:
@@ -227,6 +237,7 @@ def select_relevant_memories(
             total_latency_ms=_elapsed_ms(started),
             gate=skipped_gate,
             suppressed_memory_ids=suppressed_ids,
+            cooldown_scope=cooldown_scope,
         )
 
     profile = _active_profile_name(llm_profile, llm_config_path)
@@ -256,6 +267,7 @@ def select_relevant_memories(
             total_latency_ms=_elapsed_ms(started),
             gate=gate,
             suppressed_memory_ids=suppressed_ids,
+            cooldown_scope=cooldown_scope,
         )
 
     gate_started = time.perf_counter()
@@ -293,6 +305,7 @@ def select_relevant_memories(
             total_latency_ms=_elapsed_ms(started),
             gate=gate,
             suppressed_memory_ids=suppressed_ids,
+            cooldown_scope=cooldown_scope,
         )
 
     if health_store:
@@ -304,6 +317,7 @@ def select_relevant_memories(
             assessments=assessment_by_id,
             store=cooldown_store,
             context=context,
+            session_id=active_session_id,
         )
     gate = RelevanceGateTrace(
         mode=semantic_mode,
@@ -330,6 +344,7 @@ def select_relevant_memories(
         total_latency_ms=_elapsed_ms(started),
         gate=gate,
         suppressed_memory_ids=suppressed_ids,
+        cooldown_scope=cooldown_scope,
     )
 
 
@@ -624,6 +639,7 @@ def _filter_recall_cooldown(
     *,
     store: RecallCooldownStore | None,
     context: ProjectContext,
+    session_id: str | None,
 ) -> tuple[list[tuple[MemoryMatch, CandidateAssessment]], list[str]]:
     if store is None:
         return pairs, []
@@ -634,6 +650,7 @@ def _filter_recall_cooldown(
             context=context,
             memory_id=assessment.memory_id,
             discriminative_terms=assessment.discriminative_terms,
+            session_id=session_id,
         )
         if decision.suppressed:
             suppressed.append(assessment.memory_id)
@@ -648,6 +665,7 @@ def _record_recall_emissions(
     assessments: dict[str, CandidateAssessment],
     store: RecallCooldownStore | None,
     context: ProjectContext,
+    session_id: str | None,
 ) -> None:
     if store is None:
         return
@@ -658,6 +676,7 @@ def _record_recall_emissions(
             context=context,
             memory_id=memory_id,
             discriminative_terms=assessment.discriminative_terms if assessment else (),
+            session_id=session_id,
         )
 
 

@@ -4,19 +4,22 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Callable, Iterable
 
 from memagent.context import ProjectContext
 
 
-RECALL_COOLDOWN_SCHEMA_VERSION = "memagent.recall_cooldown.v1"
+RECALL_COOLDOWN_SCHEMA_VERSION = "memagent.recall_cooldown.v2"
 DEFAULT_RECALL_COOLDOWN_SECONDS = 6 * 60 * 60
+SESSION_RECORD_RETENTION_DAYS = 30
 
 
 @dataclass(frozen=True)
 class RecallCooldownDecision:
     suppressed: bool
+    scope: str
     previous_terms: tuple[str, ...] = ()
     emitted_at: datetime | None = None
 
@@ -39,23 +42,29 @@ class RecallCooldownStore:
         context: ProjectContext,
         memory_id: str,
         discriminative_terms: Iterable[str],
+        session_id: str | None = None,
     ) -> RecallCooldownDecision:
         records = self._records()
-        value = records.get(_record_key(context, memory_id))
+        scope = "session" if session_id else "time"
+        value = records.get(_record_key(context, memory_id, session_id=session_id))
         if not isinstance(value, dict):
-            return RecallCooldownDecision(suppressed=False)
+            return RecallCooldownDecision(suppressed=False, scope=scope)
         emitted_at = _parse_datetime(value.get("emitted_at"))
+        if session_id:
+            return RecallCooldownDecision(
+                suppressed=True,
+                scope=scope,
+                previous_terms=_terms(value.get("discriminative_terms")),
+                emitted_at=emitted_at,
+            )
         if not emitted_at or emitted_at + timedelta(seconds=self.cooldown_seconds) <= self._now():
-            return RecallCooldownDecision(suppressed=False)
-        previous_terms = tuple(
-            str(item).strip().lower()
-            for item in value.get("discriminative_terms", [])
-            if str(item).strip()
-        )
+            return RecallCooldownDecision(suppressed=False, scope=scope)
+        previous_terms = _terms(value.get("discriminative_terms"))
         current_terms = {str(item).strip().lower() for item in discriminative_terms if str(item).strip()}
         has_new_signal = bool(current_terms - set(previous_terms))
         return RecallCooldownDecision(
             suppressed=not has_new_signal,
+            scope=scope,
             previous_terms=previous_terms,
             emitted_at=emitted_at,
         )
@@ -66,13 +75,15 @@ class RecallCooldownStore:
         context: ProjectContext,
         memory_id: str,
         discriminative_terms: Iterable[str],
+        session_id: str | None = None,
     ) -> None:
         payload = self._load()
         records = payload.get("records") if isinstance(payload.get("records"), dict) else {}
-        records = dict(records)
-        records[_record_key(context, memory_id)] = {
+        records = self._prune_records(dict(records))
+        records[_record_key(context, memory_id, session_id=session_id)] = {
             "memory_id": memory_id,
             "project_id": _project_id(context),
+            "scope": "session" if session_id else "time",
             "emitted_at": self._now().isoformat(),
             "discriminative_terms": sorted(
                 {str(item).strip().lower() for item in discriminative_terms if str(item).strip()}
@@ -86,6 +97,16 @@ class RecallCooldownStore:
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temporary.replace(self.path)
+
+    def _prune_records(self, records: dict[str, object]) -> dict[str, object]:
+        cutoff = self._now() - timedelta(days=SESSION_RECORD_RETENTION_DAYS)
+        return {
+            key: value
+            for key, value in records.items()
+            if not isinstance(value, dict)
+            or (emitted_at := _parse_datetime(value.get("emitted_at"))) is None
+            or emitted_at >= cutoff
+        }
 
     def _records(self) -> dict[str, object]:
         payload = self._load()
@@ -101,8 +122,21 @@ class RecallCooldownStore:
         return payload if isinstance(payload, dict) else {"schema_version": RECALL_COOLDOWN_SCHEMA_VERSION, "records": {}}
 
 
-def _record_key(context: ProjectContext, memory_id: str) -> str:
-    return f"{_project_id(context)}:{memory_id}"
+def current_session_id(explicit: str | None = None) -> str | None:
+    return (explicit or os.environ.get("MEMAGENT_SESSION_ID") or os.environ.get("CODEX_THREAD_ID") or "").strip() or None
+
+
+def _record_key(
+    context: ProjectContext,
+    memory_id: str,
+    *,
+    session_id: str | None,
+) -> str:
+    base = f"{_project_id(context)}:{memory_id}"
+    if not session_id:
+        return base
+    digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:20]
+    return f"{base}:session:{digest}"
 
 
 def _project_id(context: ProjectContext) -> str:
@@ -123,3 +157,11 @@ def _parse_datetime(value: object) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _terms(value: object) -> tuple[str, ...]:
+    return tuple(
+        str(item).strip().lower()
+        for item in value
+        if str(item).strip()
+    ) if isinstance(value, list) else ()

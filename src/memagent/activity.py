@@ -123,6 +123,9 @@ def build_activity_report(
             retrieval_counts["suppressed_by_cooldown"] += _integer(
                 artifacts.get("suppressed_by_cooldown")
             )
+            cooldown_scope = _text(artifacts.get("recall_cooldown_scope"))
+            if cooldown_scope in {"session", "time"}:
+                retrieval_counts[f"cooldown_scope_{cooldown_scope}"] += 1
             for key in retrieval_latencies:
                 value = artifacts.get(key)
                 if isinstance(value, (int, float)):
@@ -338,6 +341,8 @@ def _render_retrieval(values: dict[str, int | float]) -> str:
         "llm_gate_fallback",
         "llm_gate_skipped_cooldown",
         "suppressed_by_cooldown",
+        "cooldown_scope_session",
+        "cooldown_scope_time",
     )
     parts = [f"{key}={values.get(key, 0)}" for key in primary]
     if "avg_candidate_generation_ms" in values or "avg_local_relevance_ms" in values:

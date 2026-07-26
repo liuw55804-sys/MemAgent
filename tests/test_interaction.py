@@ -129,6 +129,51 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertEqual(second.artifacts["suppressed_by_cooldown"], 1)
             self.assertIn("process_trace", second.writes)
 
+    def test_new_codex_session_can_recall_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+            store.remember(
+                text="For a merge conflict, inspect both changed call paths and the rollback path.",
+                topic="Focused merge conflict workflow",
+                domain="coding",
+                kind="tool_recipe",
+                repo=context.repo_name,
+                module=None,
+                triggers=["merge", "conflict", "rollback"],
+                exportable=False,
+            )
+            kwargs = {
+                "recent_text": "",
+                "context": context,
+                "store": store,
+                "handoff_store": handoffs,
+                "semantic_mode": "heuristic",
+            }
+
+            with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "session-a"}):
+                first = process_interaction(
+                    message="Debug this merge conflict and inspect both changed call paths.",
+                    **kwargs,
+                )
+                repeated = process_interaction(
+                    message="Debug this merge conflict, changed call paths, and rollback path.",
+                    **kwargs,
+                )
+            with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "session-b"}):
+                new_session = process_interaction(
+                    message="Debug this merge conflict, changed call paths, and rollback path.",
+                    **kwargs,
+                )
+
+            self.assertEqual(first.route.action, "recall")
+            self.assertEqual(repeated.route.action, "none")
+            self.assertEqual(repeated.artifacts["recall_cooldown_scope"], "session")
+            self.assertEqual(new_session.route.action, "recall")
+            self.assertEqual(new_session.artifacts["recall_cooldown_scope"], "session")
+
     def test_process_draft_memory_does_not_write_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

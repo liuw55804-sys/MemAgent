@@ -25,9 +25,10 @@ samples in local memory.
 
 Runtime reliability state is also local. Gate health stores only a profile
 name, failure category, count, and cooldown timestamps. Recall cooldown stores a
-hashed local project identity, memory ID, matched terms, and timestamp. Git
-worktree grouping hashes the local common Git directory and never stores the
-remote URL.
+hashed local project identity, hashed session identity when available, memory
+ID, matched terms, and timestamp. Raw `CODEX_THREAD_ID` values are never
+persisted. Git worktree grouping hashes the local common Git directory and never
+stores the remote URL.
 
 `trace adopt` stores only `applied`, `executed`, or `corrected`, plus an optional
 short note. The coding-agent integration must not put a full conversation,

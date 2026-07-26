@@ -13,11 +13,13 @@ unless the question explicitly asks about habits, constraints, or conventions.
 
 ## 2. Repeated recall
 
-Ask two nearby questions that would return the same memory without adding a new
-specific concept.
+Ask two questions in the same Codex task that would return the same memory, then
+open a new Codex task and ask again.
 
-Expected: the first may show the memory; the second continues quietly. Running
-`memagent recall "<specific question>"` explicitly can still inspect it.
+Expected: the first may show the memory; the second continues quietly even if
+the wording adds another matching term. The new Codex task may show it again.
+Running `memagent recall "<specific question>"` explicitly can always inspect
+it.
 
 ## 3. Provider failure
 

@@ -150,8 +150,9 @@ preview and explicit confirmation.
 
 **Will it recall something on every task?** No. Generic terms, business IDs,
 and same-project overlap are insufficient. Precision-first recall returns one
-memory or abstains. Repeated implicit recall is also cooled down unless the task
-adds new specific evidence.
+memory or abstains. Within Codex, the same memory is implicitly injected at
+most once per task; a new task can receive it immediately. Other integrations
+fall back to a six-hour cooldown unless the task adds new specific evidence.
 
 **Does it change my repository?** No. The default integration is user-level
 and does not touch the repository.

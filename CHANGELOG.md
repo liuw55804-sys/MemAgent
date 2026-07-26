@@ -2,6 +2,17 @@
 
 All notable public changes are recorded here.
 
+## 0.3.1 - Unreleased
+
+- Implicit recall cooldown is now Codex-session aware. The same memory is
+  injected at most once per `CODEX_THREAD_ID`, while a new Codex task can
+  receive it immediately.
+- Session identifiers are hashed before local persistence and never appear in
+  recall traces or activity output.
+- Non-Codex integrations retain the existing six-hour time cooldown, including
+  the new-discriminative-signal exception.
+- Activity reports distinguish session-scoped and time-scoped cooldown checks.
+
 ## 0.3.0 - Unreleased
 
 - Optional LLM relevance calls now use a three-second timeout and a local

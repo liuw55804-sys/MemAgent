@@ -213,6 +213,7 @@ class ActivityTest(unittest.TestCase):
                         "candidate_generation_ms": 2,
                         "local_relevance_ms": 1,
                         "relevance_gate_ms": 0,
+                        "recall_cooldown_scope": "session",
                     },
                 },
                 source="test",
@@ -233,6 +234,7 @@ class ActivityTest(unittest.TestCase):
             self.assertEqual(report.retrieval["considered"], 1)
             self.assertEqual(report.retrieval["abstained"], 1)
             self.assertEqual(report.retrieval["avg_candidate_generation_ms"], 2.0)
+            self.assertEqual(report.retrieval["cooldown_scope_session"], 1)
             self.assertEqual(report.suggestions["suggested"], 1)
             self.assertEqual(report.suggestions["pending"], 1)
             rendered = render_activity_report(report)
