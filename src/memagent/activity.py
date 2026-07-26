@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, matches_project_context, repo_scope_matches
 from memagent.handoff import HandoffStore, project_handoff_key
 from memagent.lifecycle import LifecycleSummary, build_lifecycle_summary
 from memagent.memory import MemoryStore
@@ -39,6 +39,7 @@ class ActivityReport:
     action_counts: dict[str, int]
     recall_total: int
     feedback_counts: dict[str, int]
+    adoption_counts: dict[str, int]
     memory_count: int
     handoff_count: int
     lifecycle: LifecycleSummary
@@ -58,6 +59,7 @@ class ActivityReport:
                 "actions": self.action_counts,
                 "recalls": self.recall_total,
                 "feedback": self.feedback_counts,
+                "adoption": self.adoption_counts,
                 "memories_created": self.memory_count,
                 "handoffs_saved": self.handoff_count,
                 "retrieval": self.retrieval,
@@ -76,10 +78,12 @@ def build_activity_report(
     since: date | None = None,
     limit: int = 20,
 ) -> ActivityReport:
+    store.expire_pending_memory_draft(context=context)
     events: list[ActivityEvent] = []
     action_counts: Counter[str] = Counter()
     recall_total = 0
     feedback_counts: Counter[str] = Counter()
+    adoption_counts: Counter[str] = Counter()
     retrieval_counts: Counter[str] = Counter()
     suggestion_counts: Counter[str] = Counter()
     retrieval_latencies: dict[str, list[int]] = {
@@ -111,6 +115,14 @@ def build_activity_report(
                 retrieval_counts["llm_gate_attempted"] += 1
             if artifacts.get("relevance_gate_fallback"):
                 retrieval_counts["llm_gate_fallback"] += 1
+            if artifacts.get("relevance_gate_skipped_cooldown"):
+                retrieval_counts["llm_gate_skipped_cooldown"] += 1
+            failure_kind = _text(artifacts.get("relevance_gate_failure_kind"))
+            if failure_kind:
+                retrieval_counts[f"llm_gate_{failure_kind}"] += 1
+            retrieval_counts["suppressed_by_cooldown"] += _integer(
+                artifacts.get("suppressed_by_cooldown")
+            )
             for key in retrieval_latencies:
                 value = artifacts.get(key)
                 if isinstance(value, (int, float)):
@@ -135,6 +147,21 @@ def build_activity_report(
             )
         )
 
+    for path in _json_paths(store.pending_drafts_archive_dir, "*.json"):
+        payload = _read_json(path)
+        archived_context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+        if not _matches_context(archived_context, context):
+            continue
+        pending = payload.get("pending") if isinstance(payload.get("pending"), dict) else {}
+        resolved_at = _parse_datetime(_text(pending.get("resolved_at")))
+        if resolved_at and not _in_window(resolved_at, since):
+            continue
+        if _text(pending.get("source")) != "agent_suggested":
+            continue
+        status = _text(pending.get("status"))
+        if status in {"expired", "replaced"}:
+            suggestion_counts[status] += 1
+
     for path in _json_paths(store.traces_dir, "trace_*.json"):
         payload = _read_json(path)
         trace_context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
@@ -148,6 +175,10 @@ def build_activity_report(
         rating = _text(feedback.get("rating"))
         if rating:
             feedback_counts[rating] += 1
+        adoption = payload.get("adoption") if isinstance(payload.get("adoption"), dict) else {}
+        signal = _text(adoption.get("signal"))
+        if signal:
+            adoption_counts[signal] += 1
 
     memory_count = 0
     for path in sorted(store.memories_dir.glob("*.memory.yaml"), reverse=True):
@@ -207,6 +238,7 @@ def build_activity_report(
         action_counts=dict(sorted(action_counts.items())),
         recall_total=recall_total,
         feedback_counts=dict(sorted(feedback_counts.items())),
+        adoption_counts=dict(sorted(adoption_counts.items())),
         memory_count=memory_count,
         handoff_count=handoff_count,
         lifecycle=lifecycle,
@@ -233,6 +265,7 @@ def render_activity_report(report: ActivityReport) -> str:
         f"- Actions: {_render_counts(report.action_counts)}",
         f"- Recall traces: {report.recall_total}",
         f"- Recall feedback: {_render_counts(report.feedback_counts)}",
+        f"- Recall adoption: {_render_counts(report.adoption_counts)}",
         f"- Memory cards saved: {report.memory_count}",
         f"- Handoffs saved: {report.handoff_count}",
         f"- Recall precision: {_render_retrieval(report.retrieval)}",
@@ -297,7 +330,15 @@ def _integer(value: object) -> int:
 def _render_retrieval(values: dict[str, int | float]) -> str:
     if not values:
         return "-"
-    primary = ("considered", "emitted", "abstained", "llm_gate_attempted", "llm_gate_fallback")
+    primary = (
+        "considered",
+        "emitted",
+        "abstained",
+        "llm_gate_attempted",
+        "llm_gate_fallback",
+        "llm_gate_skipped_cooldown",
+        "suppressed_by_cooldown",
+    )
     parts = [f"{key}={values.get(key, 0)}" for key in primary]
     if "avg_candidate_generation_ms" in values or "avg_local_relevance_ms" in values:
         local_ms = float(values.get("avg_candidate_generation_ms", 0)) + float(
@@ -310,20 +351,12 @@ def _render_retrieval(values: dict[str, int | float]) -> str:
 
 
 def _matches_context(payload: dict[str, Any], context: ProjectContext) -> bool:
-    candidate_root = _text(payload.get("git_root"))
-    candidate_cwd = _text(payload.get("cwd"))
-    candidate_repo = _text(payload.get("repo_name"))
-    if context.git_root and candidate_root:
-        return Path(candidate_root).expanduser().resolve() == context.git_root.resolve()
-    if candidate_cwd:
-        candidate_path = Path(candidate_cwd).expanduser().resolve()
-        return candidate_path == context.cwd or context.cwd.is_relative_to(candidate_path) or candidate_path.is_relative_to(context.cwd)
-    return bool(context.repo_name and candidate_repo and candidate_repo == context.repo_name)
+    return matches_project_context(payload, context)
 
 
 def _memory_matches_context(raw: str, context: ProjectContext) -> bool:
     repo = _yaml_scope_repo(raw)
-    return bool(context.repo_name and repo and repo == context.repo_name)
+    return repo_scope_matches(repo, context)
 
 
 def _yaml_scope_repo(raw: str) -> str | None:

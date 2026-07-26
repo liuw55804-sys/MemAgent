@@ -13,6 +13,14 @@ from memagent.cli import main
 
 
 class CliTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.semantic_mode = mock.patch.dict(
+            os.environ,
+            {"MEMAGENT_SEMANTIC_MODE": "heuristic"},
+        )
+        self.semantic_mode.start()
+        self.addCleanup(self.semantic_mode.stop)
+
     def test_suggest_cli_creates_agent_pending_preview(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -326,17 +334,18 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(remember_code, 0)
 
                 stdout = StringIO()
-                with redirect_stdout(stdout):
-                    codex_code = main(
-                        [
-                            "--home",
-                            str(home),
-                            "codex",
-                            "--dry-run",
-                            "--no-trace",
-                            "帮我排查 example_service maintainer 问题，先按你觉得最省时间的方式来",
-                        ]
-                    )
+                with mock.patch.dict(os.environ, {"MEMAGENT_SEMANTIC_MODE": "heuristic"}):
+                    with redirect_stdout(stdout):
+                        codex_code = main(
+                            [
+                                "--home",
+                                str(home),
+                                "codex",
+                                "--dry-run",
+                                "--no-trace",
+                                "帮我排查 example_service maintainer 问题，先按你觉得最省时间的方式来",
+                            ]
+                        )
             finally:
                 os.chdir(previous_cwd)
 
@@ -496,6 +505,8 @@ class CliTest(unittest.TestCase):
                             str(home),
                             "recall",
                             "maintainer tracing",
+                            "--semantic-mode",
+                            "heuristic",
                             "--trace",
                         ]
                     )
@@ -529,6 +540,23 @@ class CliTest(unittest.TestCase):
                     )
                 self.assertEqual(label_code, 0)
                 self.assertIn("[MemAgent recall trace labeled]", label_stdout.getvalue())
+
+                adopt_stdout = StringIO()
+                with redirect_stdout(adopt_stdout):
+                    adopt_code = main(
+                        [
+                            "--home",
+                            str(home),
+                            "trace",
+                            "adopt",
+                            "--signal",
+                            "executed",
+                            "--note",
+                            "Followed the recalled workflow.",
+                        ]
+                    )
+                self.assertEqual(adopt_code, 0)
+                self.assertIn("[MemAgent recall adoption recorded]", adopt_stdout.getvalue())
 
                 report_stdout = StringIO()
                 with redirect_stdout(report_stdout):

@@ -163,6 +163,7 @@ class McpServer:
             llm_profile=_optional_str(arguments, "llm_profile"),
             llm_config_path=_optional_path(arguments, "llm_config_path"),
             max_emitted=_optional_int(arguments, "max_emitted", 1),
+            state_home=self.store.home,
         )
         matches = list(selection.emitted)
         payload = self.store.build_recall_payload(

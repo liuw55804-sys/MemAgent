@@ -31,6 +31,7 @@ class UserCodexSkillTest(unittest.TestCase):
             self.assertIn(MANAGED_MARKER, content)
             self.assertIn("memagent process", content)
             self.assertIn("memagent suggest", content)
+            self.assertIn("memagent trace adopt", content)
             self.assertIn("at most one memory", content)
             self.assertNotIn("PYTHON" + "PATH=", content)
             self.assertNotIn("AGENTS.md", str(target.parent))

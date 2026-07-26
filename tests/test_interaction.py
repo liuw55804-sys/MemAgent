@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from memagent.context import ProjectContext
 from memagent.handoff import HandoffStore
@@ -12,6 +14,14 @@ from memagent.memory import MemoryStore
 
 
 class InteractionProcessTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.semantic_mode = mock.patch.dict(
+            os.environ,
+            {"MEMAGENT_SEMANTIC_MODE": "heuristic"},
+        )
+        self.semantic_mode.start()
+        self.addCleanup(self.semantic_mode.stop)
+
     def test_process_recall_saves_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -34,6 +44,7 @@ class InteractionProcessTest(unittest.TestCase):
                 context=context,
                 store=store,
                 handoff_store=HandoffStore(store.home),
+                semantic_mode="heuristic",
             )
 
             self.assertEqual(result.route.action, "recall")
@@ -77,6 +88,46 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertIn(preference, result.result_text)
             self.assertIn("recall_trace", result.writes)
             self.assertIn("preference", result.artifacts["retrieval_hints"])
+
+    def test_repeated_process_recall_is_suppressed_by_cooldown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+            store.remember(
+                text="For a merge conflict, inspect both changed call paths before continuing.",
+                topic="Focused merge conflict workflow",
+                domain="coding",
+                kind="tool_recipe",
+                repo=context.repo_name,
+                module=None,
+                triggers=["merge", "conflict"],
+                exportable=False,
+            )
+
+            first = process_interaction(
+                message="Debug this merge conflict and inspect both changed call paths.",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                semantic_mode="heuristic",
+            )
+            second = process_interaction(
+                message="Debug this merge conflict and inspect both changed call paths.",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+                semantic_mode="heuristic",
+            )
+
+            self.assertEqual(first.route.action, "recall")
+            self.assertEqual(second.route.action, "none")
+            self.assertFalse(second.executed)
+            self.assertEqual(second.artifacts["suppressed_by_cooldown"], 1)
+            self.assertIn("process_trace", second.writes)
 
     def test_process_draft_memory_does_not_write_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,7 +256,7 @@ class InteractionProcessTest(unittest.TestCase):
             self.assertFalse(store.has_pending_memory_draft(context=context))
             self.assertEqual(store.count_memory_cards(), 0)
 
-    def test_agent_suggestion_skips_when_preview_is_pending(self) -> None:
+    def test_agent_suggestion_replaces_different_agent_preview(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = MemoryStore(root / "home")
@@ -222,9 +273,35 @@ class InteractionProcessTest(unittest.TestCase):
             process_interaction(recent_text="Verify the live schema before debugging generated queries.", **kwargs)
             second = process_interaction(recent_text="Start from the interface definition before tracing the handler.", **kwargs)
 
+            self.assertEqual(second.route.action, "draft_memory")
+            self.assertIsNotNone(second.artifacts["replaced_pending_id"])
+            self.assertIn("pending_memory_draft_replaced", second.writes)
+            self.assertEqual(
+                len(list(store.pending_drafts_archive_dir.glob("*.replaced.json"))),
+                1,
+            )
+            self.assertIn("process_trace", second.writes)
+
+    def test_agent_suggestion_skips_related_pending_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = MemoryStore(root / "home")
+            context = _context(root / "project")
+            handoffs = HandoffStore(store.home)
+            kwargs = {
+                "message": "The agent found a reusable lesson.",
+                "context": context,
+                "store": store,
+                "handoff_store": handoffs,
+                "agent_suggested": True,
+                "suggestion_evidence": "detour",
+            }
+            lesson = "Verify the live schema before debugging generated queries."
+            process_interaction(recent_text=lesson, **kwargs)
+            second = process_interaction(recent_text=lesson, **kwargs)
+
             self.assertEqual(second.route.action, "none")
             self.assertEqual(second.artifacts["status"], "pending_exists")
-            self.assertIn("process_trace", second.writes)
 
     def test_agent_suggestion_deduplicates_highly_similar_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

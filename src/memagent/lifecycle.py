@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, matches_project_context, repo_scope_matches
 from memagent.memory import MemoryStore
 
 
@@ -53,6 +53,7 @@ class LifecycleSummary:
     draft_pending: tuple[PendingDraftLifecycle, ...]
     draft_unconfirmed: int
     draft_legacy_unlinked: int
+    draft_status_counts: dict[str, int]
     memory_total: int
     memory_recalled_again: int
     later_recall_count: int
@@ -70,6 +71,7 @@ class LifecycleSummary:
                 "pending": len(self.draft_pending),
                 "unconfirmed": self.draft_unconfirmed,
                 "legacy_unlinked": self.draft_legacy_unlinked,
+                "statuses": self.draft_status_counts,
                 "pending_drafts": [item.to_payload() for item in self.draft_pending],
             },
             "memory_reuse": {
@@ -87,6 +89,7 @@ def build_lifecycle_summary(
     context: ProjectContext,
     since: date | None = None,
 ) -> LifecycleSummary:
+    store.expire_pending_memory_draft(context=context)
     draft_ids: list[str] = []
     confirmed_ids: set[str] = set()
     saved_memory_paths: set[Path] = set()
@@ -137,6 +140,12 @@ def build_lifecycle_summary(
             feedback_counts[rating] += 1
 
     pending_drafts = _pending_drafts(store=store, context=context)
+    archived_statuses, archived_confirmed_ids = _archived_draft_statuses(
+        store=store,
+        context=context,
+        since=since,
+    )
+    confirmed_ids.update(archived_confirmed_ids)
     pending_ids = {item.identifier for item in pending_drafts}
     draft_total = len(draft_ids)
     legacy_ids = {
@@ -184,6 +193,7 @@ def build_lifecycle_summary(
         draft_pending=tuple(sorted(pending_drafts, key=lambda item: item.created_at)),
         draft_unconfirmed=unconfirmed,
         draft_legacy_unlinked=len(legacy_ids),
+        draft_status_counts=dict(sorted(archived_statuses.items())),
         memory_total=len(memories),
         memory_recalled_again=len(reused),
         later_recall_count=sum(item.later_recall_count for item in reused),
@@ -206,6 +216,34 @@ def _pending_drafts(*, store: MemoryStore, context: ProjectContext) -> list[Pend
         age_seconds = max(int((now - created_at).total_seconds()), 0)
         result.append(PendingDraftLifecycle(identifier, topic, created_at, age_seconds))
     return result
+
+
+def _archived_draft_statuses(
+    *,
+    store: MemoryStore,
+    context: ProjectContext,
+    since: date | None,
+) -> tuple[Counter[str], set[str]]:
+    counts: Counter[str] = Counter()
+    confirmed_ids: set[str] = set()
+    for path in _json_paths(store.pending_drafts_archive_dir, "*.json"):
+        payload = _read_json(path)
+        if not _matches_context(_object(payload.get("context")), context):
+            continue
+        pending = _object(payload.get("pending"))
+        resolved_at = _parse_datetime(_text(pending.get("resolved_at"))) or datetime.fromtimestamp(
+            path.stat().st_mtime,
+            timezone.utc,
+        )
+        if not _in_window(resolved_at, since):
+            continue
+        status = _text(pending.get("status"))
+        identifier = _text(pending.get("id"))
+        if status:
+            counts[status] += 1
+        if status == "confirmed" and identifier:
+            confirmed_ids.add(identifier)
+    return counts, confirmed_ids
 
 
 def _project_memory_paths(
@@ -237,15 +275,7 @@ def _existing_memory_path(value: object, store: MemoryStore) -> Path | None:
 
 
 def _matches_context(payload: dict[str, Any], context: ProjectContext) -> bool:
-    candidate_root = _text(payload.get("git_root"))
-    candidate_cwd = _text(payload.get("cwd"))
-    candidate_repo = _text(payload.get("repo_name"))
-    if context.git_root and candidate_root:
-        return Path(candidate_root).expanduser().resolve() == context.git_root.resolve()
-    if candidate_cwd:
-        candidate_path = Path(candidate_cwd).expanduser().resolve()
-        return candidate_path == context.cwd or context.cwd.is_relative_to(candidate_path) or candidate_path.is_relative_to(context.cwd)
-    return bool(context.repo_name and candidate_repo and candidate_repo == context.repo_name)
+    return matches_project_context(payload, context)
 
 
 def _memory_matches_context(raw: str, context: ProjectContext) -> bool:
@@ -256,7 +286,10 @@ def _memory_matches_context(raw: str, context: ProjectContext) -> bool:
             if child and not child.startswith(" "):
                 break
             if child.strip().startswith("repo:"):
-                return _unquote(child.split(":", 1)[1].strip()) == context.repo_name
+                return repo_scope_matches(
+                    _unquote(child.split(":", 1)[1].strip()),
+                    context,
+                )
     return False
 
 

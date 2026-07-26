@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -20,6 +21,34 @@ def project_context(repo_name: str = "sample_repo") -> ProjectContext:
 
 
 class MemoryStoreTest(unittest.TestCase):
+    def test_pending_draft_expires_and_is_archived(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            current = [datetime(2026, 7, 20, tzinfo=timezone.utc)]
+            store = MemoryStore(Path(tmp), now=lambda: current[0])
+            context = project_context()
+            saved = store.save_pending_memory_draft(
+                draft={
+                    "topic": "Verified interface entrypoint",
+                    "text": "Check the live interface before changing generated code.",
+                    "kind": "verification",
+                    "domain": "coding",
+                    "triggers": ["interface"],
+                },
+                context=context,
+                source="agent_suggested",
+                evidence="verified_entrypoint",
+            )
+
+            self.assertTrue(store.has_pending_memory_draft(context=context))
+            self.assertEqual(saved.payload["pending"]["status"], "pending")
+            current[0] += timedelta(hours=49)
+
+            self.assertFalse(store.has_pending_memory_draft(context=context))
+            archives = list(store.pending_drafts_archive_dir.glob("*.expired.json"))
+            self.assertEqual(len(archives), 1)
+            archived = archives[0].read_text(encoding="utf-8")
+            self.assertIn('"status": "expired"', archived)
+
     def test_remember_and_recall(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = MemoryStore(Path(tmp))
@@ -114,6 +143,12 @@ class MemoryStoreTest(unittest.TestCase):
             self.assertIn("- labeled: 1", report)
             self.assertIn("- useful: 1", report)
             self.assertIn("- useful_rate: 1.00", report)
+            adopted = store.mark_recall_adoption(
+                saved.identifier,
+                signal="executed",
+                note="Used the recalled verification step.",
+            )
+            self.assertEqual(adopted.payload["adoption"]["signal"], "executed")
 
     def test_remember_with_explicit_domain_and_kind(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

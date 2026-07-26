@@ -50,7 +50,10 @@ local router -> recall candidates | draft preview | feedback | handoff | none
 BM25 candidates -> local relevance -> one memory or abstain
         |
         v
-~/.memagent/ (memory cards, pending drafts, local traces)
+optional LLM gate for ambiguous candidates (failure cooldown)
+        |
+        v
+~/.memagent/ (memory cards, pending drafts, runtime state, local traces)
 ```
 
 - **Recall** uses BM25 to generate local candidates, then applies a precision
@@ -63,6 +66,8 @@ BM25 candidates -> local relevance -> one memory or abstain
   durably without confirmation.
 - **Feedback** from ordinary language helps evaluate whether a recalled hint was
   useful.
+- **Adoption evidence** distinguishes a displayed hint from advice that changed
+  the plan, was executed, or was corrected by live evidence.
 - **Handoffs** keep recent project state separate from durable lessons.
 
 ## Optional LLM Semantics
@@ -109,6 +114,7 @@ passwords, cookies, private keys, or raw request/response bodies.
 memagent process "remember this workaround and show me a preview"
 memagent suggest "Verify the live schema before editing generated queries." --evidence correction
 memagent activity --today
+memagent trace adopt --signal executed --note "Used the recalled verification step."
 memagent llm doctor --check-live
 memagent uninstall-user-codex --write
 ```
@@ -144,7 +150,8 @@ preview and explicit confirmation.
 
 **Will it recall something on every task?** No. Generic terms, business IDs,
 and same-project overlap are insufficient. Precision-first recall returns one
-memory or abstains.
+memory or abstains. Repeated implicit recall is also cooled down unless the task
+adds new specific evidence.
 
 **Does it change my repository?** No. The default integration is user-level
 and does not touch the repository.

@@ -17,6 +17,18 @@
       "kind": "preference",
       "triggers": ["docs", "tasks", "preference"],
       "text": "Do not create docs or task notes unless the user explicitly requests them."
+    },
+    {
+      "topic": "Deployment panel auto-close workflow",
+      "kind": "pitfall",
+      "triggers": ["deployment panel", "auto-close"],
+      "text": "When a deployment remains open, verify whether the panel submitted the explicit auto-close option."
+    },
+    {
+      "topic": "Production incident urgency preference",
+      "kind": "workflow",
+      "triggers": ["production", "urgency"],
+      "text": "User preference: before a production investigation, ask whether the incident is urgent."
     }
   ],
   "cases": [
@@ -31,6 +43,10 @@
     {
       "query": "Only change implementation code; do not add docs or tasks.",
       "expected_topic": "Project documentation preference"
+    },
+    {
+      "query": "The production deployment stayed open; did the panel omit the auto-close option?",
+      "expected_topic": "Deployment panel auto-close workflow"
     },
     {
       "query": "Please investigate task 987654321012345678 and fix the code.",

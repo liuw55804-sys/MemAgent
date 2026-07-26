@@ -21,8 +21,9 @@ from memagent.llm import (
 
 class LlmDoctorTest(unittest.TestCase):
     def test_missing_env_reports_not_configured(self) -> None:
-        with mock.patch.dict(os.environ, {}, clear=True):
-            result = check_llm_provider()
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {}, clear=True):
+                result = check_llm_provider(config_path=Path(tmp) / "missing.json")
 
         payload = result.to_payload()
         self.assertEqual(payload["schema_version"], LLM_DOCTOR_SCHEMA_VERSION)
@@ -34,16 +35,20 @@ class LlmDoctorTest(unittest.TestCase):
         self.assertIn("next: set MEMAGENT_LLM_BASE_URL", render_llm_doctor(result))
 
     def test_configured_without_live_check_does_not_call_api(self) -> None:
-        with mock.patch.dict(
-            os.environ,
-            {
-                "MEMAGENT_LLM_BASE_URL": "https://api.example.test/v1",
-                "MEMAGENT_LLM_API_KEY": "test-key",
-                "MEMAGENT_LLM_MODEL": "demo-model",
-            },
-            clear=True,
-        ):
-            result = check_llm_provider(check_live=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "MEMAGENT_LLM_BASE_URL": "https://api.example.test/v1",
+                    "MEMAGENT_LLM_API_KEY": "test-key",
+                    "MEMAGENT_LLM_MODEL": "demo-model",
+                },
+                clear=True,
+            ):
+                result = check_llm_provider(
+                    check_live=False,
+                    config_path=Path(tmp) / "missing.json",
+                )
 
         payload = result.to_payload()
         self.assertTrue(payload["configured"])
@@ -86,16 +91,21 @@ class LlmDoctorTest(unittest.TestCase):
         thread.start()
         try:
             base_url = f"http://127.0.0.1:{server.server_port}/v1"
-            with mock.patch.dict(
-                os.environ,
-                {
-                    "MEMAGENT_LLM_BASE_URL": base_url,
-                    "MEMAGENT_LLM_API_KEY": "test-key",
-                    "MEMAGENT_LLM_MODEL": "demo-model",
-                },
-                clear=True,
-            ):
-                result = check_llm_provider(check_live=True, timeout_seconds=5)
+            with tempfile.TemporaryDirectory() as tmp:
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        "MEMAGENT_LLM_BASE_URL": base_url,
+                        "MEMAGENT_LLM_API_KEY": "test-key",
+                        "MEMAGENT_LLM_MODEL": "demo-model",
+                    },
+                    clear=True,
+                ):
+                    result = check_llm_provider(
+                        check_live=True,
+                        timeout_seconds=5,
+                        config_path=Path(tmp) / "missing.json",
+                    )
         finally:
             server.shutdown()
             thread.join(timeout=5)

@@ -96,11 +96,13 @@ class MemoryDraftTest(unittest.TestCase):
         self.assertTrue(any("LLM quality gate unavailable" in warning for warning in draft.warnings))
 
     def test_openai_quality_gate_falls_back_when_not_configured(self) -> None:
-        with mock.patch.dict(os.environ, {}, clear=True):
-            draft = draft_memory(
-                "用户习惯：默认只修改当前需求相关代码。",
-                provider="openai-compatible",
-            )
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {}, clear=True):
+                draft = draft_memory(
+                    "用户习惯：默认只修改当前需求相关代码。",
+                    provider="openai-compatible",
+                    llm_config_path=Path(tmp) / "missing.json",
+                )
 
         self.assertEqual(draft.provider, "heuristic")
         self.assertTrue(draft.quality_gate.fallback)

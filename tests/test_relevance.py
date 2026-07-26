@@ -135,6 +135,73 @@ class RelevanceSelectionTest(unittest.TestCase):
 
         self.assertEqual(selection.emitted, (match,))
 
+    def test_specific_task_memory_outranks_single_term_online_preference(self) -> None:
+        context = project_context()
+        task_memory = _match(
+            "strategy-panel",
+            score=4.27,
+            title="策略面板自动移交实现口径",
+            kind="pitfall",
+            terms=("策略面板",),
+        )
+        online_preference = _match(
+            "online-urgency",
+            score=4.25,
+            title="长期偏好：线上排障前先询问用户是否紧急",
+            kind="workflow",
+            terms=("线上",),
+        )
+
+        selection = select_relevant_memories(
+            "线上任务没有结束，是不是策略面板没有选择同时结束任务？",
+            matches=[task_memory, online_preference],
+            context=context,
+            semantic_mode="heuristic",
+        )
+
+        self.assertEqual(selection.emitted, (task_memory,))
+        assessments = {item.memory_id: item for item in selection.assessments}
+        self.assertEqual(assessments["strategy-panel"].role, "task")
+        self.assertTrue(assessments["strategy-panel"].task_specific)
+        self.assertEqual(assessments["online-urgency"].role, "constraint")
+
+    def test_single_online_term_does_not_make_constraint_high_confidence(self) -> None:
+        context = project_context()
+        online_preference = _match(
+            "online-urgency",
+            score=4.25,
+            title="长期偏好：线上排障前先询问用户是否紧急",
+            kind="workflow",
+            terms=("线上",),
+        )
+
+        selection = select_relevant_memories(
+            "线上任务为什么没有结束？",
+            matches=[online_preference],
+            context=context,
+            semantic_mode="heuristic",
+        )
+
+        self.assertTrue(selection.abstained)
+
+    def test_incidental_cjk_fragments_do_not_select_task_memory(self) -> None:
+        match = _match(
+            "sql-pitfall",
+            score=4.0,
+            title="编写业务 SQL 前核对项目常量和实际过滤条件",
+            kind="pitfall",
+            terms=("的实际", "项目"),
+        )
+
+        selection = select_relevant_memories(
+            "研究另一个项目中的实际代码",
+            matches=[match],
+            context=project_context(),
+            semantic_mode="heuristic",
+        )
+
+        self.assertTrue(selection.abstained)
+
     def test_hybrid_gate_can_select_one_ambiguous_candidate(self) -> None:
         context = project_context()
         match = _match(
@@ -169,7 +236,7 @@ class RelevanceSelectionTest(unittest.TestCase):
             self.assertTrue(selection.gate.selected)
             prompt = completion.call_args.kwargs["messages"][1]["content"]
             self.assertNotIn("/tmp/example_service", prompt)
-            self.assertEqual(completion.call_args.kwargs["config"].timeout_seconds, 6)
+            self.assertEqual(completion.call_args.kwargs["config"].timeout_seconds, 3)
 
     def test_hybrid_gate_sanitizes_task_and_candidate_summary(self) -> None:
         context = project_context()
@@ -222,6 +289,86 @@ class RelevanceSelectionTest(unittest.TestCase):
         self.assertTrue(selection.abstained)
         self.assertTrue(selection.gate.attempted)
         self.assertTrue(selection.gate.fallback)
+
+    def test_two_timeouts_enter_cooldown_and_skip_third_gate_call(self) -> None:
+        context = project_context()
+        match = _match(
+            "git-workflow",
+            score=3.5,
+            title="Focused git reconciliation workflow",
+            kind="preference",
+            terms=("git",),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = _profile(root)
+            with mock.patch(
+                "memagent.relevance.chat_completion",
+                side_effect=ValueError("LLM provider request failed: The read operation timed out"),
+            ) as completion:
+                first = select_relevant_memories(
+                    "git pull reports divergent branches",
+                    matches=[match],
+                    context=context,
+                    semantic_mode="hybrid",
+                    llm_profile="test",
+                    llm_config_path=config,
+                    state_home=root,
+                )
+                second = select_relevant_memories(
+                    "git pull reports divergent branches",
+                    matches=[match],
+                    context=context,
+                    semantic_mode="hybrid",
+                    llm_profile="test",
+                    llm_config_path=config,
+                    state_home=root,
+                )
+                third = select_relevant_memories(
+                    "git pull reports divergent branches",
+                    matches=[match],
+                    context=context,
+                    semantic_mode="hybrid",
+                    llm_profile="test",
+                    llm_config_path=config,
+                    state_home=root,
+                )
+
+            self.assertEqual(completion.call_count, 2)
+            self.assertEqual(first.gate.failure_kind, "timeout")
+            self.assertIsNone(first.gate.cooldown_until)
+            self.assertIsNotNone(second.gate.cooldown_until)
+            self.assertTrue(third.gate.skipped_due_to_cooldown)
+            self.assertFalse(third.gate.attempted)
+
+    def test_rate_limit_enters_cooldown_immediately(self) -> None:
+        context = project_context()
+        match = _match(
+            "git-workflow",
+            score=3.5,
+            title="Focused git reconciliation workflow",
+            kind="preference",
+            terms=("git",),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = _profile(root)
+            with mock.patch(
+                "memagent.relevance.chat_completion",
+                side_effect=ValueError("LLM provider request failed: HTTP 429: rate limit"),
+            ):
+                selection = select_relevant_memories(
+                    "git pull reports divergent branches",
+                    matches=[match],
+                    context=context,
+                    semantic_mode="hybrid",
+                    llm_profile="test",
+                    llm_config_path=config,
+                    state_home=root,
+                )
+
+            self.assertEqual(selection.gate.failure_kind, "rate_limited")
+            self.assertIsNotNone(selection.gate.cooldown_until)
 
 
 def _match(

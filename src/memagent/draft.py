@@ -7,7 +7,7 @@ import re
 import shlex
 from typing import Any
 
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, context_payload
 from memagent.llm import OpenAICompatibleConfig, chat_completion, loads_json_object
 from memagent.memory import ALLOWED_KINDS, DEFAULT_DOMAIN, normalize_kind
 
@@ -90,12 +90,7 @@ class MemoryDraft:
             },
         }
         if context is not None:
-            payload["context"] = {
-                "cwd": str(context.cwd),
-                "git_root": str(context.git_root) if context.git_root else None,
-                "branch": context.branch,
-                "repo_name": context.repo_name,
-            }
+            payload["context"] = context_payload(context)
         return payload
 
 
@@ -198,7 +193,7 @@ def draft_memory_openai_compatible(
         config = (
             OpenAICompatibleConfig.from_profile(llm_profile, config_path=llm_config_path)
             if llm_profile
-            else OpenAICompatibleConfig.from_default_profile()
+            else OpenAICompatibleConfig.from_default_profile(config_path=llm_config_path)
         )
         completion = chat_completion(
             config=config,

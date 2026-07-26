@@ -37,6 +37,18 @@ Natural requests are intent, not a rigid keyword list:
 - “That was helpful” or “not relevant” labels the latest recall when present.
 - “How has MemAgent been doing?” shows local project activity.
 
+After recalled advice materially changes the work, record one small adoption
+signal:
+
+```bash
+__MEMAGENT_COMMAND__ trace adopt --signal <applied|executed|corrected> --note "<short evidence>"
+```
+
+Use `applied` when it changed the plan, `executed` after following the recalled
+workflow, and `corrected` when live evidence proved it wrong. Do not record
+adoption merely because a memory was displayed. Keep the note short and free of
+raw business data.
+
 Configuration can also start from natural language, but never ask the user to
 paste a key into chat:
 
@@ -74,9 +86,11 @@ transcript:
 __MEMAGENT_COMMAND__ suggest "<one short reusable lesson>" --evidence <detour|correction|verified_entrypoint|costly_investigation|workflow|project_boundary>
 ```
 
-Show the returned preview as an optional suggestion and wait. A duplicate or an
-already-pending preview is skipped automatically. The user can confirm in
-ordinary language or reject it; neither path changes the project repository.
+Show the returned preview as an optional suggestion and wait. A duplicate is
+skipped automatically. A different agent suggestion may replace an older agent
+suggestion, but never replaces a user-requested preview. Unattended previews
+expire locally. The user can confirm in ordinary language or reject it; neither
+path changes the project repository.
 
 Never save tokens, cookies, passwords, private keys, or raw sensitive samples.
 Do not automatically create durable memories: a preview and explicit user

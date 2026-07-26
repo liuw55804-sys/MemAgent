@@ -2,6 +2,26 @@
 
 All notable public changes are recorded here.
 
+## 0.3.0 - Unreleased
+
+- Optional LLM relevance calls now use a three-second timeout and a local
+  failure cooldown, preventing repeated provider delays after timeouts or rate
+  limits.
+- Local relevance separates task memories from project constraints. Concrete
+  task evidence wins, while broad preferences require explicit constraint
+  intent.
+- Repeated implicit recall of the same memory is suppressed for six hours
+  unless the new task adds discriminative evidence. Explicit `recall` remains
+  available.
+- Pending previews expire after 48 hours. A new agent suggestion may replace a
+  different stale suggestion, while user-requested previews remain protected.
+- Git worktrees share a canonical local project identity for activity,
+  lifecycle, pending drafts, and recall cooldown without storing remote URLs.
+- `trace adopt` records lightweight evidence that recalled advice was applied,
+  executed, or corrected. Display alone is not counted as usefulness.
+- Test suites explicitly isolate local semantic mode from developer-machine
+  configuration and remain offline by default.
+
 ## 0.2.0 - Unreleased
 
 - Precision-first recall now separates BM25 candidate generation from local

@@ -785,6 +785,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--note",
         help="Optional short feedback note.",
     )
+    trace_adopt = trace_subparsers.add_parser(
+        "adopt",
+        help="Record that recalled advice materially affected the coding work.",
+    )
+    trace_adopt.add_argument(
+        "identifier",
+        nargs="?",
+        help="Trace id, trace JSON path, or omitted for the latest trace.",
+    )
+    trace_adopt.add_argument(
+        "--signal",
+        required=True,
+        choices=["applied", "executed", "corrected"],
+        help="How recalled advice affected the work.",
+    )
+    trace_adopt.add_argument("--note", help="Optional short evidence without full conversation or business data.")
     trace_report = trace_subparsers.add_parser(
         "report",
         help="Summarize labeled recall traces.",
@@ -1323,6 +1339,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"- rating: {rating}")
                 print(f"- path: {saved.path}")
                 return 0
+            if args.trace_command == "adopt":
+                saved = store.mark_recall_adoption(
+                    args.identifier,
+                    signal=args.signal,
+                    note=args.note,
+                )
+                adoption = saved.payload.get("adoption")
+                signal = adoption.get("signal") if isinstance(adoption, dict) else args.signal
+                print("[MemAgent recall adoption recorded]")
+                print(f"- id: {saved.identifier}")
+                print(f"- signal: {signal}")
+                print(f"- path: {saved.path}")
+                return 0
             if args.trace_command == "report":
                 print(store.compose_recall_trace_report(limit=args.limit))
                 return 0
@@ -1466,6 +1495,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_profile=args.llm_profile,
             llm_config_path=Path(args.llm_config) if args.llm_config else None,
             max_emitted=args.max_emitted,
+            state_home=store.home,
         )
         matches = list(selection.emitted)
         payload = store.build_recall_payload(

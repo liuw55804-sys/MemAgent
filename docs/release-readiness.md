@@ -41,6 +41,7 @@ rg -n "(sk|rk|pk)-[A-Za-z0-9_-]{8,}|BEGIN [A-Z ]*PRIVATE KEY" .
 
 ## First release recommendation
 
-Use **v0.2.0** for the next public release candidate. It adds precision-first
-recall, optional candidate relevance gating, proactive preview suggestions, and
-product-facing quality evidence while retaining the local-first contract.
+Use **v0.3.0** for the next public release candidate. It adds reliable hybrid
+failure handling, preference/task separation, repeated-recall cooldown, pending
+draft lifecycle, worktree aggregation, and adoption evidence while retaining
+the local-first contract.

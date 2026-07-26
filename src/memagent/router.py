@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, context_payload
 from memagent.llm import (
     OpenAICompatibleConfig,
     chat_completion,
@@ -73,12 +73,7 @@ class RouteDecision:
             ),
         }
         if context is not None:
-            payload["context"] = {
-                "cwd": str(context.cwd),
-                "git_root": str(context.git_root) if context.git_root else None,
-                "branch": context.branch,
-                "repo_name": context.repo_name,
-            }
+            payload["context"] = context_payload(context)
         return payload
 
 

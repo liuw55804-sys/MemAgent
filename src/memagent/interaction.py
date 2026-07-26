@@ -7,12 +7,12 @@ from pathlib import Path
 import time
 from typing import Any
 
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, context_payload
 from memagent.draft import draft_memory, render_memory_draft
 from memagent.eval import run_trace_eval, run_trace_replay
 from memagent.handoff import HandoffStore, draft_handoff_from_text, render_handoff_draft
 from memagent.llm import default_semantic_mode
-from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryMatch, MemoryStore
+from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryMatch, MemoryStore, retrieval_terms
 from memagent.relevance import select_relevant_memories
 from memagent.router import RouteDecision, route_interaction
 
@@ -42,12 +42,7 @@ class ProcessResult:
             "payload": self.payload,
         }
         if context is not None:
-            payload["context"] = {
-                "cwd": str(context.cwd),
-                "git_root": str(context.git_root) if context.git_root else None,
-                "branch": context.branch,
-                "repo_name": context.repo_name,
-            }
+            payload["context"] = context_payload(context)
         return payload
 
 
@@ -301,6 +296,8 @@ def _process_recall(
         llm_profile=llm_profile,
         llm_config_path=llm_config_path,
         max_emitted=max_emitted,
+        state_home=store.home,
+        apply_recall_cooldown=True,
     )
     matches = list(selection.emitted)
     retrieval_payload = selection.to_payload()
@@ -327,6 +324,9 @@ def _process_recall(
         "relevance_gate_ms": selection.gate.latency_ms,
         "relevance_gate_attempted": selection.gate.attempted,
         "relevance_gate_fallback": selection.gate.fallback,
+        "relevance_gate_skipped_cooldown": selection.gate.skipped_due_to_cooldown,
+        "relevance_gate_failure_kind": selection.gate.failure_kind,
+        "suppressed_by_cooldown": len(selection.suppressed_memory_ids),
     }
     if semantic_hints:
         payload["retrieval_hints"] = list(semantic_hints)
@@ -441,19 +441,6 @@ def _process_draft_memory(
     source: str,
     evidence: str | None,
 ) -> ProcessResult:
-    if source == "agent_suggested" and store.has_pending_memory_draft(context=context):
-        return ProcessResult(
-            route=replace(route, action="none", reason="A project-scoped memory preview is already pending."),
-            executed=False,
-            result_text="[MemAgent proactive suggestion]\n- skipped: an earlier preview is still waiting for confirmation",
-            artifacts={
-                "agent_suggested": True,
-                "status": "pending_exists",
-                "pending_draft_id": store.pending_memory_draft_identifier(context=context),
-            },
-            writes=(),
-            warnings=(),
-        )
     source_text = recent_text.strip() or route.user_message
     draft = draft_memory(
         source_text,
@@ -490,6 +477,42 @@ def _process_draft_memory(
             warnings=(),
             payload=payload,
         )
+    active_pending = (
+        store.load_pending_memory_draft(context=context)
+        if store.has_pending_memory_draft(context=context)
+        else None
+    )
+    replaced_pending_id: str | None = None
+    if active_pending is not None:
+        pending_meta = (
+            active_pending.get("pending")
+            if isinstance(active_pending.get("pending"), dict)
+            else {}
+        )
+        pending_source = str(pending_meta.get("source") or "user_requested")
+        same_lesson = _pending_draft_similar(active_pending, payload)
+        if source == "agent_suggested" and (pending_source != "agent_suggested" or same_lesson):
+            return ProcessResult(
+                route=replace(route, action="none", reason="A related project-scoped memory preview is already pending."),
+                executed=False,
+                result_text="[MemAgent proactive suggestion]\n- skipped: a related preview is still waiting for confirmation",
+                artifacts={
+                    "agent_suggested": True,
+                    "status": "pending_exists",
+                    "pending_draft_id": pending_meta.get("id"),
+                    "pending_source": pending_source,
+                },
+                writes=(),
+                warnings=(),
+                payload=payload,
+            )
+        if allow_writes:
+            replaced_pending_id = str(pending_meta.get("id") or "") or None
+            store.archive_pending_memory_draft(
+                context=context,
+                status="replaced",
+                payload=active_pending,
+            )
     warnings = tuple(payload.get("warnings") or ())
     artifacts: dict[str, Any] = {
         "quality_label": draft.quality_label,
@@ -497,6 +520,7 @@ def _process_draft_memory(
         "source": source,
         "agent_suggested": source == "agent_suggested",
         "suggestion_evidence": evidence,
+        "replaced_pending_id": replaced_pending_id,
     }
     writes: tuple[str, ...] = ()
     if allow_writes:
@@ -508,18 +532,30 @@ def _process_draft_memory(
         )
         artifacts["pending_draft_id"] = pending.identifier
         artifacts["pending_draft_path"] = str(pending.path)
-        writes = ("pending_memory_draft",)
+        writes = (
+            ("pending_memory_draft_replaced", "pending_memory_draft")
+            if replaced_pending_id
+            else ("pending_memory_draft",)
+        )
     else:
         warnings = (*warnings, "writes disabled; memory draft was not saved for confirmation")
     result_text = render_memory_draft(draft, context=context)
     if source == "agent_suggested":
+        replacement_line = (
+            "- A different stale suggestion was archived and replaced."
+            if replaced_pending_id
+            else None
+        )
         result_text = "\n".join(
-            [
+            item
+            for item in [
                 "[MemAgent proactive suggestion]",
                 "- This task formed one reusable lesson. Ask the user whether to save this preview.",
+                replacement_line,
                 "",
                 result_text,
             ]
+            if item is not None
         )
     return ProcessResult(
         route=route,
@@ -659,6 +695,27 @@ def _find_duplicate_memory(*, store: MemoryStore, context: ProjectContext, text:
     if assessment is None or assessment.confidence < 0.88:
         return None
     return selected
+
+
+def _pending_draft_similar(pending: dict[str, object], draft: dict[str, object]) -> bool:
+    pending_draft = pending.get("draft") if isinstance(pending.get("draft"), dict) else {}
+    suggested = draft.get("suggested_remember") if isinstance(draft.get("suggested_remember"), dict) else draft
+    left = " ".join(
+        str(pending_draft.get(key) or "")
+        for key in ("topic", "text")
+    ).strip()
+    right = " ".join(
+        str(suggested.get(key) or "")
+        for key in ("topic", "text", "memory")
+    ).strip()
+    if not left or not right:
+        return False
+    if left == right or left in right or right in left:
+        return True
+    left_terms = set(retrieval_terms(left))
+    right_terms = set(retrieval_terms(right))
+    union = left_terms | right_terms
+    return bool(union) and len(left_terms & right_terms) / len(union) >= 0.55
 
 
 def _process_label_feedback(*, route: RouteDecision, store: MemoryStore, allow_writes: bool) -> ProcessResult:

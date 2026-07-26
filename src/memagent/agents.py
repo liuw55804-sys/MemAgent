@@ -300,6 +300,16 @@ def build_agents_snippet(memagent_root: Path | None = None) -> str:
         {command_prefix} trace label --rating useful --note "<short reason>"
         ```
 
+        When recalled advice materially changes the action you take, record one
+        lightweight adoption signal after the action. Use `applied` when it
+        changed the plan, `executed` when you actually followed the recalled
+        workflow, and `corrected` when live evidence proved the memory wrong.
+        Do not mark adoption merely because a memory was displayed.
+
+        ```bash
+        {command_prefix} trace adopt --signal executed --note "<short evidence>"
+        ```
+
         ### Developer Evaluation Mode
 
         Trace reports, eval, and replay are developer-facing quality tools.

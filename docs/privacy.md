@@ -22,3 +22,13 @@ the key itself. Local compatible services can be configured without a key.
 
 Review any memory before confirmation. Do not store secrets or sensitive raw
 samples in local memory.
+
+Runtime reliability state is also local. Gate health stores only a profile
+name, failure category, count, and cooldown timestamps. Recall cooldown stores a
+hashed local project identity, memory ID, matched terms, and timestamp. Git
+worktree grouping hashes the local common Git directory and never stores the
+remote URL.
+
+`trace adopt` stores only `applied`, `executed`, or `corrected`, plus an optional
+short note. The coding-agent integration must not put a full conversation,
+request/response body, token, or raw business sample in that note.

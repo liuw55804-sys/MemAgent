@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from collections import Counter
 import hashlib
@@ -10,8 +10,9 @@ import math
 import os
 import re
 import textwrap
+from typing import Callable
 
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, context_payload, matches_project_context
 
 
 DEFAULT_DOMAIN = "coding"
@@ -102,6 +103,7 @@ DISCRIMINATIVE_SHORT_CJK_TERMS = {
     "习惯",
     "驳回",
     "交付",
+    "移交",
     "分支",
     "工具",
     "数据库",
@@ -111,6 +113,7 @@ RECALL_FEEDBACK_RATINGS = {
     "not_useful",
     "neutral",
 }
+DEFAULT_PENDING_DRAFT_TTL_HOURS = 48
 
 ALLOWED_RECALL_STRATEGIES = {
     "bm25",
@@ -201,12 +204,19 @@ class PackedMemoryContext:
 
 
 class MemoryStore:
-    def __init__(self, home: Path) -> None:
+    def __init__(
+        self,
+        home: Path,
+        *,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
         self.home = home.expanduser().resolve()
         self.memories_dir = self.home / "memories"
         self.traces_dir = self.home / "recall_traces"
         self.process_traces_dir = self.home / "process_traces"
         self.pending_drafts_dir = self.home / "pending_memory_drafts"
+        self.pending_drafts_archive_dir = self.pending_drafts_dir / "archive"
+        self._now = now or (lambda: datetime.now(timezone.utc))
         self.memories_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
@@ -229,7 +239,7 @@ class MemoryStore:
         triggers: list[str],
         exportable: bool,
     ) -> SavedMemory:
-        now = datetime.now(timezone.utc)
+        now = self._now()
         identifier = f"mem_{now.strftime('%Y%m%d_%H%M%S_%f')}"
         title = topic or _derive_topic(text)
         normalized_domain = normalize_domain(domain)
@@ -383,7 +393,7 @@ class MemoryStore:
 
     def save_recall_trace(self, payload: dict[str, object], *, source: str) -> SavedRecallTrace:
         self.traces_dir.mkdir(parents=True, exist_ok=True)
-        now = datetime.now(timezone.utc)
+        now = self._now()
         identifier = f"trace_{now.strftime('%Y%m%d_%H%M%S_%f')}"
         path = self.traces_dir / f"{identifier}.json"
         trace_payload = dict(payload)
@@ -398,7 +408,7 @@ class MemoryStore:
 
     def save_process_trace(self, payload: dict[str, object], *, source: str) -> SavedProcessTrace:
         self.process_traces_dir.mkdir(parents=True, exist_ok=True)
-        now = datetime.now(timezone.utc)
+        now = self._now()
         identifier = f"process_trace_{now.strftime('%Y%m%d_%H%M%S_%f')}"
         path = self.process_traces_dir / f"{identifier}.json"
         trace_payload = {
@@ -433,14 +443,17 @@ class MemoryStore:
         if not text or not topic:
             raise ValueError("pending memory draft requires topic and text")
 
-        now = datetime.now(timezone.utc)
+        now = self._now()
+        expires_at = now + timedelta(hours=_pending_draft_ttl_hours())
         identifier = f"pending_{now.strftime('%Y%m%d_%H%M%S_%f')}"
         path = self._pending_memory_draft_path(context)
         payload: dict[str, object] = {
-            "schema_version": "memagent.pending_memory_draft.v1",
+            "schema_version": "memagent.pending_memory_draft.v2",
             "pending": {
                 "id": identifier,
                 "created_at": now.isoformat(),
+                "expires_at": expires_at.isoformat(),
+                "status": "pending",
                 "path": str(path),
                 "source": source,
                 "evidence": evidence,
@@ -460,9 +473,11 @@ class MemoryStore:
         return SavedPendingMemoryDraft(path=path, identifier=identifier, payload=payload)
 
     def has_pending_memory_draft(self, *, context: ProjectContext) -> bool:
+        self.expire_pending_memory_draft(context=context)
         return self._pending_memory_draft_path(context).exists()
 
     def pending_memory_draft_identifier(self, *, context: ProjectContext) -> str | None:
+        self.expire_pending_memory_draft(context=context)
         path = self._pending_memory_draft_path(context)
         if not path.exists():
             return None
@@ -475,6 +490,7 @@ class MemoryStore:
         return str(identifier) if identifier else None
 
     def load_pending_memory_draft(self, *, context: ProjectContext) -> dict[str, object]:
+        self.expire_pending_memory_draft(context=context)
         path = self._pending_memory_draft_path(context)
         if not path.exists():
             raise ValueError("no pending memory draft found for this project")
@@ -488,8 +504,66 @@ class MemoryStore:
 
     def discard_pending_memory_draft(self, *, context: ProjectContext) -> dict[str, object]:
         payload = self.load_pending_memory_draft(context=context)
-        self._pending_memory_draft_path(context).unlink()
-        return payload
+        return self.archive_pending_memory_draft(
+            context=context,
+            status="rejected",
+            payload=payload,
+        )
+
+    def expire_pending_memory_draft(self, *, context: ProjectContext) -> dict[str, object] | None:
+        path = self._pending_memory_draft_path(context)
+        if not path.exists():
+            return None
+        payload = _read_json_object(path)
+        pending = payload.get("pending") if isinstance(payload.get("pending"), dict) else {}
+        expires_at = _parse_datetime_value(pending.get("expires_at"))
+        if expires_at is None:
+            created_at = _parse_datetime_value(pending.get("created_at"))
+            expires_at = (
+                created_at + timedelta(hours=_pending_draft_ttl_hours())
+                if created_at
+                else None
+            )
+        if expires_at is None or expires_at > self._now():
+            return None
+        return self.archive_pending_memory_draft(
+            context=context,
+            status="expired",
+            payload=payload,
+        )
+
+    def archive_pending_memory_draft(
+        self,
+        *,
+        context: ProjectContext,
+        status: str,
+        payload: dict[str, object] | None = None,
+        replacement_id: str | None = None,
+        memory_id: str | None = None,
+    ) -> dict[str, object]:
+        if status not in {"expired", "replaced", "rejected", "confirmed"}:
+            raise ValueError(f"invalid pending memory draft archive status: {status}")
+        path = self._pending_memory_draft_path(context)
+        value = payload or self.load_pending_memory_draft(context=context)
+        pending = value.get("pending") if isinstance(value.get("pending"), dict) else {}
+        pending = dict(pending)
+        identifier = str(pending.get("id") or path.stem)
+        pending.update(
+            {
+                "status": status,
+                "resolved_at": self._now().isoformat(),
+                "replacement_id": replacement_id,
+                "memory_id": memory_id,
+            }
+        )
+        value = dict(value)
+        value["pending"] = pending
+        self.pending_drafts_archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = self.pending_drafts_archive_dir / f"{identifier}.{status}.json"
+        archive_path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if path.exists():
+            path.unlink()
+        return value
 
     def remember_pending_memory_draft(self, *, context: ProjectContext) -> SavedMemory:
         path = self._pending_memory_draft_path(context)
@@ -513,7 +587,12 @@ class MemoryStore:
             triggers=[item for item in triggers if item],
             exportable=False,
         )
-        path.unlink()
+        self.archive_pending_memory_draft(
+            context=context,
+            status="confirmed",
+            payload=payload,
+            memory_id=saved.identifier,
+        )
         return saved
 
     def load_process_trace(self, identifier: str | None = None) -> dict[str, object]:
@@ -581,6 +660,12 @@ class MemoryStore:
             note = feedback.get("note")
             if note:
                 lines.append(f"- feedback_note: {note}")
+        adoption = payload.get("adoption")
+        if isinstance(adoption, dict):
+            lines.append(f"- adoption: {adoption.get('signal', 'unknown')}")
+            note = adoption.get("note")
+            if note:
+                lines.append(f"- adoption_note: {note}")
         lines.append(f"- query: {payload.get('query', '')}")
         context = payload.get("context")
         if isinstance(context, dict):
@@ -607,6 +692,32 @@ class MemoryStore:
             "rating": normalized_rating,
             "note": note or "",
             "labeled_at": now.isoformat(),
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+        return SavedRecallTrace(
+            path=path,
+            identifier=str(trace.get("id") or path.stem),
+            payload=payload,
+        )
+
+    def mark_recall_adoption(
+        self,
+        identifier: str | None,
+        *,
+        signal: str,
+        note: str | None,
+    ) -> SavedRecallTrace:
+        normalized_signal = signal.strip().lower().replace("-", "_")
+        if normalized_signal not in {"applied", "executed", "corrected"}:
+            raise ValueError("adoption signal must be applied, executed, or corrected")
+        path = self._resolve_recall_trace_path(identifier)
+        payload = self.load_recall_trace(str(path))
+        now = self._now()
+        payload["adoption"] = {
+            "signal": normalized_signal,
+            "note": (note or "").strip(),
+            "recorded_at": now.isoformat(),
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
@@ -675,7 +786,23 @@ class MemoryStore:
 
     def _pending_memory_draft_path(self, context: ProjectContext) -> Path:
         identifier = f"pending_{_pending_draft_key(context)}"
-        return self.pending_drafts_dir / f"{identifier}.json"
+        preferred = self.pending_drafts_dir / f"{identifier}.json"
+        if preferred.exists() or not self.pending_drafts_dir.exists():
+            return preferred
+        for candidate in sorted(self.pending_drafts_dir.glob("pending_*.json"), reverse=True):
+            payload = _read_json_object(candidate)
+            candidate_context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+            if not matches_project_context(candidate_context, context):
+                continue
+            preferred.parent.mkdir(parents=True, exist_ok=True)
+            candidate.replace(preferred)
+            pending = payload.get("pending") if isinstance(payload.get("pending"), dict) else {}
+            pending = dict(pending)
+            pending["path"] = str(preferred)
+            payload["pending"] = pending
+            preferred.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            break
+        return preferred
 
 
 def _render_memory_card(
@@ -726,20 +853,42 @@ def _render_memory_card(
 
 
 def _context_payload(context: ProjectContext) -> dict[str, object]:
-    return {
-        "cwd": str(context.cwd),
-        "git_root": str(context.git_root) if context.git_root else None,
-        "branch": context.branch,
-        "repo_name": context.repo_name,
-        "recent_files": [str(path) for path in context.recent_files],
-        "agents_files": [str(path) for path in context.agents_files],
-    }
+    return context_payload(context)
 
 
 def _pending_draft_key(context: ProjectContext) -> str:
-    root = context.git_root or context.cwd
-    digest = hashlib.sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:12]
+    identity = context.canonical_repo_id or str((context.git_root or context.cwd).resolve())
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:12]
     return digest
+
+
+def _pending_draft_ttl_hours() -> int:
+    raw = os.environ.get("MEMAGENT_PENDING_DRAFT_TTL_HOURS", "").strip()
+    if not raw:
+        return DEFAULT_PENDING_DRAFT_TTL_HOURS
+    try:
+        return max(int(raw), 1)
+    except ValueError:
+        return DEFAULT_PENDING_DRAFT_TTL_HOURS
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _parse_datetime_value(value: object) -> datetime | None:
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def _minimal_quality_gate_trace(value: object) -> dict[str, object] | None:

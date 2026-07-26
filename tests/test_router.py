@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +12,14 @@ from memagent.router import ROUTE_SCHEMA_VERSION, route_interaction
 
 
 class RouterTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.semantic_mode = mock.patch.dict(
+            os.environ,
+            {"MEMAGENT_SEMANTIC_MODE": "heuristic"},
+        )
+        self.semantic_mode.start()
+        self.addCleanup(self.semantic_mode.stop)
+
     def test_routes_task_start_recall(self) -> None:
         decision = route_interaction("帮我排查 example_service 里 workflow task maintainer 相关问题，先按你觉得最省时间的方式来。")
 
@@ -133,8 +142,13 @@ class RouterTest(unittest.TestCase):
         self.assertEqual(decision.provider, "openai-compatible")
 
     def test_hybrid_falls_back_when_provider_is_not_configured(self) -> None:
-        with mock.patch.dict("os.environ", {}, clear=True):
-            decision = route_interaction("Can you continue the investigation from last time?", semantic_mode="hybrid")
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict("os.environ", {}, clear=True):
+                decision = route_interaction(
+                    "Can you continue the investigation from last time?",
+                    semantic_mode="hybrid",
+                    llm_config_path=Path(tmp) / "missing.json",
+                )
 
         self.assertEqual(decision.action, "none")
         self.assertEqual(decision.provider, "heuristic_fallback")

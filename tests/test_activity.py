@@ -3,19 +3,64 @@ from __future__ import annotations
 from contextlib import redirect_stdout
 from io import StringIO
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from memagent.activity import build_activity_report, render_activity_report
 from memagent.cli import main
-from memagent.context import ProjectContext
+from memagent.context import ProjectContext, context_payload, detect_context
 from memagent.handoff import HandoffStore
 from memagent.interaction import process_interaction
 from memagent.memory import MemoryStore
 
 
 class ActivityTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.semantic_mode = mock.patch.dict(
+            os.environ,
+            {"MEMAGENT_SEMANTIC_MODE": "heuristic"},
+        )
+        self.semantic_mode.start()
+        self.addCleanup(self.semantic_mode.stop)
+
+    def test_activity_aggregates_main_checkout_and_git_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            main = root / "service"
+            worktree = root / "worktree"
+            _init_repo(main)
+            _git(main, "worktree", "add", "--detach", str(worktree))
+            main_context = detect_context(main)
+            worktree_context = detect_context(worktree)
+            store = MemoryStore(root / "home")
+            for item in (main_context, worktree_context):
+                store.save_process_trace(
+                    {
+                        "context": context_payload(item),
+                        "route": {"action": "none"},
+                        "artifacts": {
+                            "recall_considered": True,
+                            "candidates": 1,
+                            "emitted": 0,
+                            "abstained": True,
+                        },
+                    },
+                    source="test",
+                )
+
+            report = build_activity_report(
+                store=store,
+                handoff_store=HandoffStore(store.home),
+                context=main_context,
+            )
+
+            self.assertEqual(report.retrieval["considered"], 2)
+            self.assertEqual(report.retrieval["abstained"], 2)
+
     def test_empty_activity_report_is_quiet(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -54,6 +99,7 @@ class ActivityTest(unittest.TestCase):
                 source="test",
             )
             store.label_recall_trace(saved_recall.identifier, rating="useful", note="helped")
+            store.mark_recall_adoption(saved_recall.identifier, signal="executed", note="used")
             store.save_process_trace(
                 {
                     "context": {
@@ -95,6 +141,7 @@ class ActivityTest(unittest.TestCase):
             self.assertEqual(report.action_counts, {"recall": 1})
             self.assertEqual(report.recall_total, 1)
             self.assertEqual(report.feedback_counts, {"useful": 1})
+            self.assertEqual(report.adoption_counts, {"executed": 1})
             self.assertEqual(report.memory_count, 1)
             self.assertEqual(report.handoff_count, 1)
             self.assertIn("Live schema entrypoint", render_activity_report(report))
@@ -278,6 +325,28 @@ def _context(project: Path) -> ProjectContext:
         recent_files=(),
         agents_files=(),
     )
+
+
+def _init_repo(path: Path) -> None:
+    path.mkdir(parents=True)
+    _git(path, "init")
+    _git(path, "config", "user.email", "memagent@example.test")
+    _git(path, "config", "user.name", "MemAgent Test")
+    (path / "README.md").write_text("# demo\n", encoding="utf-8")
+    _git(path, "add", "README.md")
+    _git(path, "commit", "-m", "initial")
+
+
+def _git(path: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=path,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    return completed.stdout.strip()
 
 
 if __name__ == "__main__":
