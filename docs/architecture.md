@@ -15,7 +15,10 @@ flowchart TD
   L --> O
   L --> A
   R -->|"explicit capture"| D["Memory preview"]
-  C["Agent task-boundary evidence"] --> Q["Proactive suggestion policy"]
+  C["Sanitized task-boundary reflection"] --> Q["Local reflection policy"]
+  Q -->|"weak, transient, or duplicate"| A
+  Q -. "ambiguous and LLM enabled" .-> L2["Optional reflection gate"]
+  L2 --> Q
   Q -->|"one useful, non-duplicate lesson"| D
   D -->|"user confirms"| S["Durable local memory"]
   D -->|"user rejects"| X["Discard preview"]
@@ -55,12 +58,16 @@ can receive the memory immediately. When no session identity is available,
 MemAgent falls back to a six-hour cooldown unless the next task adds new
 discriminative terms. Explicit CLI recall bypasses both policies.
 
-Proactive capture is initiated by the coding agent only at a meaningful task
-boundary. It passes one short lesson and an evidence category to `memagent
-suggest`. MemAgent suppresses duplicates, stores only a pending preview, and
-waits for ordinary-language confirmation or rejection. Pending previews expire
-after 48 hours. A new agent suggestion can replace a different agent suggestion,
-but cannot replace a preview explicitly requested by the user.
+Automatic candidate discovery is initiated by the coding agent only at a
+meaningful task boundary. It passes one short sanitized reflection and concrete
+evidence categories to `memagent reflect`; it does not need to pre-write the
+memory. The local policy rejects weak and transient lessons, checks existing
+memories and pending previews before optional LLM use, and emits at most one
+suggestion per Codex task. Reflection traces retain a summary hash and decision
+metadata rather than the raw reflection. MemAgent stores only a pending preview
+and waits for ordinary-language confirmation or rejection. Pending previews
+expire after 48 hours. A new agent suggestion can replace a different agent
+suggestion, but cannot replace a preview explicitly requested by the user.
 
 Git worktrees are grouped by a hash of their local common Git directory. Remote
 URLs are not stored. `~/.memagent/` contains memory cards, pending previews,

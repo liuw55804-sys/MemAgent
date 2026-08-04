@@ -14,6 +14,13 @@ from memagent.handoff import HandoffStore, draft_handoff_from_text, render_hando
 from memagent.llm import default_semantic_mode
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryMatch, MemoryStore, retrieval_terms
 from memagent.relevance import select_relevant_memories
+from memagent.reflection import (
+    ReflectionSessionStore,
+    assess_reflection,
+    reflection_candidate,
+    reflection_trace_payload,
+    suppress_for_session,
+)
 from memagent.router import RouteDecision, route_interaction
 
 
@@ -260,6 +267,166 @@ def render_process_result(result: ProcessResult, *, context: ProjectContext | No
     return "\n".join(lines)
 
 
+def reflect_on_task(
+    *,
+    summary: str,
+    signals: tuple[str, ...],
+    context: ProjectContext,
+    store: MemoryStore,
+    semantic_mode: str | None = None,
+    llm_profile: str | None = None,
+    llm_config_path: Path | None = None,
+    draft_provider: str | None = None,
+    allow_writes: bool = True,
+    session_id: str | None = None,
+) -> ProcessResult:
+    active_mode = semantic_mode or default_semantic_mode()
+    if active_mode not in {"heuristic", "hybrid", "llm"}:
+        raise ValueError("semantic mode must be heuristic, hybrid, or llm")
+    session_store = ReflectionSessionStore(store.home)
+    session_limited = session_store.already_suggested(context=context, session_id=session_id)
+    candidate = reflection_candidate(summary)
+    duplicate = _find_duplicate_memory(store=store, context=context, text=candidate)
+    active_pending = (
+        store.load_pending_memory_draft(context=context)
+        if store.has_pending_memory_draft(context=context)
+        else None
+    )
+    pending_similar = bool(
+        active_pending
+        and _pending_draft_similar(
+            active_pending,
+            {"suggested_remember": {"topic": "", "text": candidate}},
+        )
+    )
+    local_only = session_limited or duplicate is not None or pending_similar
+    assessment = assess_reflection(
+        summary,
+        signals=signals,
+        context=context,
+        semantic_mode="heuristic" if local_only else active_mode,
+        llm_profile=llm_profile,
+        llm_config_path=llm_config_path,
+        state_home=store.home,
+    )
+    if session_limited:
+        assessment = suppress_for_session(assessment)
+    elif duplicate is not None:
+        assessment = replace(
+            assessment,
+            verdict="abstain",
+            reason="A sufficiently similar durable memory already exists.",
+            lesson=None,
+            status="duplicate",
+        )
+    elif pending_similar:
+        assessment = replace(
+            assessment,
+            verdict="abstain",
+            reason="A related project-scoped memory preview is already pending.",
+            lesson=None,
+            status="pending_exists",
+        )
+
+    route = RouteDecision(
+        action="draft_memory" if assessment.should_suggest else "none",
+        confidence=assessment.score,
+        reason=assessment.reason,
+        signals=("task_boundary_reflection", *assessment.signals),
+        user_message="Coding-agent task boundary reflection.",
+        provider=assessment.provider,
+        requires_confirmation=assessment.should_suggest,
+        recent_text_used=True,
+        suggested_next=(
+            "Show one short optional memory suggestion and wait for confirmation."
+            if assessment.should_suggest
+            else "Continue without mentioning MemAgent."
+        ),
+    )
+    if assessment.should_suggest:
+        # The reflection gate already returns the candidate lesson. Keep the
+        # confirmation preview local unless a caller explicitly requests a
+        # second provider-assisted quality pass.
+        effective_draft_provider = draft_provider or "heuristic"
+        result = _process_draft_memory(
+            route=route,
+            context=context,
+            recent_text=assessment.lesson or summary,
+            store=store,
+            allow_writes=allow_writes,
+            provider=effective_draft_provider,
+            llm_profile=llm_profile,
+            llm_config_path=llm_config_path,
+            source="automatic_reflection",
+            evidence=assessment.signals[0] if assessment.signals else "workflow",
+        )
+    else:
+        result = ProcessResult(
+            route=route,
+            executed=False,
+            result_text="[MemAgent reflection]\n- action: none\n- Continue normally without a memory suggestion.",
+            artifacts={"status": assessment.status},
+            writes=(),
+            warnings=(),
+            payload=assessment.to_payload(),
+        )
+
+    artifacts = {
+        **result.artifacts,
+        "reflection_considered": True,
+        "reflection_verdict": assessment.verdict,
+        "reflection_score": round(assessment.score, 2),
+        "reflection_provider": assessment.provider,
+        "reflection_latency_ms": assessment.latency_ms,
+        "reflection_gate_attempted": assessment.gate.attempted,
+        "reflection_gate_fallback": assessment.gate.fallback,
+        "reflection_gate_skipped_cooldown": assessment.gate.skipped_due_to_cooldown,
+        "reflection_gate_failure_kind": assessment.gate.failure_kind,
+    }
+    result = replace(result, artifacts=artifacts)
+    result = _with_process_trace(
+        result,
+        context=context,
+        store=store,
+        allow_writes=allow_writes,
+        recent_text=summary,
+        trace_none=False,
+    )
+    artifacts = dict(result.artifacts)
+    writes = list(result.writes)
+    if allow_writes:
+        status = str(artifacts.get("status") or ("suggested" if result.executed else assessment.status))
+        trace = store.save_reflection_trace(
+            reflection_trace_payload(
+                assessment=assessment,
+                summary=summary,
+                context=context,
+                action=result.route.action,
+                status=status,
+                pending_draft_id=str(artifacts.get("pending_draft_id") or "") or None,
+            )
+        )
+        artifacts["reflection_trace_id"] = trace.identifier
+        artifacts["reflection_trace_path"] = str(trace.path)
+        writes.append("reflection_trace")
+        if result.executed and result.route.action == "draft_memory":
+            session_store.record(
+                context=context,
+                pending_draft_id=str(artifacts.get("pending_draft_id") or "") or None,
+                session_id=session_id,
+            )
+    warnings = result.warnings
+    if assessment.gate.fallback:
+        warnings = (*warnings, "LLM reflection gate unavailable; used local fallback")
+    return replace(
+        result,
+        artifacts=artifacts,
+        writes=tuple(writes),
+        warnings=warnings,
+        payload=assessment.to_payload() if not result.executed else result.payload,
+    )
+
+
 def _process_recall(
     *,
     route: RouteDecision,
@@ -451,9 +618,10 @@ def _process_draft_memory(
         llm_config_path=llm_config_path,
     )
     payload = draft.to_payload(context=context)
+    proactive = _is_proactive_source(source)
     duplicate = (
         _find_duplicate_memory(store=store, context=context, text=draft.memory)
-        if source == "agent_suggested"
+        if proactive
         else None
     )
     if duplicate is not None:
@@ -469,7 +637,7 @@ def _process_draft_memory(
                 ]
             ),
             artifacts={
-                "agent_suggested": source == "agent_suggested",
+                "agent_suggested": proactive,
                 "source": source,
                 "status": "duplicate",
                 "duplicate_memory": duplicate.path.name,
@@ -492,7 +660,7 @@ def _process_draft_memory(
         )
         pending_source = str(pending_meta.get("source") or "user_requested")
         same_lesson = _pending_draft_similar(active_pending, payload)
-        if source == "agent_suggested" and (pending_source != "agent_suggested" or same_lesson):
+        if proactive and (not _is_proactive_source(pending_source) or same_lesson):
             return ProcessResult(
                 route=replace(route, action="none", reason="A related project-scoped memory preview is already pending."),
                 executed=False,
@@ -519,7 +687,7 @@ def _process_draft_memory(
         "quality_label": draft.quality_label,
         "requires_confirmation": draft.requires_confirmation,
         "source": source,
-        "agent_suggested": source == "agent_suggested",
+        "agent_suggested": proactive,
         "suggestion_evidence": evidence,
         "replaced_pending_id": replaced_pending_id,
     }
@@ -541,7 +709,7 @@ def _process_draft_memory(
     else:
         warnings = (*warnings, "writes disabled; memory draft was not saved for confirmation")
     result_text = render_memory_draft(draft, context=context)
-    if source == "agent_suggested":
+    if proactive:
         replacement_line = (
             "- A different stale suggestion was archived and replaced."
             if replaced_pending_id
@@ -567,6 +735,10 @@ def _process_draft_memory(
         warnings=warnings,
         payload=payload,
     )
+
+
+def _is_proactive_source(source: str) -> bool:
+    return source in {"agent_suggested", "automatic_reflection"}
 
 
 def _process_save_memory(

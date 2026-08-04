@@ -1,7 +1,6 @@
 # Release Readiness
 
-This repository is prepared for a first public release without performing a
-publication from this checkout.
+This repository is prepared for public releases from a verified local checkout.
 
 ## Local verification
 
@@ -39,9 +38,9 @@ rg -n -i "private platform|organization domain|personal machine path" .
 rg -n "(sk|rk|pk)-[A-Za-z0-9_-]{8,}|BEGIN [A-Z ]*PRIVATE KEY" .
 ```
 
-## First release recommendation
+## Current release
 
-Use **v0.3.1** for the next public release candidate. It adds reliable hybrid
-failure handling, preference/task separation, repeated-recall cooldown, pending
-draft lifecycle, worktree aggregation, adoption evidence, and session-aware
-recall suppression while retaining the local-first contract.
+**v0.4.0** is the first public package release. In addition to the v0.3
+recall reliability work, it adds confirmation-first automatic memory-candidate
+discovery through sanitized task-boundary reflections, local/optional-LLM
+selection, per-task interruption limits, and an observable reflection funnel.

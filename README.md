@@ -24,9 +24,11 @@ memagent install-user-codex --write
 memagent user-codex-doctor
 ```
 
-Start a new Codex task and use normal language such as “remember this
-workaround” or “what did we learn last time?” The Skill invokes MemAgent from
-the project directory, so memories are scoped to the current project.
+Start a new Codex task and work normally. After a meaningful detour, correction,
+or verified workflow, the Skill can quietly ask MemAgent whether one reusable
+lesson is worth previewing; you do not need to remember a special command. You
+can still say “remember this workaround” or “what did we learn last time?”
+explicitly. Memories are scoped to the current project.
 
 You can also use the CLI directly:
 
@@ -45,6 +47,9 @@ natural-language task
         |
         v
 local router -> recall candidates | draft preview | feedback | handoff | none
+        ^
+        |
+task-boundary reflection -> suggest one preview or abstain
         |
         v
 BM25 candidates -> local relevance -> one memory or abstain
@@ -60,10 +65,11 @@ optional LLM gate for ambiguous candidates (failure cooldown)
   relevance policy. It returns at most one project-scoped hint and otherwise
   abstains. Verify any hint against live sources before acting.
 - **Drafts** are previewed first. Durable memory requires explicit confirmation.
-- **Proactive capture** lets the Codex Skill suggest one preview after a
-  meaningful detour, correction, verified entrypoint, or reusable workflow.
-  Routine work is skipped, duplicates are suppressed, and nothing is saved
-  durably without confirmation.
+- **Automatic candidate discovery** lets the Codex Skill submit a short,
+  sanitized task reflection after a meaningful detour, correction, verified
+  entrypoint, or reusable workflow. MemAgent decides whether to suggest one
+  preview or abstain. Routine work is skipped, duplicates are suppressed, and
+  nothing is saved durably without confirmation.
 - **Feedback** from ordinary language helps evaluate whether a recalled hint was
   useful.
 - **Adoption evidence** distinguishes a displayed hint from advice that changed
@@ -112,6 +118,8 @@ passwords, cookies, private keys, or raw request/response bodies.
 
 ```bash
 memagent process "remember this workaround and show me a preview"
+memagent reflect --summary "The live contract corrected a stale generated client; verify it first next time." \
+  --signal correction --signal verified_outcome
 memagent suggest "Verify the live schema before editing generated queries." --evidence correction
 memagent activity --today
 memagent trace adopt --signal executed --note "Used the recalled verification step."
@@ -145,8 +153,9 @@ your local memories.
 
 **Does it require an LLM?** No. The default behavior is fully local.
 
-**Does it write memory automatically?** No. Long-term memory always requires a
-preview and explicit confirmation.
+**Does it write memory automatically?** It can automatically discover and
+preview one candidate at a meaningful task boundary. Long-term memory still
+always requires explicit confirmation.
 
 **Will it recall something on every task?** No. Generic terms, business IDs,
 and same-project overlap are insufficient. Precision-first recall returns one

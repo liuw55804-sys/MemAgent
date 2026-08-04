@@ -79,6 +79,17 @@ class RouterTest(unittest.TestCase):
         self.assertTrue(decision.requires_pending_draft)
         self.assertEqual(route_interaction("确认保存", has_pending_draft=False).action, "none")
 
+    def test_routes_natural_english_confirmation_with_pending_draft(self) -> None:
+        decision = route_interaction("Save that lesson.", has_pending_draft=True)
+
+        self.assertEqual(decision.action, "save_memory")
+        self.assertTrue(decision.requires_pending_draft)
+
+    def test_english_rejection_is_not_misread_as_confirmation(self) -> None:
+        decision = route_interaction("Don't save this one.", has_pending_draft=True)
+
+        self.assertEqual(decision.action, "reject_memory")
+
     def test_routes_memory_rejection_only_with_pending_draft(self) -> None:
         decision = route_interaction("这条不用记了", has_pending_draft=True)
 

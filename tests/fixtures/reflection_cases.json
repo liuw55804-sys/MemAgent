@@ -1,0 +1,74 @@
+[
+  {
+    "name": "verified stale contract detour",
+    "summary": "Two failed attempts relied on an obsolete contract. Next time verify the live contract before changing generated code.",
+    "signals": ["detour", "verified_entrypoint", "verified_outcome"],
+    "expected": "suggest"
+  },
+  {
+    "name": "user correction with verification",
+    "summary": "The user corrected the generated-client assumption and the live interface confirmed it. Next time inspect the interface before editing the caller.",
+    "signals": ["correction", "verified_outcome"],
+    "expected": "suggest"
+  },
+  {
+    "name": "costly investigation becomes workflow",
+    "summary": "Several broad checks were unnecessary. The focused contract check found the cause, so run that check first on similar failures.",
+    "signals": ["costly_investigation", "workflow", "verified_outcome"],
+    "expected": "suggest"
+  },
+  {
+    "name": "stable project boundary",
+    "summary": "The user clarified a stable repository boundary and the final change followed it. Keep future task notes outside the deployable source tree.",
+    "signals": ["correction", "project_boundary", "verified_outcome"],
+    "expected": "suggest"
+  },
+  {
+    "name": "verified focused validation flow",
+    "summary": "The focused parser test exposed the regression before the full suite. Run the focused test first, then verify with the complete suite.",
+    "signals": ["workflow", "verified_entrypoint", "verified_outcome"],
+    "expected": "suggest"
+  },
+  {
+    "name": "routine typo",
+    "summary": "A spelling typo caused one compile failure, and fixing the typo completed the routine edit.",
+    "signals": ["detour", "verified_outcome"],
+    "expected": "abstain"
+  },
+  {
+    "name": "temporary network failure",
+    "summary": "A temporary network outage interrupted one command, and retrying it worked without any workflow change.",
+    "signals": ["detour", "verified_outcome"],
+    "expected": "abstain"
+  },
+  {
+    "name": "temporary task status",
+    "summary": "The implementation is half complete and the remaining endpoint will be changed tomorrow.",
+    "signals": ["verified_outcome"],
+    "expected": "abstain"
+  },
+  {
+    "name": "generic advice",
+    "summary": "Be careful and check the code before making changes.",
+    "signals": ["workflow", "verified_outcome"],
+    "expected": "abstain"
+  },
+  {
+    "name": "unverified possible workflow",
+    "summary": "A broad query looked slow, and a focused query might be better next time, but the result was not verified.",
+    "signals": ["detour", "workflow"],
+    "expected": "abstain"
+  },
+  {
+    "name": "chinese verified correction",
+    "summary": "用户纠正了依赖旧接口的判断，实时契约也验证了正确入口。下次先核对实时契约，再修改调用方。",
+    "signals": ["correction", "verified_outcome"],
+    "expected": "suggest"
+  },
+  {
+    "name": "chinese routine typo",
+    "summary": "这次只是一个拼写错误，修改后普通编译就通过了，没有形成新的排查流程。",
+    "signals": ["detour", "verified_outcome"],
+    "expected": "abstain"
+  }
+]

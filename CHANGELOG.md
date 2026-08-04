@@ -2,6 +2,23 @@
 
 All notable public changes are recorded here.
 
+## 0.4.0 - 2026-08-04
+
+- `memagent reflect` lets a coding agent submit one short, sanitized task-boundary
+  reflection and locally decides whether a reusable memory preview is warranted.
+- Automatic discovery remains confirmation-first: reflection can create only a
+  pending preview, never a durable memory card.
+- Local reflection scoring uses explicit evidence signals, draft quality, duplicate
+  checks, and a one-suggestion-per-Codex-task limit. Routine and transient mistakes
+  abstain quietly.
+- Optional `hybrid` and `llm` reflection gates receive only sanitized short summaries,
+  reuse the existing three-second timeout and failure cooldown, and fall back locally.
+- Reflection traces store decision metadata and a summary hash rather than the raw
+  reflection. Activity reports expose the considered, emitted, abstained, duplicate,
+  session-suppressed, latency, and LLM-fallback funnel.
+- The user-level Codex Skill now performs task-boundary reflection before the final
+  response after meaningful detours, corrections, verified entrypoints, or workflows.
+
 ## 0.3.1 - Unreleased
 
 - Implicit recall cooldown is now Codex-session aware. The same memory is

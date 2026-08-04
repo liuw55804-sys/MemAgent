@@ -50,6 +50,34 @@ class CliTest(unittest.TestCase):
             pending = list((home / "pending_memory_drafts").glob("*.json"))
             self.assertEqual(len(pending), 1)
 
+    def test_reflect_cli_discovers_candidate_without_writing_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--home", str(home), "reflect",
+                        "--summary",
+                        "Two attempts used an obsolete contract. Next time verify the live contract before changing generated code.",
+                        "--signal", "detour",
+                        "--signal", "verified_entrypoint",
+                        "--signal", "verified_outcome",
+                        "--cwd", str(project),
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["route"]["action"], "draft_memory")
+            self.assertTrue(payload["artifacts"]["reflection_considered"])
+            self.assertEqual(list((home / "memories").glob("*.memory.yaml")), [])
+            self.assertEqual(len(list((home / "reflection_traces").glob("*.json"))), 1)
+
     def test_llm_doctor_json_cli(self) -> None:
         with mock.patch.dict(
             os.environ,

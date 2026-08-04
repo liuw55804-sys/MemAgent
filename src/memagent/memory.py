@@ -163,6 +163,13 @@ class SavedProcessTrace:
 
 
 @dataclass(frozen=True)
+class SavedReflectionTrace:
+    path: Path
+    identifier: str
+    payload: dict[str, object]
+
+
+@dataclass(frozen=True)
 class SavedPendingMemoryDraft:
     path: Path
     identifier: str
@@ -214,6 +221,7 @@ class MemoryStore:
         self.memories_dir = self.home / "memories"
         self.traces_dir = self.home / "recall_traces"
         self.process_traces_dir = self.home / "process_traces"
+        self.reflection_traces_dir = self.home / "reflection_traces"
         self.pending_drafts_dir = self.home / "pending_memory_drafts"
         self.pending_drafts_archive_dir = self.pending_drafts_dir / "archive"
         self._now = now or (lambda: datetime.now(timezone.utc))
@@ -423,6 +431,21 @@ class MemoryStore:
         }
         path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return SavedProcessTrace(path=path, identifier=identifier, payload=trace_payload)
+
+    def save_reflection_trace(self, payload: dict[str, object]) -> SavedReflectionTrace:
+        self.reflection_traces_dir.mkdir(parents=True, exist_ok=True)
+        now = self._now()
+        identifier = f"reflection_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+        path = self.reflection_traces_dir / f"{identifier}.json"
+        trace_payload = dict(payload)
+        trace_payload["trace"] = {
+            "id": identifier,
+            "created_at": now.isoformat(),
+            "source": "task_boundary_reflection",
+            "path": str(path),
+        }
+        path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return SavedReflectionTrace(path=path, identifier=identifier, payload=trace_payload)
 
     def save_pending_memory_draft(
         self,

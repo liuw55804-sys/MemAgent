@@ -14,7 +14,7 @@ from memagent.activity import build_activity_report, render_activity_report
 from memagent.cli import main
 from memagent.context import ProjectContext, context_payload, detect_context
 from memagent.handoff import HandoffStore
-from memagent.interaction import process_interaction
+from memagent.interaction import process_interaction, reflect_on_task
 from memagent.memory import MemoryStore
 
 
@@ -316,6 +316,52 @@ class ActivityTest(unittest.TestCase):
             self.assertEqual(len(report.lifecycle.draft_pending), 1)
             self.assertEqual(report.lifecycle.draft_unconfirmed, 1)
             self.assertIn("Pending draft", render_activity_report(report))
+
+    def test_activity_reports_automatic_reflection_funnel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            os.environ,
+            {"CODEX_THREAD_ID": "activity-session"},
+            clear=False,
+        ):
+            root = Path(tmp)
+            context = _context(root / "project")
+            store = MemoryStore(root / "home")
+            handoffs = HandoffStore(store.home)
+            reflect_on_task(
+                summary=(
+                    "Two attempts used a stale interface. Next time verify the live contract "
+                    "before changing generated code."
+                ),
+                signals=("detour", "correction", "verified_outcome"),
+                context=context,
+                store=store,
+            )
+            reflect_on_task(
+                summary=(
+                    "A different investigation found a reusable validation step. "
+                    "Next time run the focused validation before the full suite."
+                ),
+                signals=("workflow", "verified_outcome"),
+                context=context,
+                store=store,
+            )
+            process_interaction(
+                message="确认保存",
+                recent_text="",
+                context=context,
+                store=store,
+                handoff_store=handoffs,
+            )
+
+            report = build_activity_report(store=store, handoff_store=handoffs, context=context)
+
+            self.assertEqual(report.reflections["considered"], 2)
+            self.assertEqual(report.reflections["emitted"], 1)
+            self.assertEqual(report.reflections["abstained"], 1)
+            self.assertEqual(report.reflections["session_suppressed"], 1)
+            self.assertEqual(report.reflections["accepted"], 1)
+            self.assertEqual(report.reflections["acceptance_rate"], 1.0)
+            self.assertIn("Task reflections", render_activity_report(report))
 
 
 def _context(project: Path) -> ProjectContext:

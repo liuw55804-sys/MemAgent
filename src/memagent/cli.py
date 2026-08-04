@@ -38,7 +38,12 @@ from memagent.ingest import (
     DEFAULT_CODEX_SESSIONS_ROOT,
     run_codex_ingest,
 )
-from memagent.interaction import process_interaction, process_payload_json, render_process_result
+from memagent.interaction import (
+    process_interaction,
+    process_payload_json,
+    reflect_on_task,
+    render_process_result,
+)
 from memagent.llm import activate_semantic_profile, check_llm_provider, configure_semantic_mode, default_semantic_mode, render_llm_doctor
 from memagent.memory import DEFAULT_RECALL_STRATEGY, MemoryStore
 from memagent.mcp import McpServer, run_stdio_server
@@ -438,6 +443,46 @@ def build_parser() -> argparse.ArgumentParser:
     suggest.add_argument("--llm-config", help="Optional provider profile config path.")
     suggest.add_argument("--no-write", action="store_true", help="Preview without saving a pending draft.")
     suggest.add_argument("--json", action="store_true", help="Print structured JSON output.")
+
+    reflect = subparsers.add_parser(
+        "reflect",
+        help="Assess a short task-boundary reflection and optionally create one pending preview.",
+    )
+    reflect.add_argument(
+        "--summary",
+        required=True,
+        help="Sanitized task reflection, at most 1200 characters; do not pass a full transcript.",
+    )
+    reflect.add_argument(
+        "--signal",
+        action="append",
+        required=True,
+        choices=[
+            "detour",
+            "correction",
+            "verified_entrypoint",
+            "costly_investigation",
+            "workflow",
+            "project_boundary",
+            "verified_outcome",
+        ],
+        help="Concrete evidence for possible reuse. Can be repeated.",
+    )
+    reflect.add_argument("--cwd", help="Project directory. Defaults to the current working directory.")
+    reflect.add_argument(
+        "--semantic-mode",
+        choices=["heuristic", "llm", "hybrid"],
+        help="Reflection decision mode. Defaults to local configuration or heuristic.",
+    )
+    reflect.add_argument("--llm-profile", help="Named optional LLM profile for reflection decisions.")
+    reflect.add_argument("--llm-config", help="Optional provider profile config path.")
+    reflect.add_argument(
+        "--draft-provider",
+        choices=["heuristic", "openai-compatible"],
+        help="Optional provider for the final draft after a positive reflection decision.",
+    )
+    reflect.add_argument("--no-write", action="store_true", help="Assess without writing a trace or pending draft.")
+    reflect.add_argument("--json", action="store_true", help="Print structured JSON output.")
     codex.add_argument(
         "--provider",
         default="heuristic",
@@ -1276,6 +1321,28 @@ def main(argv: list[str] | None = None) -> int:
                 allow_writes=not args.no_write,
                 agent_suggested=True,
                 suggestion_evidence=args.evidence,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.json:
+            print(process_payload_json(result, context=context))
+        else:
+            print(render_process_result(result, context=context))
+        return 0
+
+    if args.command == "reflect":
+        context = detect_context(Path(args.cwd) if args.cwd else None)
+        try:
+            result = reflect_on_task(
+                summary=args.summary,
+                signals=tuple(args.signal),
+                context=context,
+                store=store,
+                semantic_mode=args.semantic_mode,
+                llm_profile=args.llm_profile,
+                llm_config_path=Path(args.llm_config) if args.llm_config else None,
+                draft_provider=args.draft_provider,
+                allow_writes=not args.no_write,
             )
         except ValueError as exc:
             parser.error(str(exc))

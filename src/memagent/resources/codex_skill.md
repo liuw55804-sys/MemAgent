@@ -69,8 +69,8 @@ hybrid routing is configured explicitly with `memagent configure`. It only uses
 short sanitized task summaries and draft candidates; never send a full
 conversation, secrets, or raw request/response bodies.
 
-At the end of a non-trivial task, proactively suggest at most one memory only
-when the work produced concrete evidence of a reusable lesson:
+Before the final reply for a non-trivial task, perform one quiet task-boundary
+reflection when the work produced concrete evidence that may be reusable:
 
 - a meaningful detour or repeated failed path;
 - a user correction that changes the workflow;
@@ -78,19 +78,31 @@ when the work produced concrete evidence of a reusable lesson:
 - a costly investigation with a shorter repeatable path;
 - a stable project boundary or multi-step workflow.
 
-Do not suggest memories for routine edits, generic advice, unverified guesses,
-or facts already captured. Pass only a short actionable lesson, never the full
-transcript:
+Do not reflect on routine edits, generic questions, unverified guesses, or tiny
+mechanical work. Pass a short sanitized account of what went wrong, what changed,
+and how the outcome was verified. Do not pre-decide that it must become a memory,
+and never pass the full transcript or raw command output:
 
 ```bash
-__MEMAGENT_COMMAND__ suggest "<one short reusable lesson>" --evidence <detour|correction|verified_entrypoint|costly_investigation|workflow|project_boundary>
+__MEMAGENT_COMMAND__ reflect \
+  --summary "<short sanitized task reflection>" \
+  --signal <detour|correction|verified_entrypoint|costly_investigation|workflow|project_boundary|verified_outcome>
 ```
 
-Show the returned preview as an optional suggestion and wait. A duplicate is
+Repeat `--signal` only when multiple evidence types genuinely apply. MemAgent
+decides whether to abstain or create one preview. For `action: none`, finish the
+task normally without mentioning MemAgent. For `action: draft_memory`, show one
+natural sentence describing the candidate and ask whether to remember it. A
+duplicate, a second suggestion in the same Codex task, or weak evidence is
 skipped automatically. A different agent suggestion may replace an older agent
 suggestion, but never replaces a user-requested preview. Unattended previews
 expire locally. The user can confirm in ordinary language or reject it; neither
 path changes the project repository.
+
+The lower-level `memagent suggest` command remains available when the coding
+agent already has one exact reusable lesson, but normal automatic discovery
+should use `reflect` so MemAgent, rather than the user, makes the interruption
+decision.
 
 Never save tokens, cookies, passwords, private keys, or raw sensitive samples.
 Do not automatically create durable memories: a preview and explicit user

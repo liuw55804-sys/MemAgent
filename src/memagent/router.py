@@ -239,6 +239,11 @@ def route_with_heuristics(
             "按这个保存",
             "确认写入",
             "保存这条",
+            "记下这条",
+            "save it",
+            "save that",
+            "remember it",
+            "yes, save",
         ),
     )
     if confirmation_signals and has_pending_draft is True:

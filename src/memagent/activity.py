@@ -11,6 +11,7 @@ from memagent.context import ProjectContext, matches_project_context, repo_scope
 from memagent.handoff import HandoffStore, project_handoff_key
 from memagent.lifecycle import LifecycleSummary, build_lifecycle_summary
 from memagent.memory import MemoryStore
+from memagent.reflection import reflection_project_id
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class ActivityReport:
     lifecycle: LifecycleSummary
     retrieval: dict[str, int | float]
     suggestions: dict[str, int]
+    reflections: dict[str, int | float]
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -64,6 +66,7 @@ class ActivityReport:
                 "handoffs_saved": self.handoff_count,
                 "retrieval": self.retrieval,
                 "suggestions": self.suggestions,
+                "reflections": self.reflections,
             },
             "events": [event.to_payload() for event in self.events],
             "lifecycle": self.lifecycle.to_payload(),
@@ -86,6 +89,9 @@ def build_activity_report(
     adoption_counts: Counter[str] = Counter()
     retrieval_counts: Counter[str] = Counter()
     suggestion_counts: Counter[str] = Counter()
+    reflection_counts: Counter[str] = Counter()
+    reflection_latencies: list[int] = []
+    automatic_memory_ids: set[str] = set()
     retrieval_latencies: dict[str, list[int]] = {
         "candidate_generation_ms": [],
         "local_relevance_ms": [],
@@ -135,10 +141,15 @@ def build_activity_report(
             status = _text(artifacts.get("status"))
             if status in {"duplicate", "pending_exists"}:
                 suggestion_counts[status] += 1
-        if artifacts.get("source") == "agent_suggested" and artifacts.get("user_confirmed"):
+        source = _text(artifacts.get("source"))
+        if source in {"agent_suggested", "automatic_reflection"} and artifacts.get("user_confirmed"):
             suggestion_counts["accepted"] += 1
-        if artifacts.get("source") == "agent_suggested" and artifacts.get("user_rejected"):
+        if source in {"agent_suggested", "automatic_reflection"} and artifacts.get("user_rejected"):
             suggestion_counts["rejected"] += 1
+        if source == "automatic_reflection" and artifacts.get("user_confirmed"):
+            reflection_counts["accepted"] += 1
+        if source == "automatic_reflection" and artifacts.get("user_rejected"):
+            reflection_counts["rejected"] += 1
         detail = _event_detail(action, artifacts)
         events.append(
             ActivityEvent(
@@ -150,6 +161,46 @@ def build_activity_report(
             )
         )
 
+    for path in _json_paths(store.reflection_traces_dir, "reflection_*.json"):
+        payload = _read_json(path)
+        reflection_context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+        if not _matches_reflection_context(reflection_context, context):
+            continue
+        created_at = _created_at(payload.get("trace"), path)
+        if not _in_window(created_at, since):
+            continue
+        assessment = payload.get("assessment") if isinstance(payload.get("assessment"), dict) else {}
+        outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
+        reflection_counts["considered"] += 1
+        verdict = _text(assessment.get("verdict")) or "abstain"
+        status = _text(outcome.get("status")) or _text(assessment.get("status")) or "assessed"
+        if verdict == "suggest" and _text(outcome.get("action")) == "draft_memory":
+            reflection_counts["emitted"] += 1
+        else:
+            reflection_counts["abstained"] += 1
+        if status in {"duplicate", "pending_exists"}:
+            reflection_counts["duplicate_suppressed"] += 1
+        if status == "session_limit":
+            reflection_counts["session_suppressed"] += 1
+        gate = assessment.get("gate") if isinstance(assessment.get("gate"), dict) else {}
+        if gate.get("attempted"):
+            reflection_counts["llm_gate_attempted"] += 1
+        if gate.get("fallback"):
+            reflection_counts["llm_gate_fallback"] += 1
+        latency = assessment.get("latency_ms")
+        if isinstance(latency, (int, float)):
+            reflection_latencies.append(max(int(latency), 0))
+        if verdict == "suggest" and _text(outcome.get("action")) == "draft_memory":
+            events.append(
+                ActivityEvent(
+                    created_at=created_at,
+                    category="reflection",
+                    label="memory_suggested",
+                    identifier=_trace_identifier(payload.get("trace"), path),
+                    detail=status,
+                )
+            )
+
     for path in _json_paths(store.pending_drafts_archive_dir, "*.json"):
         payload = _read_json(path)
         archived_context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
@@ -159,11 +210,18 @@ def build_activity_report(
         resolved_at = _parse_datetime(_text(pending.get("resolved_at")))
         if resolved_at and not _in_window(resolved_at, since):
             continue
-        if _text(pending.get("source")) != "agent_suggested":
+        pending_source = _text(pending.get("source"))
+        if pending_source not in {"agent_suggested", "automatic_reflection"}:
             continue
         status = _text(pending.get("status"))
         if status in {"expired", "replaced"}:
             suggestion_counts[status] += 1
+        if pending_source == "automatic_reflection":
+            if status == "expired":
+                reflection_counts["expired"] += 1
+            memory_id = _text(pending.get("memory_id"))
+            if status == "confirmed" and memory_id:
+                automatic_memory_ids.add(memory_id)
 
     for path in _json_paths(store.traces_dir, "trace_*.json"):
         payload = _read_json(path)
@@ -226,14 +284,29 @@ def build_activity_report(
         try:
             pending = store.load_pending_memory_draft(context=context)
             pending_meta = pending.get("pending") if isinstance(pending.get("pending"), dict) else {}
-            if pending_meta.get("source") == "agent_suggested":
+            if pending_meta.get("source") in {"agent_suggested", "automatic_reflection"}:
                 suggestion_counts["pending"] = 1
+            if pending_meta.get("source") == "automatic_reflection":
+                reflection_counts["pending"] = 1
         except ValueError:
             pass
     retrieval = dict(sorted(retrieval_counts.items()))
     for key, values in retrieval_latencies.items():
         if values:
             retrieval[f"avg_{key}"] = round(sum(values) / len(values), 1)
+    reflections: dict[str, int | float] = dict(sorted(reflection_counts.items()))
+    resolved = reflection_counts["accepted"] + reflection_counts["rejected"]
+    if resolved:
+        reflections["acceptance_rate"] = round(reflection_counts["accepted"] / resolved, 3)
+    reused_ids = {item.identifier for item in lifecycle.reused_memories}
+    if automatic_memory_ids:
+        reflections["confirmed_memories"] = len(automatic_memory_ids)
+        reflections["later_recalled"] = len(automatic_memory_ids & reused_ids)
+    if reflection_latencies:
+        reflections["avg_decision_latency_ms"] = round(
+            sum(reflection_latencies) / len(reflection_latencies),
+            1,
+        )
     return ActivityReport(
         context=context,
         window_label=_window_label(since),
@@ -247,11 +320,12 @@ def build_activity_report(
         lifecycle=lifecycle,
         retrieval=retrieval,
         suggestions=dict(sorted(suggestion_counts.items())),
+        reflections=reflections,
     )
 
 
 def render_activity_report(report: ActivityReport) -> str:
-    if not report.events and not _has_lifecycle_data(report.lifecycle):
+    if not report.events and not report.reflections and not _has_lifecycle_data(report.lifecycle):
         return "\n".join(
             [
                 "[MemAgent activity]",
@@ -273,6 +347,7 @@ def render_activity_report(report: ActivityReport) -> str:
         f"- Handoffs saved: {report.handoff_count}",
         f"- Recall precision: {_render_retrieval(report.retrieval)}",
         f"- Proactive memory: {_render_counts(report.suggestions)}",
+        f"- Task reflections: {_render_counts(report.reflections)}",
         (
             "- Draft lifecycle: "
             f"total={report.lifecycle.draft_total}, "
@@ -356,6 +431,13 @@ def _render_retrieval(values: dict[str, int | float]) -> str:
 
 
 def _matches_context(payload: dict[str, Any], context: ProjectContext) -> bool:
+    return matches_project_context(payload, context)
+
+
+def _matches_reflection_context(payload: dict[str, Any], context: ProjectContext) -> bool:
+    project_id = _text(payload.get("project_id"))
+    if project_id:
+        return project_id == reflection_project_id(context)
     return matches_project_context(payload, context)
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import redirect_stdout
 from io import StringIO
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,11 +15,19 @@ from memagent.codex_skill import build_user_codex_skill_plan, write_user_codex_s
 from memagent.cli import main
 from memagent.context import detect_context
 from memagent.handoff import HandoffStore
-from memagent.interaction import process_interaction
+from memagent.interaction import process_interaction, reflect_on_task
 from memagent.memory import MemoryStore
 
 
 class ZeroIntrusionFlowTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.semantic_mode = mock.patch.dict(
+            os.environ,
+            {"MEMAGENT_SEMANTIC_MODE": "heuristic"},
+        )
+        self.semantic_mode.start()
+        self.addCleanup(self.semantic_mode.stop)
+
     def test_project_without_agents_md_keeps_git_clean_through_memory_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -229,6 +238,37 @@ class ZeroIntrusionFlowTest(unittest.TestCase):
                 suggestion_evidence="correction",
             )
             self.assertEqual(draft.route.action, "draft_memory")
+            self.assertEqual(store.count_memory_cards(), 0)
+            self.assertEqual(_git(project, "status", "--porcelain"), "")
+
+    def test_automatic_reflection_in_temporary_git_project_keeps_project_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "example_service"
+            project.mkdir()
+            _git(project, "init")
+            _git(project, "config", "user.email", "memagent@example.test")
+            _git(project, "config", "user.name", "MemAgent Test")
+            (project / "README.md").write_text("# demo\n", encoding="utf-8")
+            _git(project, "add", "README.md")
+            _git(project, "commit", "-m", "initial")
+            store = MemoryStore(root / "memagent-home")
+            context = detect_context(project)
+            handoffs = HandoffStore(store.home)
+
+            reflected = reflect_on_task(
+                summary=(
+                    "Two failed attempts relied on a stale generated client. "
+                    "Next time verify the live interface before changing the caller."
+                ),
+                signals=("detour", "correction", "verified_outcome"),
+                context=context,
+                store=store,
+                semantic_mode="heuristic",
+            )
+
+            self.assertEqual(reflected.route.action, "draft_memory")
+            self.assertTrue(store.has_pending_memory_draft(context=context))
             self.assertEqual(store.count_memory_cards(), 0)
             self.assertEqual(_git(project, "status", "--porcelain"), "")
 
